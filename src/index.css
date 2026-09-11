@@ -395,7 +395,10 @@ h3 {
   }
 }
 .marquee {
-  animation: marquee 40s linear infinite;
+  animation: marquee 44s linear infinite;
+}
+.marquee-wrap:hover .marquee {
+  animation-play-state: paused;
 }
 
 @media (prefers-reduced-motion: reduce) {

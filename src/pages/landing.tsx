@@ -195,6 +195,37 @@ function PasskeyCard({ compact }: { compact?: boolean }) {
   );
 }
 
+const TYPED = ["AI agent", "coding agent", "Stripe refund", "SQL query", "browser agent", "pull request"];
+
+/** Types a word, holds it, erases it, moves to the next. */
+function Typewriter({ words }: { words: string[] }) {
+  const reduce = useReducedMotion();
+  const [i, setI] = useState(0);
+  const [n, setN] = useState(0);
+  const [erasing, setErasing] = useState(false);
+  const word = words[i % words.length];
+  useEffect(() => {
+    if (reduce) return;
+    let t: ReturnType<typeof setTimeout>;
+    if (!erasing && n < word.length) t = setTimeout(() => setN(n + 1), 70);
+    else if (!erasing) t = setTimeout(() => setErasing(true), 1700);
+    else if (n > 0) t = setTimeout(() => setN(n - 1), 35);
+    else
+      t = setTimeout(() => {
+        setErasing(false);
+        setI(i + 1);
+      }, 250);
+    return () => clearTimeout(t);
+  }, [n, erasing, word, i, reduce]);
+  const shown = reduce ? words[0] : word.slice(0, n);
+  return (
+    <span className="whitespace-nowrap">
+      <span className="bg-[linear-gradient(100deg,#ec4a22,#ff6f9e_45%,#7d6cf0)] bg-clip-text text-transparent">{shown}</span>
+      <span className="ml-[0.04em] inline-block h-[0.82em] w-[0.07em] translate-y-[0.08em] rounded-full bg-fg animate-[blink_1s_steps(1)_infinite]" />
+    </span>
+  );
+}
+
 function Hero() {
   const reduce = useReducedMotion();
   const head = useRef<HTMLDivElement>(null);
@@ -228,8 +259,10 @@ function Hero() {
             <button onClick={() => scrollTo("decide")} className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 h-7 text-[12.5px] text-fg-2 hover:border-line-strong">
               <span className="size-1.5 rounded-full bg-allow live-dot" /> New · human approvals signed with passkeys <ArrowRight className="size-3" />
             </button>
-            <h1 className="mt-6 text-[44px] sm:text-[64px] font-medium leading-[1.02] tracking-[-0.045em] text-fg">
-              Wrapbox puts every AI agent <span className="text-fg-3">on a permit.</span>
+            <h1 className="mt-6 min-h-[2.04em] text-[44px] sm:text-[64px] font-medium leading-[1.02] tracking-[-0.045em] text-fg" aria-label="Wrapbox puts every AI agent on a permit.">
+              <span aria-hidden="true">
+                Wrapbox puts every <Typewriter words={TYPED} /> <span className="text-fg-3">on a permit.</span>
+              </span>
             </h1>
             <p className="mt-5 max-w-[620px] text-[17px] sm:text-[18px] leading-relaxed text-fg-2">
               The runtime authorization layer for AI agents. Every risky action — from Claude Code to your Stripe MCP — is checked against one intent contract, milliseconds before it runs.
@@ -320,43 +353,68 @@ function Statement() {
 /* Agent logos marquee                                                 */
 /* ------------------------------------------------------------------ */
 
-const MARQUEE: [string, string][] = [
+const AGENT_ROW: [string, string][] = [
   ["claudecode", "Claude Code"],
   ["cursor", "Cursor"],
   ["codex", "Codex"],
   ["githubcopilot", "GitHub Copilot"],
   ["geminicli", "Gemini CLI"],
   ["windsurf", "Windsurf"],
+  ["junie", "Junie"],
   ["langgraph", "LangGraph"],
   ["openai", "OpenAI Agents"],
+  ["vertexai", "Vertex AI"],
   ["salesforce", "Agentforce"],
   ["copilotstudio", "Copilot Studio"],
-  ["stripe", "Stripe"],
-  ["postgresql", "Postgres"],
-  ["razorpay", "Razorpay"],
-  ["zapier", "Zapier"],
-  ["slack", "Slack"],
-  ["okta", "Okta"],
   ["browseruse", "Browser Use"],
   ["playwright", "Playwright"],
 ];
+const TOOL_ROW: [string, string][] = [
+  ["stripe", "Stripe"],
+  ["razorpay", "Razorpay"],
+  ["postgresql", "Postgres"],
+  ["zapier", "Zapier"],
+  ["servicenow", "ServiceNow"],
+  ["slack", "Slack"],
+  ["teams", "Microsoft Teams"],
+  ["okta", "Okta"],
+  ["aws", "AWS"],
+  ["kubernetes", "Kubernetes"],
+  ["datadog", "Datadog"],
+  ["splunk", "Splunk"],
+  ["pagerduty", "PagerDuty"],
+  ["jetbrains", "JetBrains"],
+];
+
+function LogoRow({ items, reverse }: { items: [string, string][]; reverse?: boolean }) {
+  const row = [...items, ...items];
+  return (
+    <div className="flex w-max items-center gap-3 pr-3 marquee" style={reverse ? { animationDirection: "reverse", animationDuration: "52s" } : undefined}>
+      {row.map(([logo, name], i) => (
+        <span key={i} className="group flex h-16 items-center gap-3 rounded-2xl border border-line bg-surface pl-3 pr-5 shadow-[0_1px_2px_rgba(17,28,53,0.04)] transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-0.5 hover:border-line-strong hover:shadow-card">
+          <span className="grid size-10 place-items-center rounded-xl bg-white ring-1 ring-black/[0.06]">
+            <img src={logoUrl(logo)} alt="" className="size-6 object-contain" draggable={false} />
+          </span>
+          <span className="whitespace-nowrap text-[16.5px] font-medium tracking-[-0.01em] text-fg">{name}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function Marquee() {
-  const row = [...MARQUEE, ...MARQUEE];
   return (
-    <section className="py-16">
+    <section className="py-16 sm:py-20">
       <Container>
-        <p className="text-center text-[13.5px] text-fg-3">Works with the agents and tools your teams already run</p>
+        <Reveal className="text-center">
+          <div className="text-[13px] font-medium text-fg-3">Integrations</div>
+          <h2 className="mx-auto mt-2 max-w-[640px] text-[26px] sm:text-[32px] font-medium leading-[1.12] tracking-[-0.03em] text-fg">Works with the agents and tools your teams already run</h2>
+          <p className="mt-3 text-[15px] text-fg-2">25 integrations across 8 agent platforms — one contract governs them all.</p>
+        </Reveal>
       </Container>
-      <div className="relative mt-8 overflow-hidden [mask-image:linear-gradient(90deg,transparent,#000_12%,#000_88%,transparent)]">
-        <div className="marquee flex w-max items-center gap-10 pr-10">
-          {row.map(([logo, name], i) => (
-            <span key={i} className="flex items-center gap-2.5 text-[15px] font-medium text-fg-2 grayscale-[35%] hover:grayscale-0 transition">
-              <img src={logoUrl(logo)} alt="" className="size-6 object-contain" draggable={false} />
-              {name}
-            </span>
-          ))}
-        </div>
+      <div className="marquee-wrap relative mt-10 space-y-3 overflow-hidden py-1 [mask-image:linear-gradient(90deg,transparent,#000_10%,#000_90%,transparent)]">
+        <LogoRow items={AGENT_ROW} />
+        <LogoRow items={TOOL_ROW} reverse />
       </div>
     </section>
   );
