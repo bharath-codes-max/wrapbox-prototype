@@ -62,7 +62,7 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
   const sso = (who: string) => {
     setError(null);
-    setNotice(`${who} sign-in is simulated in this prototype. Use your email and password below.`);
+    setNotice(`${who} sign-in is coming soon. Use your email and password for now.`);
     emailRef.current?.focus();
   };
 
@@ -123,7 +123,7 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
             label="Password"
             hint={
               !signup && (
-                <button type="button" onClick={() => setNotice("Password reset is simulated in this prototype. Ask the Wrapbox team for the access code.")} className="text-[12px] font-medium text-fg-3 hover:text-fg">
+                <button type="button" onClick={() => setNotice("To reset your password, contact your Wrapbox admin.")} className="text-[12px] font-medium text-fg-3 hover:text-fg">
                   Forgot?
                 </button>
               )
@@ -443,7 +443,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-fg-3">
           <span>© 2026 Wrapbox</span>
-          <span>Prototype · SSO and email are simulated</span>
+          <span className="flex gap-4"><span>Terms</span><span>Privacy</span><span>Security</span></span>
         </div>
       </div>
       <div className="hidden lg:block lg:sticky lg:top-0 lg:h-screen">

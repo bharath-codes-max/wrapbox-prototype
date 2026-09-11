@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const read = () => window.location.hash.replace(/^#/, "") || "/start";
+const read = () => window.location.hash.replace(/^#/, "") || "/landing";
 
 export function useRoute() {
   const [path, setPath] = useState(read);

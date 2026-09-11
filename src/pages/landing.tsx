@@ -1,4 +1,4 @@
-import { AnimatePresence, motion, useInView, useMotionValue, useScroll, useSpring, useTransform } from "motion/react";
+import { AnimatePresence, motion, useInView, useMotionValue, useReducedMotion, useScroll, useSpring, useTransform, type MotionValue } from "motion/react";
 import { ArrowRight, Check, Fingerprint, Minus, Plus, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { agentById, type Decision } from "../data/agents";
@@ -27,7 +27,7 @@ function Container({ children, className }: { children: ReactNode; className?: s
 
 function Reveal({ children, className, delay = 0 }: { children: ReactNode; className?: string; delay?: number }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-80px" }} transition={{ duration: 0.7, delay, ease: [0.2, 0.7, 0.2, 1] }} className={className}>
+    <motion.div initial={{ opacity: 0, y: 32, scale: 0.97, filter: "blur(6px)" }} whileInView={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }} viewport={{ once: true, margin: "-80px" }} transition={{ duration: 0.8, delay, ease: [0.2, 0.7, 0.2, 1] }} className={className}>
       {children}
     </motion.div>
   );
@@ -196,70 +196,121 @@ function PasskeyCard({ compact }: { compact?: boolean }) {
 }
 
 function Hero() {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
-  const yShot = useTransform(scrollYProgress, [0, 1], [0, -70]);
-  const yTerm = useTransform(scrollYProgress, [0, 1], [0, -190]);
-  const ySlack = useTransform(scrollYProgress, [0, 1], [0, -130]);
+  const reduce = useReducedMotion();
+  const head = useRef<HTMLDivElement>(null);
+  const demo = useRef<HTMLDivElement>(null);
+  // Headline zooms out and fades as you scroll away from it.
+  const { scrollYProgress: headP } = useScroll({ target: head, offset: ["start start", "end start"] });
+  const headScale = useTransform(headP, [0, 1], reduce ? [1, 1] : [1, 0.9]);
+  const headOpacity = useTransform(headP, [0, 0.85], reduce ? [1, 1] : [1, 0]);
+  const headY = useTransform(headP, [0, 1], reduce ? [0, 0] : [0, -60]);
+  // The demo starts tilted back and slightly small, then flattens and zooms to full size.
+  const { scrollYProgress: inP } = useScroll({ target: demo, offset: ["start end", "start 0.25"] });
+  const tilt = useTransform(inP, [0, 1], reduce ? [0, 0] : [24, 0]);
+  const zoom = useTransform(inP, [0, 1], reduce ? [1, 1] : [0.84, 1]);
+  const { scrollYProgress: outP } = useScroll({ target: demo, offset: ["start start", "end start"] });
+  const yShot = useTransform(outP, [0, 1], reduce ? [0, 0] : [0, -80]);
+  const yTerm = useTransform(outP, [0, 1], reduce ? [0, 0] : [0, -220]);
+  const ySlack = useTransform(outP, [0, 1], reduce ? [0, 0] : [0, -150]);
+  const zoomOut = useTransform(outP, [0, 1], reduce ? [1, 1] : [1, 0.94]);
   const mx = useMotionValue(0);
   const my = useMotionValue(0);
-  const rx = useSpring(useTransform(my, [-1, 1], [3, -3]), { stiffness: 120, damping: 18 });
+  const rxMouse = useSpring(useTransform(my, [-1, 1], [3, -3]), { stiffness: 120, damping: 18 });
   const ry = useSpring(useTransform(mx, [-1, 1], [-4, 4]), { stiffness: 120, damping: 18 });
   const tx = useSpring(useTransform(mx, [-1, 1], [-14, 14]), { stiffness: 120, damping: 18 });
+  const rx = useTransform([tilt, rxMouse] as const, ([a, b]: number[]) => a + b);
 
   return (
-    <section ref={ref} className="pt-14 sm:pt-20">
+    <section className="pt-14 sm:pt-20">
       <Container>
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: [0.2, 0.7, 0.2, 1] }} className="max-w-[860px]">
-          <button onClick={() => scrollTo("decide")} className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 h-7 text-[12.5px] text-fg-2 hover:border-line-strong">
-            <span className="size-1.5 rounded-full bg-allow live-dot" /> New · human approvals signed with passkeys <ArrowRight className="size-3" />
-          </button>
-          <h1 className="mt-6 text-[44px] sm:text-[64px] font-medium leading-[1.02] tracking-[-0.045em] text-fg">
-            Wrapbox puts every AI agent <span className="text-fg-3">on a permit.</span>
-          </h1>
-          <p className="mt-5 max-w-[620px] text-[17px] sm:text-[18px] leading-relaxed text-fg-2">
-            The runtime authorization layer for AI agents. Every risky action — from Claude Code to your Stripe MCP — is checked against one intent contract, milliseconds before it runs.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <button onClick={() => go("/signup")} className="inline-flex h-11 items-center gap-2 rounded-full bg-[#111113] px-5 text-[14.5px] font-medium text-white shadow-[0_10px_24px_-12px_rgba(17,17,19,0.8)] hover:opacity-90">
-              Start free <ArrowRight className="size-4" />
+        <motion.div ref={head} style={{ scale: headScale, opacity: headOpacity, y: headY }} className="max-w-[860px] origin-top-left">
+          <motion.div initial={{ opacity: 0, y: 16, filter: "blur(8px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} transition={{ duration: 0.9, ease: [0.2, 0.7, 0.2, 1] }}>
+            <button onClick={() => scrollTo("decide")} className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 h-7 text-[12.5px] text-fg-2 hover:border-line-strong">
+              <span className="size-1.5 rounded-full bg-allow live-dot" /> New · human approvals signed with passkeys <ArrowRight className="size-3" />
             </button>
-            <button onClick={() => scrollTo("decide")} className="inline-flex h-11 items-center gap-2 rounded-full border border-line bg-surface px-5 text-[14.5px] font-medium text-fg hover:border-line-strong">
-              Try it live
-            </button>
-            <span className="text-[13px] text-fg-3">Free for 3 people · no card</span>
-          </div>
+            <h1 className="mt-6 text-[44px] sm:text-[64px] font-medium leading-[1.02] tracking-[-0.045em] text-fg">
+              Wrapbox puts every AI agent <span className="text-fg-3">on a permit.</span>
+            </h1>
+            <p className="mt-5 max-w-[620px] text-[17px] sm:text-[18px] leading-relaxed text-fg-2">
+              The runtime authorization layer for AI agents. Every risky action — from Claude Code to your Stripe MCP — is checked against one intent contract, milliseconds before it runs.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <button onClick={() => go("/signup")} className="inline-flex h-11 items-center gap-2 rounded-full bg-[#111113] px-5 text-[14.5px] font-medium text-white shadow-[0_10px_24px_-12px_rgba(17,17,19,0.8)] hover:opacity-90">
+                Start free <ArrowRight className="size-4" />
+              </button>
+              <button onClick={() => scrollTo("decide")} className="inline-flex h-11 items-center gap-2 rounded-full border border-line bg-surface px-5 text-[14.5px] font-medium text-fg hover:border-line-strong">
+                Try it live
+              </button>
+              <span className="text-[13px] text-fg-3">Free for 3 people · no card</span>
+            </div>
+          </motion.div>
         </motion.div>
       </Container>
 
       <Container className="mt-14">
-        <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1, delay: 0.15, ease: [0.2, 0.7, 0.2, 1] }}>
-          <Backdrop className="px-4 pt-12 pb-0 sm:px-12 sm:pt-16">
-            <div
-              className="relative"
-              style={{ perspective: 1600 }}
-              onMouseMove={(e) => {
-                const r = e.currentTarget.getBoundingClientRect();
-                mx.set(((e.clientX - r.left) / r.width) * 2 - 1);
-                my.set(((e.clientY - r.top) / r.height) * 2 - 1);
-              }}
-              onMouseLeave={() => {
-                mx.set(0);
-                my.set(0);
-              }}
-            >
-              <motion.div style={{ y: yShot, rotateX: rx, rotateY: ry }} className="mx-auto max-w-[1000px] origin-bottom">
-                <AppWindow src={shotOverview} className="rounded-b-none" />
-              </motion.div>
-              <motion.div style={{ y: yTerm, x: tx }} className="absolute -left-2 bottom-8 hidden lg:block w-[500px]">
-                <Terminal height={210} />
-              </motion.div>
-              <motion.div style={{ y: ySlack }} className="absolute -right-2 top-24 hidden md:block">
-                <PasskeyCard compact />
-              </motion.div>
-            </div>
-          </Backdrop>
+        <motion.div ref={demo} initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1, delay: 0.15, ease: [0.2, 0.7, 0.2, 1] }} style={{ perspective: 1800 }}>
+          <motion.div style={{ scale: zoomOut }} className="origin-top">
+            <Backdrop className="px-4 pt-12 pb-0 sm:px-12 sm:pt-16">
+              <div
+                className="relative"
+                style={{ perspective: 1600 }}
+                onMouseMove={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  mx.set(((e.clientX - r.left) / r.width) * 2 - 1);
+                  my.set(((e.clientY - r.top) / r.height) * 2 - 1);
+                }}
+                onMouseLeave={() => {
+                  mx.set(0);
+                  my.set(0);
+                }}
+              >
+                <motion.div style={{ y: yShot, rotateX: rx, rotateY: ry, scale: zoom }} className="mx-auto max-w-[1000px] origin-bottom">
+                  <AppWindow src={shotOverview} className="rounded-b-none" />
+                </motion.div>
+                <motion.div style={{ y: yTerm, x: tx }} className="absolute -left-2 bottom-8 hidden lg:block w-[500px]">
+                  <Terminal height={210} />
+                </motion.div>
+                <motion.div style={{ y: ySlack }} className="absolute -right-2 top-24 hidden md:block">
+                  <PasskeyCard compact />
+                </motion.div>
+              </div>
+            </Backdrop>
+          </motion.div>
         </motion.div>
+      </Container>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Statement: words light up as you scroll                             */
+/* ------------------------------------------------------------------ */
+
+const STATEMENT = "AI agents now push code, move money and read customer data. Wrapbox decides what each one may do — and proves it — before the action runs.";
+
+function Word({ w, p, range }: { w: string; p: MotionValue<number>; range: [number, number] }) {
+  const reduce = useReducedMotion();
+  const opacity = useTransform(p, range, reduce ? [1, 1] : [0.14, 1]);
+  const y = useTransform(p, range, reduce ? [0, 0] : [6, 0]);
+  return (
+    <motion.span style={{ opacity, y }} className="inline-block mr-[0.26em]">
+      {w}
+    </motion.span>
+  );
+}
+
+function Statement() {
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start 0.85", "end 0.45"] });
+  const words = STATEMENT.split(" ");
+  return (
+    <section ref={ref} className="py-20 sm:py-32">
+      <Container>
+        <p className="max-w-[980px] text-[30px] sm:text-[46px] font-medium leading-[1.14] tracking-[-0.035em] text-fg">
+          {words.map((w, i) => (
+            <Word key={i} w={w} p={scrollYProgress} range={[i / words.length, (i + 1.5) / words.length]} />
+          ))}
+        </p>
       </Container>
     </section>
   );
@@ -422,15 +473,18 @@ function FeatureRow({ id, head, children }: { id?: string; head: ReactNode; chil
 }
 
 function ParallaxShot({ src, children, align = "right" }: { src: string; children?: ReactNode; align?: "left" | "right" }) {
+  const reduce = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
-  const yShot = useTransform(scrollYProgress, [0, 1], [40, -40]);
-  const yFloat = useTransform(scrollYProgress, [0, 1], [90, -90]);
+  const yShot = useTransform(scrollYProgress, [0, 1], reduce ? [0, 0] : [60, -60]);
+  const yFloat = useTransform(scrollYProgress, [0, 1], reduce ? [0, 0] : [130, -130]);
+  const frame = useTransform(scrollYProgress, [0, 0.38, 0.62, 1], reduce ? [1, 1, 1, 1] : [0.88, 1, 1, 0.94]);
+  const shotZoom = useTransform(scrollYProgress, [0, 0.5, 1], reduce ? [1, 1, 1] : [1.1, 1, 1.03]);
   return (
-    <div ref={ref}>
+    <motion.div ref={ref} style={{ scale: frame }}>
       <Backdrop className="px-4 pt-10 sm:px-14 sm:pt-14">
         <div className="relative">
-          <motion.div style={{ y: yShot }} className="mx-auto max-w-[940px]">
+          <motion.div style={{ y: yShot, scale: shotZoom }} className="mx-auto max-w-[940px] origin-bottom">
             <AppWindow src={src} className="rounded-b-none" />
           </motion.div>
           {children && (
@@ -440,7 +494,7 @@ function ParallaxShot({ src, children, align = "right" }: { src: string; childre
           )}
         </div>
       </Backdrop>
-    </div>
+    </motion.div>
   );
 }
 
@@ -755,11 +809,16 @@ function Faq() {
 }
 
 function FinalCta() {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "center center"] });
+  const scale = useTransform(scrollYProgress, [0, 1], reduce ? [1, 1] : [0.86, 1]);
+  const radius = useTransform(scrollYProgress, [0, 1], [40, 16]);
   return (
     <section className="pb-20">
       <Container>
-        <Reveal>
-          <Backdrop className="px-8 py-16 sm:px-16 sm:py-24 text-white">
+        <motion.div ref={ref} style={{ scale, borderRadius: radius }} className="overflow-hidden">
+          <Backdrop className="px-8 py-16 sm:px-16 sm:py-24 text-white rounded-none">
             <div className="max-w-[640px]">
               <h2 className="text-[40px] sm:text-[56px] font-medium leading-[1.02] tracking-[-0.045em] [text-shadow:0_2px_24px_rgba(90,20,40,0.25)]">
                 Put your agents on a <span className="text-[#1b0f33] [text-shadow:none]">permit</span> today.
@@ -775,7 +834,7 @@ function FinalCta() {
               </div>
             </div>
           </Backdrop>
-        </Reveal>
+        </motion.div>
       </Container>
     </section>
   );
@@ -812,7 +871,11 @@ function Footer() {
       </Container>
       <Container className="mt-12 flex flex-wrap items-center justify-between gap-3 text-[12.5px] text-fg-3">
         <span>© 2026 Wrapbox</span>
-        <span>Prototype · product screenshots are the live demo workspace</span>
+        <span className="flex gap-4">
+          <button className="hover:text-fg transition-colors">Terms</button>
+          <button className="hover:text-fg transition-colors">Privacy</button>
+          <button className="hover:text-fg transition-colors">Security</button>
+        </span>
       </Container>
     </footer>
   );
@@ -831,6 +894,7 @@ export function Landing() {
       <Nav />
       <Hero />
       <Marquee />
+      <Statement />
 
       <FeatureRow
         id="product"
