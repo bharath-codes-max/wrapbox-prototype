@@ -1,4 +1,4 @@
-import { AnimatePresence, motion, useInView, useMotionValue, useMotionValueEvent, useReducedMotion, useScroll, useSpring, useTransform } from "motion/react";
+import { AnimatePresence, motion, useInView, useMotionValue, useReducedMotion, useScroll, useSpring, useTransform, type MotionValue } from "motion/react";
 import { ArrowRight, Check, Fingerprint, Minus, Plus, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { agentById, type Decision } from "../data/agents";
@@ -32,57 +32,6 @@ function Reveal({ children, className, delay = 0 }: { children: ReactNode; class
     </motion.div>
   );
 }
-
-/* Typewriter text: reveals character by character (one rAF clock, so it stays smooth) when it
-   scrolls into view — or when `start` flips true. The untyped rest keeps its space, so nothing
-   reflows; screen readers get the whole sentence at once. */
-type Seg = { t: string; c?: string };
-function TypeSeq({ segs, speed = 16, delay = 0, max = 1400, start, caret = true }: { segs: Seg[]; speed?: number; delay?: number; max?: number; start?: boolean; caret?: boolean }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const inView = useInView(ref, { once: true, margin: "0px 0px -10% 0px" });
-  const reduce = useReducedMotion();
-  const total = segs.reduce((n, x) => n + x.t.length, 0);
-  const [n, setN] = useState(0);
-  const go = start ?? inView;
-  useEffect(() => {
-    if (!go || reduce) return;
-    const dur = Math.min(max, Math.max(240, total * speed));
-    const t0 = performance.now() + delay;
-    let raf = 0;
-    const tick = (t: number) => {
-      const p = Math.min(1, Math.max(0, (t - t0) / dur));
-      setN(Math.round(p * total));
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [go, reduce, total, speed, delay, max]);
-  const shown = reduce ? total : n;
-  const typing = !reduce && go && shown > 0 && shown < total;
-  let offset = 0;
-  return (
-    <span ref={ref}>
-      <span className="sr-only">{segs.map((x) => x.t).join("")}</span>
-      <span aria-hidden="true">
-        {segs.map((x, i) => {
-          const from = offset;
-          offset += x.t.length;
-          const vis = Math.max(0, Math.min(x.t.length, shown - from));
-          const caretHere = typing && caret && shown >= from && (shown < offset || (i === segs.length - 1 && shown === offset));
-          return (
-            <span key={i}>
-              <span className={x.c}>{x.t.slice(0, vis)}</span>
-              {caretHere && <span className="tw-caret" />}
-              <span className={cn(x.c, "opacity-0")}>{x.t.slice(vis)}</span>
-            </span>
-          );
-        })}
-      </span>
-    </span>
-  );
-}
-const T = (text: string, props: Omit<Parameters<typeof TypeSeq>[0], "segs"> = {}) => <TypeSeq segs={[{ t: text }]} {...props} />;
-const typeMs = (text: string, speed = 16, max = 1400) => Math.min(max, Math.max(240, text.length * speed));
 
 function Pill({ d, className }: { d: Decision; className?: string }) {
   const tone: Record<Decision, string> = {
@@ -123,12 +72,11 @@ function Backdrop({ children, className }: { children: ReactNode; className?: st
 }
 
 function SectionHead({ eyebrow, title, body, cta, onCta }: { eyebrow: string; title: string; body: string; cta?: string; onCta?: () => void }) {
-  const tTitle = typeMs(title, 24, 1100);
   return (
     <Reveal className="max-w-[640px]">
-      <div className="text-[13px] font-medium text-fg-3">{T(eyebrow, { speed: 30, caret: false })}</div>
-      <h2 className="mt-3 text-[34px] sm:text-[40px] font-medium leading-[1.08] tracking-[-0.035em] text-fg">{T(title, { speed: 24, max: 1100, delay: 120 })}</h2>
-      <p className="mt-4 text-[16.5px] leading-relaxed text-fg-2">{T(body, { speed: 9, max: 1500, delay: 120 + tTitle })}</p>
+      <div className="text-[13px] font-medium text-fg-3">{eyebrow}</div>
+      <h2 className="mt-3 text-[34px] sm:text-[40px] font-medium leading-[1.08] tracking-[-0.035em] text-fg">{title}</h2>
+      <p className="mt-4 text-[16.5px] leading-relaxed text-fg-2">{body}</p>
       {cta && (
         <button onClick={onCta} className="mt-5 inline-flex items-center gap-1.5 text-[14.5px] font-medium text-fg hover:gap-2.5 transition-[gap]">
           {cta} <ArrowRight className="size-4" />
@@ -247,43 +195,6 @@ function PasskeyCard({ compact }: { compact?: boolean }) {
   );
 }
 
-const TYPED = ["AI agent", "coding agent", "Stripe refund", "SQL query", "browser agent", "pull request"];
-
-/** Types a word, holds it, erases it, moves to the next. */
-function Typewriter({ words, startDelay = 0 }: { words: string[]; startDelay?: number }) {
-  const reduce = useReducedMotion();
-  const [ready, setReady] = useState(startDelay === 0);
-  useEffect(() => {
-    if (ready) return;
-    const t = setTimeout(() => setReady(true), startDelay);
-    return () => clearTimeout(t);
-  }, [ready, startDelay]);
-  const [i, setI] = useState(0);
-  const [n, setN] = useState(0);
-  const [erasing, setErasing] = useState(false);
-  const word = words[i % words.length];
-  useEffect(() => {
-    if (reduce || !ready) return;
-    let t: ReturnType<typeof setTimeout>;
-    if (!erasing && n < word.length) t = setTimeout(() => setN(n + 1), 70);
-    else if (!erasing) t = setTimeout(() => setErasing(true), 1700);
-    else if (n > 0) t = setTimeout(() => setN(n - 1), 35);
-    else
-      t = setTimeout(() => {
-        setErasing(false);
-        setI(i + 1);
-      }, 250);
-    return () => clearTimeout(t);
-  }, [n, erasing, word, i, reduce, ready]);
-  const shown = reduce ? words[0] : word.slice(0, n);
-  return (
-    <span className="whitespace-nowrap">
-      <span className="bg-[linear-gradient(100deg,#ec4a22,#ff6f9e_45%,#7d6cf0)] bg-clip-text text-transparent">{shown}</span>
-      {(ready || reduce) && <span className="ml-[0.04em] inline-block h-[0.82em] w-[0.07em] translate-y-[0.08em] rounded-full bg-fg animate-[blink_1s_steps(1)_infinite]" />}
-    </span>
-  );
-}
-
 function Hero() {
   const reduce = useReducedMotion();
   const head = useRef<HTMLDivElement>(null);
@@ -315,16 +226,13 @@ function Hero() {
         <motion.div ref={head} style={{ scale: headScale, opacity: headOpacity, y: headY }} className="max-w-[860px] origin-top-left">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: [0.2, 0.7, 0.2, 1] }}>
             <button onClick={() => scrollTo("decide")} className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 h-7 text-[12.5px] text-fg-2 hover:border-line-strong">
-              <span className="size-1.5 rounded-full bg-allow live-dot" /> {T("New · human approvals signed with passkeys", { start: true, speed: 18, caret: false })} <ArrowRight className="size-3" />
+              <span className="size-1.5 rounded-full bg-allow live-dot" /> New · human approvals signed with passkeys <ArrowRight className="size-3" />
             </button>
-            <h1 className="mt-6 min-h-[2.04em] text-[44px] sm:text-[64px] font-medium leading-[1.02] tracking-[-0.045em] text-fg" aria-label="Wrapbox puts every AI agent on a permit.">
-              <span aria-hidden="true">
-                <TypeSeq segs={[{ t: "Wrapbox puts every " }]} start speed={45} delay={250} /> <Typewriter words={TYPED} startDelay={1150} />{" "}
-                <TypeSeq segs={[{ t: "on a permit.", c: "text-fg-3" }]} start speed={45} delay={1100} caret={false} />
-              </span>
+            <h1 className="mt-6 text-[44px] sm:text-[64px] font-medium leading-[1.02] tracking-[-0.045em] text-fg">
+              Wrapbox puts every AI agent <span className="text-fg-3">on a permit.</span>
             </h1>
             <p className="mt-5 max-w-[620px] text-[17px] sm:text-[18px] leading-relaxed text-fg-2">
-              {T("The runtime authorization layer for AI agents. Every risky action — from Claude Code to your Stripe MCP — is checked against one intent contract, milliseconds before it runs.", { start: true, speed: 9, max: 1700, delay: 1500 })}
+              The runtime authorization layer for AI agents. Every risky action — from Claude Code to your Stripe MCP — is checked against one intent contract, milliseconds before it runs.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <button onClick={() => go("/signup")} className="inline-flex h-11 items-center gap-2 rounded-full bg-[#111113] px-5 text-[14.5px] font-medium text-white shadow-[0_10px_24px_-12px_rgba(17,17,19,0.8)] hover:opacity-90">
@@ -333,7 +241,7 @@ function Hero() {
               <button onClick={() => scrollTo("decide")} className="inline-flex h-11 items-center gap-2 rounded-full border border-line bg-surface px-5 text-[14.5px] font-medium text-fg hover:border-line-strong">
                 Try it live
               </button>
-              <span className="text-[13px] text-fg-3">{T("Free for 3 people · no card", { start: true, speed: 20, delay: 2600, caret: false })}</span>
+              <span className="text-[13px] text-fg-3">Free for 3 people · no card</span>
             </div>
           </motion.div>
         </motion.div>
@@ -380,23 +288,27 @@ function Hero() {
 
 const STATEMENT = "AI agents now push code, move money and read customer data. Wrapbox decides what each one may do — and proves it — before the action runs.";
 
+function Word({ w, p, range }: { w: string; p: MotionValue<number>; range: [number, number] }) {
+  const reduce = useReducedMotion();
+  const opacity = useTransform(p, range, reduce ? [1, 1] : [0.14, 1]);
+  return (
+    <motion.span style={{ opacity }} className="inline-block mr-[0.26em]">
+      {w}
+    </motion.span>
+  );
+}
+
 function Statement() {
   const ref = useRef<HTMLDivElement>(null);
-  const reduce = useReducedMotion();
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start 0.85", "end 0.5"] });
-  const [n, setN] = useState(0);
-  useMotionValueEvent(scrollYProgress, "change", (v) => setN(Math.round(Math.min(1, Math.max(0, v)) * STATEMENT.length)));
-  const shown = reduce ? STATEMENT.length : n;
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start 0.85", "end 0.45"] });
+  const words = STATEMENT.split(" ");
   return (
     <section ref={ref} className="py-20 sm:py-32">
       <Container>
         <p className="max-w-[980px] text-[30px] sm:text-[46px] font-medium leading-[1.14] tracking-[-0.035em] text-fg">
-          <span className="sr-only">{STATEMENT}</span>
-          <span aria-hidden="true">
-            {STATEMENT.slice(0, shown)}
-            {shown < STATEMENT.length && <span className="tw-caret" />}
-            <span className="opacity-0">{STATEMENT.slice(shown)}</span>
-          </span>
+          {words.map((w, i) => (
+            <Word key={i} w={w} p={scrollYProgress} range={[i / words.length, (i + 1.5) / words.length]} />
+          ))}
         </p>
       </Container>
     </section>
@@ -461,9 +373,9 @@ function Marquee() {
     <section className="py-16 sm:py-20">
       <Container>
         <Reveal className="text-center">
-          <div className="text-[13px] font-medium text-fg-3">{T("Integrations", { speed: 30, caret: false })}</div>
-          <h2 className="mx-auto mt-2 max-w-[640px] text-[26px] sm:text-[32px] font-medium leading-[1.12] tracking-[-0.03em] text-fg">{T("Works with the agents and tools your teams already run", { speed: 22, delay: 100 })}</h2>
-          <p className="mt-3 text-[15px] text-fg-2">{T("25 integrations across 8 agent platforms — one contract governs them all.", { speed: 12, delay: 1200 })}</p>
+          <div className="text-[13px] font-medium text-fg-3">Integrations</div>
+          <h2 className="mx-auto mt-2 max-w-[640px] text-[26px] sm:text-[32px] font-medium leading-[1.12] tracking-[-0.03em] text-fg">Works with the agents and tools your teams already run</h2>
+          <p className="mt-3 text-[15px] text-fg-2">25 integrations across 8 agent platforms — one contract governs them all.</p>
         </Reveal>
       </Container>
       <div className="marquee-wrap relative mt-10 space-y-3 overflow-hidden py-1 [mask-image:linear-gradient(90deg,transparent,#000_10%,#000_90%,transparent)]">
@@ -697,7 +609,7 @@ function Numbers() {
         {items.map(([k, v], i) => (
           <Reveal key={v} delay={i * 0.06}>
             <div className="text-[44px] font-medium tracking-[-0.04em] text-fg">{k}</div>
-            <div className="mt-1 text-[14px] text-fg-2">{T(v, { speed: 16, delay: 300 + i * 120 })}</div>
+            <div className="mt-1 text-[14px] text-fg-2">{v}</div>
           </Reveal>
         ))}
       </Container>
@@ -727,14 +639,14 @@ function UseCases() {
                   <span className="grid size-8 place-items-center rounded-lg bg-white ring-1 ring-black/[0.07]">
                     <img src={logoUrl(u.logo)} alt="" className="size-5 object-contain" />
                   </span>
-                  <span className="text-[14.5px] font-medium text-fg">{T(u.team, { speed: 26, delay: i * 90, caret: false })}</span>
+                  <span className="text-[14.5px] font-medium text-fg">{u.team}</span>
                 </div>
-                <div className="mt-4 rounded-lg bg-surface-2 px-3 py-2 font-mono text-[12px] text-fg-2 break-words">{T(u.ask, { speed: 20, delay: 250 + i * 90 })}</div>
+                <div className="mt-4 rounded-lg bg-surface-2 px-3 py-2 font-mono text-[12px] text-fg-2 break-words">{u.ask}</div>
                 <div className="mt-3 flex items-center gap-2">
                   <Pill d={u.d} />
                   <span className="font-mono text-[11.5px] text-fg-3">{u.rule}</span>
                 </div>
-                <div className="mt-1.5 text-[13px] text-fg-2">{T(u.note, { speed: 14, delay: 900 + i * 90 })}</div>
+                <div className="mt-1.5 text-[13px] text-fg-2">{u.note}</div>
               </div>
             </Reveal>
           ))}
@@ -828,7 +740,7 @@ function Pricing() {
               <Reveal key={p.name} delay={i * 0.06} className="h-full">
                 <div className={cn("wb-card relative flex h-full flex-col rounded-2xl border p-6", p.popular ? "border-transparent bg-[#111113] text-white shadow-[0_30px_70px_-30px_rgba(17,17,19,0.7)]" : "border-line bg-surface")}>
                   {p.popular && <span className="absolute -top-3 left-6 rounded-full prism-swatch px-2.5 py-1 text-[11px] font-semibold text-white shadow">Most popular</span>}
-                  <div className="text-[15px] font-medium">{T(p.name, { speed: 30, delay: i * 100, caret: false })}</div>
+                  <div className="text-[15px] font-medium">{p.name}</div>
                   <div className="mt-4 flex items-baseline gap-1.5">
                     {price === null ? (
                       <span className="text-[40px] font-medium tracking-[-0.04em]">Custom</span>
@@ -848,7 +760,7 @@ function Pricing() {
                     {p.unit}
                     {price ? (annual ? " · billed yearly" : " · billed monthly") : ""}
                   </div>
-                  <p className={cn("mt-4 text-[13.5px] leading-relaxed", p.popular ? "text-white/80" : "text-fg-2")}>{T(p.blurb, { speed: 12, delay: 300 + i * 100 })}</p>
+                  <p className={cn("mt-4 text-[13.5px] leading-relaxed", p.popular ? "text-white/80" : "text-fg-2")}>{p.blurb}</p>
                   <button
                     onClick={() => go(p.name === "Enterprise" ? "/landing" : "/signup")}
                     className={cn("mt-5 inline-flex h-10 items-center justify-center gap-1.5 rounded-full text-[13.5px] font-medium transition-opacity hover:opacity-90", p.popular ? "bg-white text-[#111113]" : "bg-[#111113] text-white")}
@@ -859,7 +771,7 @@ function Pricing() {
                     {p.features.map((f, k) => (
                       <li key={f} className="flex gap-2">
                         <Check className={cn("mt-0.5 size-3.5 shrink-0", p.popular ? "text-[#5ef0b5]" : "text-allow")} strokeWidth={2.5} />
-                        <span>{T(f, { speed: 14, max: 500, delay: 700 + i * 100 + k * 140, caret: false })}</span>
+                        <span>{f}</span>
                       </li>
                     ))}
                   </ul>
@@ -901,13 +813,13 @@ function Faq() {
             {FAQ.map(([q, a], i) => (
               <div key={q}>
                 <button onClick={() => setOpen(open === i ? null : i)} className="flex w-full items-center justify-between gap-4 py-5 text-left text-[16px] font-medium text-fg" aria-expanded={open === i}>
-                  <span>{T(q, { speed: 16, delay: i * 120, caret: false })}</span>
+                  <span>{q}</span>
                   <span className="grid size-7 shrink-0 place-items-center rounded-full border border-line text-fg-2">{open === i ? <Minus className="size-3.5" /> : <Plus className="size-3.5" />}</span>
                 </button>
                 <AnimatePresence initial={false}>
                   {open === i && (
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3 }} className="overflow-hidden">
-                      <p className="pb-5 pr-10 text-[15px] leading-relaxed text-fg-2">{T(a, { start: true, speed: 7, max: 1300, delay: 120 })}</p>
+                      <p className="pb-5 pr-10 text-[15px] leading-relaxed text-fg-2">{a}</p>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -933,9 +845,9 @@ function FinalCta() {
           <Backdrop className="px-8 py-16 sm:px-16 sm:py-24 text-white rounded-none">
             <div className="max-w-[640px]">
               <h2 className="text-[40px] sm:text-[56px] font-medium leading-[1.02] tracking-[-0.045em] [text-shadow:0_2px_24px_rgba(90,20,40,0.25)]">
-                <TypeSeq segs={[{ t: "Put your agents on a " }, { t: "permit", c: "text-[#1b0f33] [text-shadow:none]" }, { t: " today." }]} speed={40} max={1300} />
+                Put your agents on a <span className="text-[#1b0f33] [text-shadow:none]">permit</span> today.
               </h2>
-              <p className="mt-4 text-[17px] font-medium text-white/90">{T("Connect your first agent in minutes. Watch every action get a decision, a reason and a signature.", { speed: 10, delay: 1300 })}</p>
+              <p className="mt-4 text-[17px] font-medium text-white/90">Connect your first agent in minutes. Watch every action get a decision, a reason and a signature.</p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <button onClick={() => go("/signup")} className="inline-flex h-11 items-center gap-2 rounded-full bg-[#1b0f33] px-5 text-[14.5px] font-semibold text-white shadow-[0_10px_24px_-10px_rgba(27,15,51,0.8)] hover:bg-[#2a1850]">
                   Start free <ArrowRight className="size-4" />
@@ -964,7 +876,7 @@ function Footer() {
       <Container className="grid gap-10 md:grid-cols-[1.4fr_repeat(4,1fr)]">
         <div>
           <WrapboxLockup size={18} />
-          <p className="mt-3 max-w-[260px] text-[13px] leading-relaxed text-fg-3">{T("Runtime authorization for AI agents. Every action checked before it runs.", { speed: 12 })}</p>
+          <p className="mt-3 max-w-[260px] text-[13px] leading-relaxed text-fg-3">Runtime authorization for AI agents. Every action checked before it runs.</p>
         </div>
         {cols.map(([h, items]) => (
           <div key={h}>

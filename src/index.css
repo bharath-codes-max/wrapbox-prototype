@@ -400,20 +400,6 @@ h3 {
 .marquee-wrap:hover .marquee {
   animation-play-state: paused;
 }
-/* Typewriter caret used across the landing page */
-.tw-caret {
-  display: inline-block;
-  width: 0.08em;
-  min-width: 2px;
-  height: 0.95em;
-  margin-left: 0.04em;
-  margin-right: -0.12em;
-  vertical-align: -0.1em;
-  border-radius: 2px;
-  background: currentColor;
-  opacity: 0.75;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .packet,
   .live-dot,
