@@ -258,11 +258,58 @@ h3 {
   animation: blink 1s steps(1) infinite;
 }
 
+/* Get started hero: ribbed-glass prism — coral → pink → violet, deep teal pooling bottom-right */
+.hero-prism {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(62% 95% at 80% 112%, rgba(9, 34, 46, 0.97) 0%, rgba(9, 34, 46, 0.7) 40%, transparent 76%),
+    radial-gradient(30% 60% at 52% -10%, rgba(255, 236, 246, 0.42), transparent 72%),
+    linear-gradient(90deg, #ec4a22 0%, #ff6a3d 16%, #ff8580 32%, #ff9fcf 50%, #d69bff 64%, #9a82f7 80%, #6d66e6 100%);
+  background-size: 100% 100%, 100% 100%, 130% 100%;
+  animation: prism-drift 18s ease-in-out infinite alternate;
+}
+.hero-prism::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.2) 0px,
+    rgba(255, 255, 255, 0.04) 3px,
+    rgba(20, 8, 40, 0.1) 8px,
+    rgba(255, 255, 255, 0.12) 11px
+  );
+  mix-blend-mode: soft-light;
+}
+.hero-prism::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(150, 24, 40, 0.16) 0%, rgba(150, 24, 40, 0.06) 36%, transparent 55%);
+}
+@keyframes prism-drift {
+  from {
+    background-position: 0 0, 0 0, 0% 0;
+  }
+  to {
+    background-position: 0 0, 0 0, 100% 0;
+  }
+}
+.prism-swatch {
+  background: linear-gradient(120deg, #ff6a3d, #ff9fcf 50%, #9a82f7);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .packet,
   .live-dot,
   .shimmer,
-  .caret::after {
+  .caret::after,
+  .hero-prism {
     animation: none;
   }
 }

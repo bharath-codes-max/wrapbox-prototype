@@ -34,19 +34,21 @@ function Ticker() {
               key={r.action}
               layout
               initial={{ opacity: 0, y: -12 }}
-              animate={{ opacity: k === 0 ? 1 : 0.55 - k * 0.12, y: 0 }}
+              animate={{ opacity: k === 0 ? 1 : 1 - k * 0.16, y: 0 }}
               exit={{ opacity: 0, y: 12 }}
               transition={{ duration: 0.45 }}
-              className="flex items-center gap-3 rounded-xl bg-white/[0.06] ring-1 ring-white/10 px-3 py-2.5"
+              className={cn("flex items-center gap-3 rounded-xl px-3 py-2.5 ring-1", k === 0 ? "bg-white/[0.16] ring-white/30 shadow-[0_8px_24px_-12px_rgba(10,4,30,0.6)]" : "bg-white/[0.08] ring-white/15")}
             >
-              <Logo name={a.logo} bleed={a.bleed} size={28} rounded="rounded-lg" />
+              <span className="rounded-lg bg-white p-0.5 shadow-sm">
+                <Logo name={a.logo} bleed={a.bleed} size={26} rounded="rounded-md" />
+              </span>
               <div className="min-w-0 flex-1">
-                <div className="font-mono text-[12px] text-white truncate">{r.action}</div>
-                <div className="text-[11px] text-white/55 truncate">
+                <div className="font-mono text-[12px] font-medium text-white truncate">{r.action}</div>
+                <div className="text-[11px] text-white/75 truncate">
                   {a.name} · {r.why}
                 </div>
               </div>
-              <DecisionPill d={r.d} size="sm" />
+              <DecisionPill d={r.d} size="sm" className="bg-white! shadow-sm" />
             </motion.div>
           );
         })}
@@ -80,28 +82,25 @@ export function Start() {
 
   return (
     <div className="mx-auto max-w-[1180px] px-4 lg:px-8 py-8">
-      <section
-        className="relative overflow-hidden rounded-3xl p-7 lg:p-9 text-white"
-        style={{ background: "radial-gradient(700px 260px at 10% -10%, rgba(79,123,255,0.35), transparent 70%), radial-gradient(500px 240px at 100% 120%, rgba(157,182,255,0.18), transparent 70%), linear-gradient(160deg, #13214a 0%, #0f1b35 55%, #0b1530 100%)" }}
-      >
+      <section className="hero-prism overflow-hidden rounded-3xl p-7 lg:p-9 text-white shadow-[0_24px_60px_-28px_rgba(120,40,90,0.55)]">
         <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] items-center">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/[0.08] ring-1 ring-white/15 pl-1 pr-3 py-1 text-[12px] text-white/80">
-              <span className="grid size-6 place-items-center rounded-full bg-[#0a1226]">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/20 ring-1 ring-white/40 backdrop-blur-md pl-1 pr-3 py-1 text-[12px] font-medium text-white">
+              <span className="grid size-6 place-items-center rounded-full bg-[#1b0f33]">
                 <WrapboxLogo size={16} />
               </span>
               Runtime authorization for AI agents
             </div>
-            <h1 className="mt-5 text-[38px] lg:text-[46px] leading-[1.02] font-semibold tracking-[-0.04em]">
+            <h1 className="mt-5 text-[38px] lg:text-[46px] leading-[1.02] font-semibold tracking-[-0.04em] [text-shadow:0_2px_24px_rgba(90,20,40,0.25)]">
               Put every AI agent
               <br />
-              on a <span className="bg-[linear-gradient(120deg,#9db6ff,#5a82ff)] bg-clip-text text-transparent">permit</span>.
+              on a <span className="text-[#1b0f33] [text-shadow:none]">permit</span>.
             </h1>
-            <p className="mt-4 max-w-[52ch] text-[14.5px] leading-relaxed text-white/70">
+            <p className="mt-4 max-w-[52ch] text-[14.5px] leading-relaxed font-medium text-white/90">
               Claude Code, Cursor, Codex, your LangGraph agents, Agentforce, browser agents — every risky action is checked a few milliseconds before it runs, against one contract you write. Explore a live company, or build your own from zero.
             </p>
             <div className="mt-6 flex flex-wrap gap-2">
-              <button onClick={() => startFresh("admin")} className="inline-flex items-center gap-2 h-11 rounded-full bg-white px-5 text-[14px] font-semibold text-[#0f1b35] hover:opacity-90">
+              <button onClick={() => startFresh("admin")} className="inline-flex items-center gap-2 h-11 rounded-full bg-[#1b0f33] px-5 text-[14px] font-semibold text-white shadow-[0_10px_24px_-10px_rgba(27,15,51,0.8)] hover:bg-[#2a1850] transition-colors">
                 <Plus className="size-4" /> Build from zero
               </button>
               <button
@@ -110,17 +109,17 @@ export function Start() {
                   setState({ role: "admin" });
                   go("/");
                 }}
-                className="inline-flex items-center gap-2 h-11 rounded-full bg-white/[0.08] ring-1 ring-white/20 px-5 text-[14px] font-semibold text-white hover:bg-white/[0.12]"
+                className="inline-flex items-center gap-2 h-11 rounded-full bg-[#1b0f33]/20 ring-1 ring-white/55 backdrop-blur-md px-5 text-[14px] font-semibold text-white hover:bg-[#1b0f33]/30 transition-colors"
               >
                 Explore the live demo <ArrowRight className="size-4" />
               </button>
             </div>
           </div>
-          <div className="rounded-2xl bg-black/20 ring-1 ring-white/10 p-4 backdrop-blur-sm">
+          <div className="rounded-2xl bg-[#160a2e]/40 ring-1 ring-white/25 p-4 backdrop-blur-xl shadow-[0_20px_50px_-20px_rgba(10,4,30,0.7)]">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[12px] font-medium text-white/80">Decisions, as they happen</span>
-              <span className="inline-flex items-center gap-1.5 text-[11px] text-[#b6f0d6]">
-                <span className="size-1.5 rounded-full bg-[#3fd49b] live-dot" /> p50 3 ms
+              <span className="text-[12px] font-semibold text-white">Decisions, as they happen</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium text-white">
+                <span className="size-1.5 rounded-full bg-[#5ef0b5] live-dot" /> p50 3 ms
               </span>
             </div>
             <Ticker />
@@ -175,7 +174,7 @@ export function Start() {
           </div>
           <div className="w-[220px]">
             <div className="h-2 rounded-full bg-surface-3 overflow-hidden">
-              <motion.div className="h-full bg-allow" animate={{ width: `${(done / steps.length) * 100}%` }} />
+              <motion.div className="h-full prism-swatch"animate={{ width: `${(done / steps.length) * 100}%` }} />
             </div>
             <div className="mt-1 text-right text-[11.5px] text-fg-3 tnum">{Math.round((done / steps.length) * 100)}%</div>
           </div>
@@ -203,7 +202,7 @@ function PathCard({ icon, tag, title, body, cta, onClick, active, primary }: { i
   return (
     <Card className={cn("p-5 flex flex-col transition-all hover:shadow-card", active ? "border-fg/40" : "hover:border-line-strong")}>
       <div className="flex items-center justify-between">
-        <span className={cn("grid size-9 place-items-center rounded-xl", primary ? "bg-nav text-white" : "bg-surface-2 text-fg-2")}>{icon}</span>
+        <span className={cn("grid size-9 place-items-center rounded-xl", primary ? "prism-swatch text-white" : "bg-surface-2 text-fg-2")}>{icon}</span>
         {active && <span className="rounded-full bg-surface-2 border border-line px-2 py-0.5 text-[11px] text-fg-2">you're here</span>}
       </div>
       <div className="mt-4 eyebrow">{tag}</div>
