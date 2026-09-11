@@ -199,7 +199,7 @@ function PathCard({ icon, tag, title, body, cta, onClick, active, primary }: { i
   return (
     <Card className={cn("p-5 flex flex-col transition-all hover:shadow-card", active ? "border-fg/40" : "hover:border-line-strong")}>
       <div className="flex items-center justify-between">
-        <span className={cn("grid size-9 place-items-center rounded-xl", primary ? "prism-swatch text-white" : "bg-surface-2 text-fg-2")}>{icon}</span>
+        <span className="grid size-9 place-items-center rounded-xl prism-swatch text-white shadow-[0_6px_16px_-8px_rgba(236,74,34,0.55)]">{icon}</span>
         {active && <span className="rounded-full bg-surface-2 border border-line px-2 py-0.5 text-[11px] text-fg-2">you're here</span>}
       </div>
       <div className="mt-4 eyebrow">{tag}</div>
