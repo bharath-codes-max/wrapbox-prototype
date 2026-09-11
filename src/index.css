@@ -1,0 +1,321 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ---------- Tokens: light palette is the base ---------- */
+:root {
+  --bg: #fafaf8;
+  --surface: #ffffff;
+  --surface-2: #f4f4f1;
+  --surface-3: #ebebe7;
+  --line: #e6e5e0;
+  --line-strong: #d3d2cc;
+  --fg: #111c35;
+  --fg-2: #4a5061;
+  --fg-3: #8a8e99;
+  --accent: #1848ff;
+  --accent-2: #5a82ff;
+  --accent-soft: #f0f2f8;
+  --accent-fg: #ffffff;
+  --ink: #111c35;
+  --ink-fg: #ffffff;
+  --nav: #0f1b35;
+  --nav-line: rgba(255, 255, 255, 0.08);
+  --allow: #0a8a5c;
+  --allow-soft: #e9f5ee;
+  --constrain: #6b45e0;
+  --constrain-soft: #f1ecfd;
+  --review: #b26500;
+  --review-soft: #fbf2e1;
+  --block: #d6224a;
+  --block-soft: #fcecee;
+  --code-bg: #0f1628;
+  --code-line: #1e2740;
+  --shadow: 0 1px 2px rgba(17, 28, 53, 0.04), 0 8px 24px -12px rgba(17, 28, 53, 0.12);
+  --shadow-lg: 0 24px 60px -24px rgba(17, 28, 53, 0.35);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #080c17;
+    --surface: #0e1424;
+    --surface-2: #141b2e;
+    --surface-3: #1b2338;
+    --line: #1e273d;
+    --line-strong: #2b3652;
+    --fg: #e8ecf5;
+    --fg-2: #a3acc2;
+    --fg-3: #6c7590;
+    --accent: #7c98ff;
+    --accent-2: #9db4ff;
+    --accent-soft: #161f3a;
+    --accent-fg: #080c17;
+    --ink: #e8ecf5;
+    --ink-fg: #111c35;
+    --nav: #0b1326;
+    --nav-line: rgba(255, 255, 255, 0.07);
+    --allow: #3fd49b;
+    --allow-soft: #0d271e;
+    --constrain: #a78bff;
+    --constrain-soft: #221a3f;
+    --review: #f4b453;
+    --review-soft: #2c2010;
+    --block: #ff6e8a;
+    --block-soft: #321219;
+    --code-bg: #060a14;
+    --code-line: #161e33;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+    --shadow-lg: 0 24px 60px -24px rgba(0, 0, 0, 0.8);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+--bg: #080c17;
+  --surface: #0e1424;
+  --surface-2: #141b2e;
+  --surface-3: #1b2338;
+  --line: #1e273d;
+  --line-strong: #2b3652;
+  --fg: #e8ecf5;
+  --fg-2: #a3acc2;
+  --fg-3: #6c7590;
+  --accent: #7c98ff;
+  --accent-2: #9db4ff;
+  --accent-soft: #161f3a;
+  --accent-fg: #080c17;
+  --ink: #e8ecf5;
+  --ink-fg: #111c35;
+  --nav: #0b1326;
+  --nav-line: rgba(255, 255, 255, 0.07);
+  --allow: #3fd49b;
+  --allow-soft: #0d271e;
+  --constrain: #a78bff;
+  --constrain-soft: #221a3f;
+  --review: #f4b453;
+  --review-soft: #2c2010;
+  --block: #ff6e8a;
+  --block-soft: #321219;
+  --code-bg: #060a14;
+  --code-line: #161e33;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 24px 60px -24px rgba(0, 0, 0, 0.8);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+  --color-ink: var(--ink);
+  --color-ink-fg: var(--ink-fg);
+  --color-allow: var(--allow);
+  --color-allow-soft: var(--allow-soft);
+  --color-constrain: var(--constrain);
+  --color-constrain-soft: var(--constrain-soft);
+  --color-nav: var(--nav);
+  --color-review: var(--review);
+  --color-review-soft: var(--review-soft);
+  --color-block: var(--block);
+  --color-block-soft: var(--block-soft);
+  --color-code: var(--code-bg);
+  --color-code-line: var(--code-line);
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-brand: "IBM Plex Sans", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --shadow-card: var(--shadow);
+  --shadow-float: var(--shadow-lg);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "ss01", "cv11";
+}
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+  letter-spacing: -0.02em;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--fg-3);
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+::selection {
+  background: color-mix(in oklab, var(--accent) 25%, transparent);
+}
+
+/* Scrollbars */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* Brand gradient (from the Wrapbox mark) */
+.brand-grad {
+  background: linear-gradient(135deg, #9db4ff 0%, #5a82ff 55%, #1848ff 100%);
+}
+.brand-text {
+  background: linear-gradient(120deg, var(--accent-2) 0%, var(--accent) 70%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* The permit: a signed ticket with a perforated stub */
+.perforation {
+  background-image: radial-gradient(circle at 50% 50%, var(--bg) 5px, transparent 5.5px);
+  background-size: 14px 14px;
+  background-repeat: repeat-x;
+  height: 14px;
+}
+
+/* Flowing packets along the agent → wrapbox → resource rails */
+@keyframes travel {
+  from {
+    transform: translateX(-10%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  to {
+    transform: translateX(1000%);
+    opacity: 0;
+  }
+}
+.packet {
+  animation: travel 2.6s cubic-bezier(0.5, 0, 0.3, 1) infinite;
+}
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--allow) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.live-dot {
+  animation: pulse-ring 1.8s infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+.shimmer {
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--accent) 18%, transparent), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+.caret::after {
+  content: "▋";
+  margin-left: 2px;
+  animation: blink 1s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .packet,
+  .live-dot,
+  .shimmer,
+  .caret::after {
+    animation: none;
+  }
+}
+
+/* Wrapbox mark: seal and tick draw on, the tick re-verifies every few seconds */
+@keyframes wb-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes wb-tick-loop {
+  0%,
+  8% {
+    stroke-dashoffset: 26;
+  }
+  22%,
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes wb-nudge {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+}
+.wb-seal {
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+  animation: wb-draw 0.7s ease 0.35s forwards;
+}
+.wb-tick {
+  stroke-dasharray: 26;
+  stroke-dashoffset: 26;
+  animation: wb-tick-loop 6s cubic-bezier(0.6, 0, 0.2, 1) 0.75s infinite;
+}
+.wb-box {
+  transform-origin: 20px 20px;
+  transform-box: view-box;
+}
+.wb-logo:hover .wb-box {
+  animation: wb-nudge 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-seal,
+  .wb-tick {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .wb-logo:hover .wb-box {
+    animation: none;
+  }
+}
