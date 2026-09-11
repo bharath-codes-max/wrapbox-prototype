@@ -16,6 +16,7 @@ import { Welcome } from "./pages/welcome";
 import { Start } from "./pages/start";
 import { AdminSetup, EmployeeSetup } from "./pages/onboarding";
 import { Playground } from "./pages/playground";
+import { SettingsPage } from "./pages/settings";
 
 export default function App() {
   const route = useRoute();
@@ -66,6 +67,9 @@ export default function App() {
       break;
     case "evidence":
       page = <Evidence />;
+      break;
+    case "settings":
+      page = <SettingsPage />;
       break;
     case "team":
       page = role === "admin" ? <Team /> : <Locked what="Team & devices" />;

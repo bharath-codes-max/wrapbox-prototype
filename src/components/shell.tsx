@@ -6,24 +6,22 @@ import {
   ChevronsUpDown,
   CircleCheck,
   CirclePlay,
-  Compass,
   FileCheck2,
   FlaskConical,
   Hand,
   Info,
+  Settings as SettingsIcon,
   KeyRound,
   LayoutGrid,
   ListTree,
   Lock,
   Menu,
-  Moon,
   Network,
   OctagonX,
   Plus,
   RotateCcw,
   Rocket,
   Search,
-  Sun,
   Users,
   X,
 } from "lucide-react";
@@ -32,9 +30,10 @@ import { AGENTS, CATEGORIES } from "../data/agents";
 import { SCENARIOS } from "../data/scenarios";
 import type { Env } from "../lib/engine";
 import { go } from "../lib/router";
-import { ADMIN, EMPLOYEE, TOUR, getState, resetFresh, setState, setTheme, switchWorkspace, useStore, workspaceHasData, type Role, type WorkspaceId } from "../lib/store";
+import { ADMIN, EMPLOYEE, TOUR, getState, resetFresh, setState, switchWorkspace, useStore, workspaceHasData, type Role, type WorkspaceId } from "../lib/store";
 import { PasskeyModal } from "./insight";
 import { WrapboxWordmark } from "./logo";
+import { useNavStyle } from "../lib/navstyle";
 import { Avatar, Kbd, Logo, cn } from "./ui";
 
 interface NavItem {
@@ -157,6 +156,7 @@ function Sidebar({ current, onNavigate }: { current: string; onNavigate?: () => 
         ))}
       </nav>
       <div className="px-2.5 pb-2">
+        <NavLink it={{ path: "/settings", label: "Settings", icon: SettingsIcon }} current={current} onNavigate={onNavigate} />
         <NavLink it={{ path: "/welcome", label: "About Wrapbox", icon: Info }} current={current} onNavigate={onNavigate} />
       </div>
       <div className="mx-2.5 mb-3 flex items-center gap-2.5 rounded-xl border border-line bg-surface p-2.5">
@@ -175,6 +175,7 @@ function Sidebar({ current, onNavigate }: { current: string; onNavigate?: () => 
 
 const TITLES: [string, string][] = [
   ["/welcome", "About Wrapbox"],
+  ["/settings", "Settings"],
   ["/start", "Get started"],
   ["/onboarding/admin", "Admin setup"],
   ["/onboarding/employee", "Employee setup"],
@@ -312,55 +313,12 @@ function RoleSwitch() {
   );
 }
 
-type NavStyle = "navy" | "light";
-const NAV_KEY = "wbx-nav";
-const readNav = (): NavStyle => {
-  try {
-    return localStorage.getItem(NAV_KEY) === "light" ? "light" : "navy";
-  } catch {
-    return "navy";
-  }
-};
-
-/** Small switch between the matte black bar and the off-white bar. */
-function NavStyleSwitch({ nav, onChange }: { nav: NavStyle; onChange: (v: NavStyle) => void }) {
-  const light = nav === "light";
-  return (
-    <button
-      role="switch"
-      aria-checked={light}
-      aria-label="Off-white top bar"
-      title={light ? "Switch to the matte black bar" : "Switch to the off-white bar"}
-      onClick={() => onChange(light ? "navy" : "light")}
-      className="relative hidden sm:inline-flex h-6 w-11 shrink-0 items-center rounded-full ring-1 ring-(--n-ring-2) bg-(--n-soft-2) transition-colors"
-    >
-      <span className="absolute left-[7px] size-2 rounded-full bg-[#111113] ring-1 ring-white/30" />
-      <span className="absolute right-[7px] size-2 rounded-full bg-[#fafaf8] ring-1 ring-black/15" />
-      <motion.span
-        className="absolute top-[3px] size-[18px] rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.3)] ring-1 ring-black/10"
-        style={{ background: light ? "#fafaf8" : "#111113", border: light ? "none" : "1.5px solid rgba(255,255,255,0.85)" }}
-        animate={{ left: light ? 23 : 3 }}
-        transition={{ type: "spring", duration: 0.3, bounce: 0.2 }}
-      />
-    </button>
-  );
-}
-
 function Topbar({ onMenu }: { onMenu: () => void }) {
-  const theme = useStore((s) => s.theme);
   const kill = useStore((s) => s.killSwitch);
   const live = useStore((s) => s.live);
   const events = useStore((s) => s.events.length);
   const ruleCount = useStore((s) => s.published.length);
-  const [nav, setNavState] = useState<NavStyle>(readNav);
-  const setNav = (v: NavStyle) => {
-    setNavState(v);
-    try {
-      localStorage.setItem(NAV_KEY, v);
-    } catch {
-      /* storage blocked — the choice lasts for this visit */
-    }
-  };
+  const nav = useNavStyle();
   return (
     <header data-nav={nav} className="wb-nav relative sticky top-0 z-40 flex items-center gap-3 h-[68px] px-4 lg:px-5 border-b border-(--n-edge) transition-[background,color] duration-300">
       <span className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-[linear-gradient(90deg,transparent,var(--n-glow),transparent)]" />
@@ -401,14 +359,7 @@ function Topbar({ onMenu }: { onMenu: () => void }) {
             {events ? "No rules — allowing everything" : "Waiting for your first agent"}
           </span>
         )}
-        <button onClick={() => setState({ tour: 0 })} className="hidden md:inline-flex items-center gap-1.5 rounded-full h-8 px-3 text-[12.5px] text-(--n-fg-2) ring-1 ring-(--n-ring) hover:text-(--n-fg) hover:bg-(--n-soft)">
-          <Compass className="size-3.5" /> Guided tour
-        </button>
         <RoleSwitch />
-        <NavStyleSwitch nav={nav} onChange={setNav} />
-        <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-9 place-items-center rounded-full ring-1 ring-(--n-ring) text-(--n-fg-2) hover:text-(--n-fg) hover:bg-(--n-soft)" aria-label="Toggle theme">
-          {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-        </button>
       </div>
     </header>
   );
