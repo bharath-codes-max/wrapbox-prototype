@@ -10,6 +10,8 @@ import {
   FlaskConical,
   Hand,
   Info,
+  Laptop,
+  ShieldCheck,
   Settings as SettingsIcon,
   KeyRound,
   LayoutGrid,
@@ -34,7 +36,7 @@ import { ADMIN, EMPLOYEE, TOUR, getState, resetFresh, setState, switchWorkspace,
 import { PasskeyModal } from "./insight";
 import { WrapboxWordmark } from "./logo";
 import { useNavStyle } from "../lib/navstyle";
-import { Avatar, Kbd, Logo, cn } from "./ui";
+import { Avatar, Kbd, Logo, PersonFigure, cn } from "./ui";
 
 interface NavItem {
   path: string;
@@ -160,7 +162,7 @@ function Sidebar({ current, onNavigate }: { current: string; onNavigate?: () => 
         <NavLink it={{ path: "/welcome", label: "About Wrapbox", icon: Info }} current={current} onNavigate={onNavigate} />
       </div>
       <div className="mx-2.5 mb-3 flex items-center gap-2.5 rounded-xl border border-line bg-surface p-2.5">
-        <Avatar p={me} size={32} />
+        <PersonFigure p={me} size={32} />
         <div className="min-w-0 flex-1">
           <div className="text-[13px] font-semibold truncate">{me.name}</div>
           <div className="text-[11.5px] text-fg-3 truncate">
@@ -294,21 +296,32 @@ function WorkspaceMenu() {
 
 function RoleSwitch() {
   const role = useStore((s) => s.role);
-  const opts: { v: Role; label: string; p: typeof ADMIN }[] = [
-    { v: "admin", label: "Admin", p: ADMIN },
-    { v: "employee", label: "Employee", p: EMPLOYEE },
+  const opts: { v: Role; label: string; p: typeof ADMIN; badge: ReactNode }[] = [
+    { v: "admin", label: "Admin", p: ADMIN, badge: <ShieldCheck className="size-[9px]" strokeWidth={3} /> },
+    { v: "employee", label: "Employee", p: EMPLOYEE, badge: <Laptop className="size-[9px]" strokeWidth={2.6} /> },
   ];
   return (
-    <div className="flex rounded-full bg-(--n-soft) p-0.5 ring-1 ring-(--n-ring)" role="tablist" aria-label="View as">
-      {opts.map((o) => (
-        <button key={o.v} role="tab" aria-selected={role === o.v} onClick={() => setState({ role: o.v })} className={cn("relative flex items-center gap-1.5 rounded-full h-8 pl-1 pr-3 text-[12.5px] font-medium transition-colors", role === o.v ? "text-(--n-pill-fg)" : "text-(--n-fg-2) hover:text-(--n-fg)")}>
-          {role === o.v && <motion.span layoutId="role-pill" className="absolute inset-0 rounded-full bg-(--n-pill-bg) shadow-[0_2px_10px_rgba(0,0,0,0.25)]" transition={{ type: "spring", duration: 0.35, bounce: 0.15 }} />}
-          <span className="relative">
-            <Avatar p={o.p} size={22} className="!ring-0" />
-          </span>
-          <span className="relative">{o.label}</span>
-        </button>
-      ))}
+    <div className="flex items-center gap-0.5 rounded-full bg-(--n-soft) p-1 ring-1 ring-(--n-ring)" role="tablist" aria-label="View as">
+      {opts.map((o) => {
+        const on = role === o.v;
+        return (
+          <button
+            key={o.v}
+            role="tab"
+            aria-selected={on}
+            onClick={() => setState({ role: o.v })}
+            title={`View as ${o.p.name} (${o.label.toLowerCase()})`}
+            className={cn("relative flex items-center gap-2 rounded-full h-9 pl-1 pr-3.5 text-left transition-colors", on ? "text-(--n-pill-fg)" : "text-(--n-fg-2) hover:text-(--n-fg)")}
+          >
+            {on && <motion.span layoutId="role-pill" className="absolute inset-0 rounded-full bg-(--n-pill-bg) shadow-[0_2px_10px_rgba(0,0,0,0.28)]" transition={{ type: "spring", duration: 0.35, bounce: 0.15 }} />}
+            <PersonFigure p={o.p} size={28} badge={o.badge} className={cn("relative transition-opacity", !on && "opacity-75")} />
+            <span className="relative leading-[1.1]">
+              <span className="block text-[12.5px] font-semibold">{o.p.name.split(" ")[0]}</span>
+              <span className={cn("block text-[10.5px] font-medium", on ? "opacity-60" : "opacity-70")}>{o.label}</span>
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -449,7 +462,7 @@ function Toasts() {
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[90] flex flex-col items-center gap-2 pointer-events-none">
       <AnimatePresence>
         {toasts.map((t) => (
-          <motion.div key={t.id} initial={{ y: 16, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 8, opacity: 0 }} className="pointer-events-auto flex items-start gap-2.5 rounded-xl bg-[#0f1b35] text-white px-4 py-2.5 shadow-float max-w-[460px] ring-1 ring-white/10">
+          <motion.div key={t.id} initial={{ y: 16, opacity: 0, scale: 0.97 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 8, opacity: 0 }} className="pointer-events-auto flex items-start gap-2.5 rounded-xl bg-[#111113] text-white px-4 py-2.5 shadow-float max-w-[460px] ring-1 ring-white/10">
             <span className={cn("mt-1.5 size-2 rounded-full shrink-0", t.tone === "allow" ? "bg-[#3fd49b]" : t.tone === "block" ? "bg-[#ff6e8a]" : t.tone === "review" ? "bg-[#f4b453]" : "bg-[#9db4ff]")} />
             <div>
               <div className="text-[13px] font-semibold">{t.title}</div>
@@ -472,7 +485,7 @@ function TourCard() {
     go(n.path);
   };
   return (
-    <motion.div key={step} initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="fixed bottom-4 right-4 z-[55] w-[min(360px,calc(100vw-32px))] rounded-2xl bg-[#0f1b35] text-white p-4 shadow-float ring-1 ring-white/10">
+    <motion.div key={step} initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="fixed bottom-4 right-4 z-[55] w-[min(360px,calc(100vw-32px))] rounded-2xl bg-[#111113] text-white p-4 shadow-float ring-1 ring-white/10">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-mono opacity-60">
           Guided tour · {step + 1}/{TOUR.length}
@@ -521,7 +534,7 @@ export function Shell({ current, children, focus }: { current: string; children:
       )}
       <div className="flex flex-1 min-h-0">
         {!focus && (
-          <aside className="relative z-10 hidden lg:block w-[244px] shrink-0 border-r border-line bg-bg shadow-[6px_0_24px_-14px_rgba(17,28,53,0.22)]">
+          <aside className="relative z-10 hidden lg:block w-[244px] shrink-0 border-r border-[color-mix(in_oklab,var(--fg)_11%,transparent)] bg-bg">
             <Sidebar current={current} />
           </aside>
         )}

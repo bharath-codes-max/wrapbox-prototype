@@ -91,6 +91,26 @@ export function WrapboxMark({ size = 28 }: { size?: number }) {
   return <img src={logoUrl("wrapbox-icon")} alt="Wrapbox" style={{ width: size, height: size }} className="rounded-[22%] shrink-0" />;
 }
 
+/** A person figure (head and shoulders) on the person's colour — used where we show who you are acting as. */
+export function PersonFigure({ p, size = 28, badge, className }: { p: Person; size?: number; badge?: ReactNode; className?: string }) {
+  return (
+    <span className={cn("relative inline-block shrink-0", className)} style={{ width: size, height: size }} title={`${p.name} · ${p.role}`}>
+      <svg viewBox="0 0 32 32" width={size} height={size} className="rounded-full" aria-hidden="true">
+        <defs>
+          <linearGradient id={`pf-${p.id}`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor={`hsl(${p.hue} 72% 66%)`} />
+            <stop offset="1" stopColor={`hsl(${p.hue + 28} 62% 44%)`} />
+          </linearGradient>
+        </defs>
+        <circle cx="16" cy="16" r="16" fill={`url(#pf-${p.id})`} />
+        <circle cx="16" cy="12.6" r="5.4" fill="#fff" fillOpacity="0.95" />
+        <path d="M5.5 29.2c1.6-5.6 5.8-8.6 10.5-8.6s8.9 3 10.5 8.6A15.9 15.9 0 0 1 16 32a15.9 15.9 0 0 1-10.5-2.8Z" fill="#fff" fillOpacity="0.95" />
+      </svg>
+      {badge && <span className="absolute -right-1 -bottom-1 grid size-[15px] place-items-center rounded-full bg-[#111113] text-white ring-2 ring-white">{badge}</span>}
+    </span>
+  );
+}
+
 export function Avatar({ p, size = 26, className }: { p: Person; size?: number; className?: string }) {
   return (
     <span
