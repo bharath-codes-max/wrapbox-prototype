@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import {
+  Building2,
   Bot,
   Check,
   ChevronsUpDown,
@@ -33,7 +34,7 @@ import type { Env } from "../lib/engine";
 import { go } from "../lib/router";
 import { ADMIN, EMPLOYEE, TOUR, getState, resetFresh, setState, setTheme, switchWorkspace, useStore, workspaceHasData, type Role, type WorkspaceId } from "../lib/store";
 import { PasskeyModal } from "./insight";
-import { WrapboxLogo, WrapboxWordmark } from "./logo";
+import { WrapboxWordmark } from "./logo";
 import { Avatar, Kbd, Logo, cn } from "./ui";
 
 interface NavItem {
@@ -189,7 +190,7 @@ const TITLES: [string, string][] = [
 ];
 
 const ENVS: { id: "all" | Env; label: string; dot: string; note: string }[] = [
-  { id: "all", label: "All environments", dot: "bg-white/40", note: "every decision" },
+  { id: "all", label: "All environments", dot: "bg-(--n-fg-3)", note: "every decision" },
   { id: "production", label: "Production", dot: "bg-[#3fd49b]", note: "customer-facing systems" },
   { id: "staging", label: "Staging", dot: "bg-[#f4b453]", note: "cloud runners, previews" },
   { id: "development", label: "Development", dot: "bg-[#9db4ff]", note: "laptops and sandboxes" },
@@ -221,20 +222,17 @@ function WorkspaceMenu() {
   };
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen(!open)} className={cn("flex items-center gap-2.5 rounded-xl h-10 pl-1.5 pr-2.5 transition-colors ring-1", open ? "bg-white/[0.12] ring-white/20" : "bg-white/[0.06] ring-white/10 hover:bg-white/[0.1]")}>
-        <span className={cn("grid size-7 place-items-center rounded-lg", workspace === "fresh" ? "border border-dashed border-white/40" : "bg-[#0a1226] ring-1 ring-white/10")}>
-          {workspace === "fresh" ? <Plus className="size-3.5 text-white/80" /> : <WrapboxLogo size={18} />}
-        </span>
+      <button onClick={() => setOpen(!open)} className={cn("flex items-center gap-3 rounded-xl h-10 pl-3.5 pr-2.5 transition-colors ring-1", open ? "bg-(--n-soft-2) ring-(--n-ring-2)" : "bg-(--n-soft) ring-(--n-ring) hover:bg-(--n-soft-2)")}>
         <span className="text-left leading-tight">
-          <span className="block text-[12.5px] font-semibold text-white">
-            {company} <span className="font-normal text-white/50">· {workspace === "fresh" ? "fresh" : "demo"}</span>
+          <span className="block text-[12.5px] font-semibold text-(--n-fg)">
+            {company} <span className="font-normal text-(--n-fg-3)">· {workspace === "fresh" ? "fresh" : "demo"}</span>
           </span>
-          <span className="flex items-center gap-1.5 text-[11px] text-white/60">
+          <span className="flex items-center gap-1.5 text-[11px] text-(--n-fg-2)">
             <span className={cn("size-1.5 rounded-full", env.dot)} />
             {env.label}
           </span>
         </span>
-        <ChevronsUpDown className="size-3.5 text-white/50" />
+        <ChevronsUpDown className="size-3.5 text-(--n-fg-3)" />
       </button>
       <AnimatePresence>
         {open && (
@@ -248,7 +246,7 @@ function WorkspaceMenu() {
                 ] as const
               ).map((w) => (
                 <button key={w.id} onClick={() => pickWs(w.id)} className={cn("flex w-full items-start gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors", workspace === w.id ? "bg-surface-2" : "hover:bg-surface-2")}>
-                  <span className={cn("mt-0.5 grid size-8 place-items-center rounded-lg shrink-0", w.id === "demo" ? "bg-nav" : "border border-dashed border-line-strong")}>{w.id === "demo" ? <WrapboxLogo size={20} /> : <Plus className="size-4 text-fg-2" />}</span>
+                  <span className={cn("mt-0.5 grid size-8 place-items-center rounded-lg shrink-0", w.id === "demo" ? "bg-surface-2 border border-line" : "border border-dashed border-line-strong")}>{w.id === "demo" ? <Building2 className="size-4 text-fg-2" /> : <Plus className="size-4 text-fg-2" />}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-[13px] font-semibold">{w.title}</span>
                     <span className="block text-[11.5px] text-fg-3 leading-snug">{w.desc}</span>
@@ -274,7 +272,7 @@ function WorkspaceMenu() {
               {ENVS.map((e) => (
                 <button key={e.id} onClick={() => setState({ envFilter: e.id })} className={cn("rounded-xl px-2.5 py-2 text-left transition-colors border", envFilter === e.id ? "border-fg bg-surface" : "border-transparent hover:bg-surface-2")}>
                   <span className="flex items-center gap-1.5 text-[12.5px] font-medium">
-                    <span className={cn("size-2 rounded-full", e.dot.replace("bg-white/40", "bg-fg-3"))} />
+                    <span className={cn("size-2 rounded-full", e.dot.replace("bg-(--n-fg-3)", "bg-fg-3"))} />
                     {e.label}
                   </span>
                   <span className="block text-[11px] text-fg-3">
@@ -300,10 +298,10 @@ function RoleSwitch() {
     { v: "employee", label: "Employee", p: EMPLOYEE },
   ];
   return (
-    <div className="flex rounded-full bg-white/[0.07] p-0.5 ring-1 ring-white/10" role="tablist" aria-label="View as">
+    <div className="flex rounded-full bg-(--n-soft) p-0.5 ring-1 ring-(--n-ring)" role="tablist" aria-label="View as">
       {opts.map((o) => (
-        <button key={o.v} role="tab" aria-selected={role === o.v} onClick={() => setState({ role: o.v })} className={cn("relative flex items-center gap-1.5 rounded-full h-8 pl-1 pr-3 text-[12.5px] font-medium transition-colors", role === o.v ? "text-[#0f1b35]" : "text-white/70 hover:text-white")}>
-          {role === o.v && <motion.span layoutId="role-pill" className="absolute inset-0 rounded-full bg-white shadow-[0_2px_10px_rgba(0,0,0,0.25)]" transition={{ type: "spring", duration: 0.35, bounce: 0.15 }} />}
+        <button key={o.v} role="tab" aria-selected={role === o.v} onClick={() => setState({ role: o.v })} className={cn("relative flex items-center gap-1.5 rounded-full h-8 pl-1 pr-3 text-[12.5px] font-medium transition-colors", role === o.v ? "text-(--n-pill-fg)" : "text-(--n-fg-2) hover:text-(--n-fg)")}>
+          {role === o.v && <motion.span layoutId="role-pill" className="absolute inset-0 rounded-full bg-(--n-pill-bg) shadow-[0_2px_10px_rgba(0,0,0,0.25)]" transition={{ type: "spring", duration: 0.35, bounce: 0.15 }} />}
           <span className="relative">
             <Avatar p={o.p} size={22} className="!ring-0" />
           </span>
@@ -314,62 +312,101 @@ function RoleSwitch() {
   );
 }
 
+type NavStyle = "navy" | "light";
+const NAV_KEY = "wbx-nav";
+const readNav = (): NavStyle => {
+  try {
+    return localStorage.getItem(NAV_KEY) === "light" ? "light" : "navy";
+  } catch {
+    return "navy";
+  }
+};
+
+/** Small switch between the navy bar and the off-white bar. */
+function NavStyleSwitch({ nav, onChange }: { nav: NavStyle; onChange: (v: NavStyle) => void }) {
+  const light = nav === "light";
+  return (
+    <button
+      role="switch"
+      aria-checked={light}
+      aria-label="Off-white top bar"
+      title={light ? "Switch to the navy bar" : "Switch to the off-white bar"}
+      onClick={() => onChange(light ? "navy" : "light")}
+      className="relative hidden sm:inline-flex h-6 w-11 shrink-0 items-center rounded-full ring-1 ring-(--n-ring-2) bg-(--n-soft-2) transition-colors"
+    >
+      <span className="absolute left-[7px] size-2 rounded-full bg-[#0f1b35] ring-1 ring-white/30" />
+      <span className="absolute right-[7px] size-2 rounded-full bg-[#fafaf8] ring-1 ring-black/15" />
+      <motion.span
+        className="absolute top-[3px] size-[18px] rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.3)] ring-1 ring-black/10"
+        style={{ background: light ? "#fafaf8" : "#0f1b35", border: light ? "none" : "1.5px solid rgba(255,255,255,0.85)" }}
+        animate={{ left: light ? 23 : 3 }}
+        transition={{ type: "spring", duration: 0.3, bounce: 0.2 }}
+      />
+    </button>
+  );
+}
+
 function Topbar({ onMenu }: { onMenu: () => void }) {
   const theme = useStore((s) => s.theme);
   const kill = useStore((s) => s.killSwitch);
   const live = useStore((s) => s.live);
   const events = useStore((s) => s.events.length);
   const ruleCount = useStore((s) => s.published.length);
+  const [nav, setNavState] = useState<NavStyle>(readNav);
+  const setNav = (v: NavStyle) => {
+    setNavState(v);
+    try {
+      localStorage.setItem(NAV_KEY, v);
+    } catch {
+      /* storage blocked — the choice lasts for this visit */
+    }
+  };
   return (
-    <header
-      className="relative sticky top-0 z-40 flex items-center gap-3 h-[68px] px-4 lg:px-5 text-white border-b border-[var(--nav-line)]"
-      style={{
-        background: "radial-gradient(520px 140px at 150px -30px, rgba(79,123,255,0.30), transparent 70%), radial-gradient(420px 120px at 85% -40px, rgba(157,182,255,0.12), transparent 70%), linear-gradient(180deg, #13214a 0%, #0f1b35 55%, #0c1630 100%)",
-      }}
-    >
-      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-[linear-gradient(90deg,transparent,rgba(157,182,255,0.45),transparent)]" />
-      <button onClick={onMenu} className="lg:hidden grid size-9 place-items-center rounded-lg hover:bg-white/10" aria-label="Open menu">
+    <header data-nav={nav} className="wb-nav relative sticky top-0 z-40 flex items-center gap-3 h-[68px] px-4 lg:px-5 border-b border-(--n-edge) transition-[background,color] duration-300">
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-[linear-gradient(90deg,transparent,var(--n-glow),transparent)]" />
+      <button onClick={onMenu} className="lg:hidden grid size-9 place-items-center rounded-lg hover:bg-(--n-soft-2)" aria-label="Open menu">
         <Menu className="size-4.5" />
       </button>
       <a href="#/" aria-label="Wrapbox home" className="shrink-0">
-        <WrapboxWordmark />
+        <WrapboxWordmark tone={nav === "light" ? "light" : "dark"} />
       </a>
-      <span className="hidden md:block h-7 w-px bg-white/12 mx-1" />
+      <span className="hidden md:block h-7 w-px bg-(--n-ring) mx-1" />
       <div className="hidden md:block">
         <WorkspaceMenu />
       </div>
       <button
         onClick={() => setState({ palette: true })}
-        className="ml-2 hidden lg:flex items-center gap-2.5 h-10 w-[min(420px,32vw)] rounded-xl bg-white/[0.07] ring-1 ring-white/12 px-3.5 text-[13px] text-white/60 hover:bg-white/[0.1] hover:text-white/80 transition-colors shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+        className="ml-2 hidden lg:flex items-center gap-2.5 h-10 w-[min(420px,32vw)] rounded-xl bg-(--n-soft) ring-1 ring-(--n-ring) px-3.5 text-[13px] text-(--n-fg-3) hover:bg-(--n-soft-2) hover:text-(--n-fg-2) transition-colors"
       >
         <Search className="size-4" />
         Search agents, rules, flows, people…
         <span className="ml-auto flex items-center gap-1">
-          <kbd className="grid h-5 min-w-5 place-items-center rounded-md bg-white/10 px-1 font-mono text-[10.5px] text-white/70">⌘</kbd>
-          <kbd className="grid h-5 min-w-5 place-items-center rounded-md bg-white/10 px-1 font-mono text-[10.5px] text-white/70">K</kbd>
+          <kbd className="grid h-5 min-w-5 place-items-center rounded-md bg-(--n-soft-2) px-1 font-mono text-[10.5px] text-(--n-fg-2)">⌘</kbd>
+          <kbd className="grid h-5 min-w-5 place-items-center rounded-md bg-(--n-soft-2) px-1 font-mono text-[10.5px] text-(--n-fg-2)">K</kbd>
         </span>
       </button>
       <div className="ml-auto flex items-center gap-2">
         {kill ? (
-          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-[#ff6e8a]/15 text-[#ff8fa3] ring-1 ring-[#ff6e8a]/30 px-3 h-8 text-[12px] font-semibold">
+          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-[#ff6e8a]/15 text-(--n-bad-fg) ring-1 ring-[#ff6e8a]/30 px-3 h-8 text-[12px] font-semibold">
             <OctagonX className="size-3.5" /> Kill switch on
           </span>
         ) : ruleCount ? (
-          <span className="hidden xl:inline-flex items-center gap-2 rounded-full bg-[#3fd49b]/10 ring-1 ring-[#3fd49b]/25 px-3 h-8 text-[12px] text-[#b6f0d6]">
-            <span className={cn("size-1.5 rounded-full bg-[#3fd49b]", live && "live-dot")} />
+          <span className="hidden xl:inline-flex items-center gap-2 rounded-full bg-(--n-ok-bg) ring-1 ring-(--n-ok-ring) px-3 h-8 text-[12px] font-medium text-(--n-ok-fg)">
+            <span className={cn("size-1.5 rounded-full bg-(--n-ok-dot)", live && "live-dot")} />
             Enforcing {ruleCount} rules · 3 ms
           </span>
         ) : (
-          <span className="hidden xl:inline-flex items-center gap-2 rounded-full ring-1 ring-white/12 px-3 h-8 text-[12px] text-white/65">
-            <span className="size-1.5 rounded-full bg-white/35" />
+          <span className="hidden xl:inline-flex items-center gap-2 rounded-full ring-1 ring-(--n-ring) px-3 h-8 text-[12px] text-(--n-fg-2)">
+            <span className="size-1.5 rounded-full bg-(--n-fg-3)" />
             {events ? "No rules — allowing everything" : "Waiting for your first agent"}
           </span>
         )}
-        <button onClick={() => setState({ tour: 0 })} className="hidden md:inline-flex items-center gap-1.5 rounded-full h-8 px-3 text-[12.5px] text-white/80 ring-1 ring-white/10 hover:text-white hover:bg-white/[0.08]">
+        <button onClick={() => setState({ tour: 0 })} className="hidden md:inline-flex items-center gap-1.5 rounded-full h-8 px-3 text-[12.5px] text-(--n-fg-2) ring-1 ring-(--n-ring) hover:text-(--n-fg) hover:bg-(--n-soft)">
           <Compass className="size-3.5" /> Guided tour
         </button>
         <RoleSwitch />
-        <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-9 place-items-center rounded-full ring-1 ring-white/10 text-white/75 hover:text-white hover:bg-white/[0.08]" aria-label="Toggle theme">
+        <NavStyleSwitch nav={nav} onChange={setNav} />
+        <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-9 place-items-center rounded-full ring-1 ring-(--n-ring) text-(--n-fg-2) hover:text-(--n-fg) hover:bg-(--n-soft)" aria-label="Toggle theme">
           {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
         </button>
       </div>

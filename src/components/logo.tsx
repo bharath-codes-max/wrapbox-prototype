@@ -4,7 +4,7 @@ import { cn } from "./ui";
 /** The Wrapbox mark, drawn exactly as on the pitch site: a box, the wrapping seal, and the verified tick. */
 export function WrapboxLogo({ size = 30, tone = "dark", className }: { size?: number; tone?: "dark" | "light"; className?: string }) {
   const id = useId().replace(/:/g, "");
-  const ink = tone === "dark" ? "#ffffff" : "#111c35";
+  const ink = tone === "dark" ? "#ffffff" : "currentColor";
   return (
     <svg
       width={size}
@@ -12,7 +12,7 @@ export function WrapboxLogo({ size = 30, tone = "dark", className }: { size?: nu
       viewBox="0 0 40 40"
       fill="none"
       aria-hidden="true"
-      className={cn("shrink-0", tone === "dark" && "drop-shadow-[0_2px_8px_rgba(79,123,255,0.35)]", className)}
+      className={cn("shrink-0", tone === "dark" ? "drop-shadow-[0_2px_8px_rgba(79,123,255,0.35)]" : "text-fg drop-shadow-[0_2px_6px_rgba(24,72,255,0.18)]", className)}
     >
       <defs>
         <linearGradient id={`wbg-${id}`} x1="6" y1="6" x2="34" y2="34" gradientUnits="userSpaceOnUse">

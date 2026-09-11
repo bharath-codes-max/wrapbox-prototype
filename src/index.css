@@ -258,6 +258,54 @@ h3 {
   animation: blink 1s steps(1) infinite;
 }
 
+/* Top bar: two styles, switched from the bar itself. Navy is the default. */
+.wb-nav {
+  --n-bg:
+    radial-gradient(520px 140px at 150px -30px, rgba(79, 123, 255, 0.3), transparent 70%),
+    radial-gradient(420px 120px at 85% -40px, rgba(157, 182, 255, 0.12), transparent 70%),
+    linear-gradient(180deg, #13214a 0%, #0f1b35 55%, #0c1630 100%);
+  --n-fg: #ffffff;
+  --n-fg-2: rgba(255, 255, 255, 0.72);
+  --n-fg-3: rgba(255, 255, 255, 0.5);
+  --n-soft: rgba(255, 255, 255, 0.07);
+  --n-soft-2: rgba(255, 255, 255, 0.12);
+  --n-ring: rgba(255, 255, 255, 0.12);
+  --n-ring-2: rgba(255, 255, 255, 0.22);
+  --n-edge: rgba(255, 255, 255, 0.08);
+  --n-glow: rgba(157, 182, 255, 0.45);
+  --n-pill-bg: #ffffff;
+  --n-pill-fg: #0f1b35;
+  --n-ok-bg: rgba(63, 212, 155, 0.1);
+  --n-ok-ring: rgba(63, 212, 155, 0.25);
+  --n-ok-fg: #b6f0d6;
+  --n-ok-dot: #3fd49b;
+  --n-bad-fg: #ff8fa3;
+  --n-shadow: none;
+  background: var(--n-bg);
+  color: var(--n-fg);
+  box-shadow: var(--n-shadow);
+}
+.wb-nav[data-nav="light"] {
+  --n-bg: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+  --n-fg: var(--fg);
+  --n-fg-2: color-mix(in oklab, var(--fg) 72%, transparent);
+  --n-fg-3: color-mix(in oklab, var(--fg) 50%, transparent);
+  --n-soft: color-mix(in oklab, var(--fg) 4%, transparent);
+  --n-soft-2: color-mix(in oklab, var(--fg) 8%, transparent);
+  --n-ring: color-mix(in oklab, var(--fg) 11%, transparent);
+  --n-ring-2: color-mix(in oklab, var(--fg) 22%, transparent);
+  --n-edge: var(--line);
+  --n-glow: transparent;
+  --n-pill-bg: var(--fg);
+  --n-pill-fg: var(--bg);
+  --n-ok-bg: color-mix(in oklab, var(--allow) 9%, transparent);
+  --n-ok-ring: color-mix(in oklab, var(--allow) 28%, transparent);
+  --n-ok-fg: var(--allow);
+  --n-ok-dot: var(--allow);
+  --n-bad-fg: var(--block);
+  --n-shadow: 0 10px 28px -22px rgba(17, 28, 53, 0.45);
+}
+
 /* Get started hero: ribbed-glass prism — coral → pink → violet, deep teal pooling bottom-right */
 .hero-prism {
   position: relative;

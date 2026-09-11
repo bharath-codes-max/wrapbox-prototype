@@ -2,7 +2,6 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, Check, Database, Plus, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { agentById, type Decision } from "../data/agents";
-import { WrapboxLogo } from "../components/logo";
 import { Button, Card, DecisionPill, Logo, cn } from "../components/ui";
 import { go } from "../lib/router";
 import { setState, switchWorkspace, useStore, workspaceHasData } from "../lib/store";
@@ -85,10 +84,8 @@ export function Start() {
       <section className="hero-prism overflow-hidden rounded-3xl p-7 lg:p-9 text-white shadow-[0_24px_60px_-28px_rgba(120,40,90,0.55)]">
         <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] items-center">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/20 ring-1 ring-white/40 backdrop-blur-md pl-1 pr-3 py-1 text-[12px] font-medium text-white">
-              <span className="grid size-6 place-items-center rounded-full bg-[#1b0f33]">
-                <WrapboxLogo size={16} />
-              </span>
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/20 ring-1 ring-white/40 backdrop-blur-md px-3.5 py-1.5 text-[12px] font-medium text-white">
+              <span className="size-1.5 rounded-full bg-[#1b0f33]" />
               Runtime authorization for AI agents
             </div>
             <h1 className="mt-5 text-[38px] lg:text-[46px] leading-[1.02] font-semibold tracking-[-0.04em] [text-shadow:0_2px_24px_rgba(90,20,40,0.25)]">
