@@ -81,9 +81,20 @@ export function Start() {
 
   return (
     <div className="mx-auto max-w-[1180px] px-4 lg:px-8 py-8">
-      <section className="hero-prism overflow-hidden rounded-3xl p-7 lg:p-9 text-white shadow-[0_24px_60px_-28px_rgba(120,40,90,0.55)]">
+      <section
+        className="hero-prism parallax-head overflow-hidden rounded-3xl p-7 lg:p-9 text-white shadow-[0_24px_60px_-28px_rgba(120,40,90,0.55)]"
+        onMouseMove={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          e.currentTarget.style.setProperty("--mx", (((e.clientX - r.left) / r.width) * 2 - 1).toFixed(3));
+          e.currentTarget.style.setProperty("--my", (((e.clientY - r.top) / r.height) * 2 - 1).toFixed(3));
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.setProperty("--mx", "0");
+          e.currentTarget.style.setProperty("--my", "0");
+        }}
+      >
         <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] items-center">
-          <div>
+          <div className="parallax-mouse" style={{ ["--depth" as string]: -6 }}>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/20 ring-1 ring-white/40 backdrop-blur-md px-3.5 py-1.5 text-[12px] font-medium text-white">
               <span className="size-1.5 rounded-full bg-[#1b0f33]" />
               Runtime authorization for AI agents
@@ -112,7 +123,7 @@ export function Start() {
               </button>
             </div>
           </div>
-          <div className="rounded-2xl bg-[#160a2e]/40 ring-1 ring-white/25 p-4 backdrop-blur-xl shadow-[0_20px_50px_-20px_rgba(10,4,30,0.7)]">
+          <div className="parallax-mouse rounded-2xl bg-[#160a2e]/40 ring-1 ring-white/25 p-4 backdrop-blur-xl shadow-[0_20px_50px_-20px_rgba(10,4,30,0.7)]" style={{ ["--depth" as string]: 14 }}>
             <div className="flex items-center justify-between mb-3">
               <span className="text-[12px] font-semibold text-white">Decisions, as they happen</span>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium text-white">

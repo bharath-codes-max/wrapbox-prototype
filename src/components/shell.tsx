@@ -520,6 +520,21 @@ function TourCard() {
 export function Shell({ current, children, focus }: { current: string; children: ReactNode; focus?: boolean }) {
   const [menu, setMenu] = useState(false);
   const workspace = useStore((s) => s.workspace);
+  // Feed the scroll offset to CSS (--sy) for the parallax page headers.
+  useEffect(() => {
+    const el = document.getElementById("main-scroll");
+    if (!el) return;
+    let raf = 0;
+    const on = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => el.style.setProperty("--sy", String(el.scrollTop)));
+    };
+    el.addEventListener("scroll", on, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", on);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-bg text-fg">
       <Topbar onMenu={() => setMenu(true)} />

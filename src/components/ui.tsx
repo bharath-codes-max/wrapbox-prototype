@@ -150,7 +150,7 @@ export function Avatar({ p, size = 26, className }: { p: Person; size?: number; 
 
 export function Card({ className, children, ...rest }: { className?: string; children: ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div {...rest} className={cn("rounded-2xl border border-line bg-surface", className)}>
+    <div {...rest} className={cn("wb-card rounded-2xl border border-line bg-surface", className)}>
       {children}
     </div>
   );
@@ -308,7 +308,7 @@ export function Modal({ open, onClose, children, width = 520 }: { open: boolean;
 
 export function PageHeader({ eyebrow, title, sub, right }: { eyebrow?: ReactNode; title: ReactNode; sub?: ReactNode; right?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+    <div className="parallax-head flex flex-wrap items-end justify-between gap-4 mb-6">
       <div className="min-w-0 max-w-[720px]">
         {eyebrow && <div className="eyebrow mb-2">{eyebrow}</div>}
         <h1 className="text-[26px] leading-[1.15] font-semibold tracking-tight">{title}</h1>

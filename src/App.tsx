@@ -18,6 +18,7 @@ import { AdminSetup, EmployeeSetup } from "./pages/onboarding";
 import { Playground } from "./pages/playground";
 import { SettingsPage } from "./pages/settings";
 import { AuthPage } from "./pages/auth";
+import { Landing } from "./pages/landing";
 import { useAccount } from "./lib/auth";
 import { go } from "./lib/router";
 
@@ -37,11 +38,19 @@ export default function App() {
   const query = new URLSearchParams(qs ?? "");
   const seg = path.split("/").filter(Boolean);
   const authRoute = seg[0] === "login" || seg[0] === "signup";
+  const landing = seg[0] === "landing";
 
   useEffect(() => {
-    if (!account && !authRoute) go("/login");
+    if (!account && !authRoute && !landing) go("/landing");
     else if (account && authRoute) go("/start");
-  }, [account, authRoute]);
+  }, [account, authRoute, landing]);
+
+  if (landing || (!account && !authRoute))
+    return (
+      <MotionConfig reducedMotion="user">
+        <Landing />
+      </MotionConfig>
+    );
 
   if (!account || authRoute)
     return (

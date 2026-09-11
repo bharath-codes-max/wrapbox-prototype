@@ -351,13 +351,69 @@ h3 {
   background: linear-gradient(120deg, #ff6a3d, #ff9fcf 50%, #9a82f7);
 }
 
+/* Cards ease in on load (staggered by position) and lift slightly on hover */
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.995);
+  }
+}
+.wb-card {
+  animation: card-in 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  transition:
+    transform 0.28s cubic-bezier(0.2, 0.7, 0.2, 1),
+    box-shadow 0.28s,
+    border-color 0.28s;
+}
+.wb-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+  border-color: var(--line-strong);
+}
+.wb-card:nth-child(2) { animation-delay: 0.05s; }
+.wb-card:nth-child(3) { animation-delay: 0.1s; }
+.wb-card:nth-child(4) { animation-delay: 0.15s; }
+.wb-card:nth-child(5) { animation-delay: 0.2s; }
+.wb-card:nth-child(6) { animation-delay: 0.25s; }
+.wb-card:nth-child(n + 7) { animation-delay: 0.3s; }
+
+/* Scroll parallax inside the app: --sy is the main scroll offset, set by the shell */
+.parallax-head {
+  transform: translate3d(0, calc(var(--sy, 0) * -0.08px), 0);
+  opacity: max(0.25, calc(1 - var(--sy, 0) * 0.0016));
+  will-change: transform, opacity;
+}
+/* Mouse parallax: --mx/--my run -1..1 across the hovered element */
+.parallax-mouse {
+  transform: translate3d(calc(var(--mx, 0) * var(--depth, 10) * 1px), calc(var(--my, 0) * var(--depth, 10) * 0.8px), 0);
+  transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+.marquee {
+  animation: marquee 40s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .packet,
   .live-dot,
   .shimmer,
   .caret::after,
-  .hero-prism {
+  .hero-prism,
+  .wb-card,
+  .marquee {
     animation: none;
+  }
+  .wb-card,
+  .wb-card:hover,
+  .parallax-head,
+  .parallax-mouse {
+    transform: none;
+    transition: none;
   }
 }
 

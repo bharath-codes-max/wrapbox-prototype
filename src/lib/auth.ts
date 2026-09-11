@@ -11,6 +11,8 @@ export interface Account {
 }
 
 let account: Account | null = (() => {
+  // Local screenshots only: the dev server accepts ?shot=1 to skip sign-in. Never active in a build.
+  if (import.meta.env.DEV && new URLSearchParams(location.search).has("shot")) return { email: "priya@wrapbox.ai", name: "Priya Menon" };
   try {
     const raw = localStorage.getItem(KEY);
     return raw ? (JSON.parse(raw) as Account) : null;

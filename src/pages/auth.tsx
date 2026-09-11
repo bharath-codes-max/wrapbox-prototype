@@ -188,6 +188,7 @@ interface Tab {
   category: CategoryId;
   prompt: string;
   placeholder: string;
+  examples: string[];
   steps: Step[];
   parse: (text: string) => { tool: string; act: Act };
 }
@@ -204,6 +205,7 @@ const TABS: Tab[] = [
     category: "cli",
     prompt: 'claude "ship the ledger fix, then clean up prod"',
     placeholder: "Try: cat .env · git push origin main · curl -H 'Authorization: …' https://x.io",
+    examples: ["cat .env", "git push origin main", "rm -rf ./build", "curl -H 'Authorization: Bearer sk' https://paste.io"],
     steps: [cmd("git push --force origin feat/ledger"), { tool: "Read(.env.production)", act: classify("cat .env.production", "production").act }, cmd("git push origin main"), cmd("kubectl delete deployment payments-api -n prod")],
     parse: (t) => ({ tool: `Bash(${t})`, act: classify(t, "production").act }),
   },
@@ -214,6 +216,7 @@ const TABS: Tab[] = [
     category: "mcp",
     prompt: 'support-agent "refund the duplicate charges from last week"',
     placeholder: "Try a refund amount in dollars: 250 · 2400 · 12000",
+    examples: ["$250", "$2,400", "$12,000"],
     steps: [refund(300), refund(2400), refund(12000)],
     parse: (t) => {
       const usd = Number(t.replace(/[^0-9.]/g, "")) || 0;
@@ -227,6 +230,7 @@ const TABS: Tab[] = [
     category: "mcp",
     prompt: 'analyst-agent "pull churned customers and tidy old orders"',
     placeholder: "Try SQL: SELECT name FROM customers · DELETE FROM orders",
+    examples: ["SELECT name FROM customers", "SELECT email, phone FROM users", "DELETE FROM orders"],
     steps: [sql("SELECT email, phone FROM customers WHERE churned"), sql("SELECT id, plan FROM accounts LIMIT 50"), sql("DELETE FROM orders WHERE created_at < '2024-01-01'")],
     parse: (t) => sql(t),
   },
@@ -269,7 +273,7 @@ function useTyped(text: string, active: boolean, speed = 22) {
   return text.slice(0, n);
 }
 
-function Terminal() {
+export function Terminal({ chips, height = 300 }: { chips?: boolean; height?: number } = {}) {
   const [tabIdx, setTabIdx] = useState(0);
   const tab = TABS[tabIdx];
   const [shown, setShown] = useState(0);
@@ -296,14 +300,17 @@ function Terminal() {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
   }, [shown, extra.length]);
 
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    const t = input.trim();
+  const runText = (raw: string) => {
+    const t = raw.trim();
     if (!t) return;
     const s = tab.parse(t);
     setExtra((x) => [...x.slice(-3), decide(tab, s, 100 + x.length, true)]);
     setShown(lines.length);
     setInput("");
+  };
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    runText(input);
   };
 
   const visible = [...lines.slice(0, shown), ...extra];
@@ -337,7 +344,7 @@ function Terminal() {
         </button>
       </div>
 
-      <div ref={bodyRef} className="h-[300px] overflow-y-auto scroll-thin px-4 py-3.5 font-mono text-[12px] leading-[1.7] text-white/85">
+      <div ref={bodyRef} className="overflow-y-auto scroll-thin px-4 py-3.5 font-mono text-[12px] leading-[1.7] text-white/85" style={{ height }}>
         <div>
           <span className="text-[#5ef0b5]">~/wrapbox</span> <span className="text-white/40">$</span> {typed}
           {!promptDone && <span className="ml-0.5 inline-block h-3.5 w-[7px] translate-y-0.5 bg-white/80 animate-pulse" />}
@@ -366,6 +373,16 @@ function Terminal() {
         </AnimatePresence>
       </div>
 
+      {chips && (
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-white/10 px-4 py-2.5">
+          <span className="font-mono text-[11px] text-white/40 mr-1">try</span>
+          {tab.examples.map((x) => (
+            <button key={x} type="button" onClick={() => runText(x)} className="rounded-md bg-white/[0.08] ring-1 ring-white/12 px-2 h-6 font-mono text-[11px] text-white/80 hover:bg-white/15 hover:text-white transition-colors">
+              {x}
+            </button>
+          ))}
+        </div>
+      )}
       <form onSubmit={onSubmit} className="flex items-center gap-2 border-t border-white/10 px-4 h-12">
         <span className="font-mono text-[12px] text-[#9db6ff]">›</span>
         <input
@@ -418,7 +435,9 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   return (
     <div className="min-h-screen bg-bg text-fg lg:grid lg:grid-cols-[minmax(460px,1fr)_1.15fr]">
       <div className="flex min-h-screen flex-col px-6 sm:px-10 py-8">
-        <WrapboxLockup size={22} />
+        <a href="#/landing" aria-label="Wrapbox home" className="self-start">
+          <WrapboxLockup size={22} />
+        </a>
         <div className="flex flex-1 items-center justify-center py-10">
           <AuthForm mode={mode} />
         </div>
