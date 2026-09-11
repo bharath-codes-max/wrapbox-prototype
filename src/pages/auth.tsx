@@ -3,7 +3,7 @@ import { ArrowRight, Eye, EyeOff, Info, Loader2, RotateCcw } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { CategoryId, Decision } from "../data/agents";
 import { INITIAL_RULES } from "../data/contract";
-import { WrapboxWordmark } from "../components/logo";
+import { WrapboxLockup } from "../components/logo";
 import { cn, D_DOT } from "../components/ui";
 import { checkPassword, signIn } from "../lib/auth";
 import { classify, evaluate, rewrite, type Act } from "../lib/engine";
@@ -418,7 +418,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   return (
     <div className="min-h-screen bg-bg text-fg lg:grid lg:grid-cols-[minmax(460px,1fr)_1.15fr]">
       <div className="flex min-h-screen flex-col px-6 sm:px-10 py-8">
-        <WrapboxWordmark tone="light" />
+        <WrapboxLockup size={22} />
         <div className="flex flex-1 items-center justify-center py-10">
           <AuthForm mode={mode} />
         </div>
