@@ -161,16 +161,94 @@ function Sidebar({ current, onNavigate }: { current: string; onNavigate?: () => 
         <NavLink it={{ path: "/settings", label: "Settings", icon: SettingsIcon }} current={current} onNavigate={onNavigate} />
         <NavLink it={{ path: "/welcome", label: "About Wrapbox", icon: Info }} current={current} onNavigate={onNavigate} />
       </div>
-      <div className="mx-2.5 mb-3 flex items-center gap-2.5 rounded-xl border border-line bg-surface p-2.5">
-        <PersonFigure p={me} size={32} />
-        <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-semibold truncate">{me.name}</div>
-          <div className="text-[11.5px] text-fg-3 truncate">
-            {role === "admin" ? "Owner" : "Engineer · on-call"} · {company}
-            {workspace === "fresh" ? " (fresh)" : ""}
-          </div>
-        </div>
-      </div>
+      <ProfileSwitcher me={me} role={role} company={company} fresh={workspace === "fresh"} />
+    </div>
+  );
+}
+
+const ROLE_BADGE: Record<Role, ReactNode> = {
+  admin: <ShieldCheck className="size-[9px]" strokeWidth={3} />,
+  employee: <Laptop className="size-[9px]" strokeWidth={2.6} />,
+};
+
+/** Bottom-of-sidebar profile: who you're viewing as, and a menu to switch between the admin and an employee. */
+function ProfileSwitcher({ me, role, company, fresh }: { me: typeof ADMIN; role: Role; company: string; fresh: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const click = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("mousedown", click);
+    window.addEventListener("keydown", key);
+    return () => {
+      window.removeEventListener("mousedown", click);
+      window.removeEventListener("keydown", key);
+    };
+  }, [open]);
+  const opts: { v: Role; p: typeof ADMIN; title: string; sub: string }[] = [
+    { v: "admin", p: ADMIN, title: "Admin", sub: "Owner · sets the rules and approves" },
+    { v: "employee", p: EMPLOYEE, title: "Employee", sub: "Engineer · runs agents, asks for access" },
+  ];
+  return (
+    <div ref={ref} className="relative mx-2.5 mb-3">
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.18 }}
+            className="absolute bottom-full left-0 mb-2 z-50 w-[300px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-line bg-surface shadow-float"
+            role="menu"
+          >
+            <div className="px-3 pt-2.5 pb-1.5 eyebrow !text-[10.5px]">View Wrapbox as</div>
+            <div className="px-1.5 pb-1.5 space-y-0.5">
+              {opts.map((o) => (
+                <button
+                  key={o.v}
+                  role="menuitemradio"
+                  aria-checked={role === o.v}
+                  onClick={() => {
+                    setState({ role: o.v });
+                    setOpen(false);
+                  }}
+                  className={cn("flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors", role === o.v ? "bg-surface-2" : "hover:bg-surface-2")}
+                >
+                  <PersonFigure p={o.p} size={32} badge={ROLE_BADGE[o.v]} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5 whitespace-nowrap text-[13px] font-semibold">
+                      {o.p.name}
+                      <span className={cn("rounded-full px-1.5 py-px text-[10px] font-semibold", o.v === "admin" ? "bg-[#111113] text-white" : "bg-surface-3 text-fg-2")}>{o.title}</span>
+                    </span>
+                    <span className="block text-[11px] leading-snug text-fg-3">{o.sub}</span>
+                  </span>
+                  {role === o.v && <Check className="size-4 shrink-0 text-fg" />}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <button
+        onClick={() => setOpen(!open)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={cn("flex w-full items-center gap-2.5 rounded-xl border bg-surface p-2.5 text-left transition-colors", open ? "border-line-strong" : "border-line hover:border-line-strong")}
+      >
+        <PersonFigure p={me} size={34} badge={ROLE_BADGE[role]} />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5">
+            <span className="text-[13px] font-semibold truncate">{me.name}</span>
+            <span className={cn("shrink-0 rounded-full px-1.5 py-px text-[10px] font-semibold", role === "admin" ? "bg-[#111113] text-white" : "bg-surface-3 text-fg-2")}>{role === "admin" ? "Admin" : "Employee"}</span>
+          </span>
+          <span className="block text-[11.5px] text-fg-3 truncate">
+            {company}
+            {fresh ? " · fresh" : ""} · switch view
+          </span>
+        </span>
+        <ChevronsUpDown className="size-4 shrink-0 text-fg-3" />
+      </button>
     </div>
   );
 }
@@ -294,38 +372,6 @@ function WorkspaceMenu() {
   );
 }
 
-function RoleSwitch() {
-  const role = useStore((s) => s.role);
-  const opts: { v: Role; label: string; p: typeof ADMIN; badge: ReactNode }[] = [
-    { v: "admin", label: "Admin", p: ADMIN, badge: <ShieldCheck className="size-[9px]" strokeWidth={3} /> },
-    { v: "employee", label: "Employee", p: EMPLOYEE, badge: <Laptop className="size-[9px]" strokeWidth={2.6} /> },
-  ];
-  return (
-    <div className="flex items-center gap-0.5 rounded-full bg-(--n-soft) p-1 ring-1 ring-(--n-ring)" role="tablist" aria-label="View as">
-      {opts.map((o) => {
-        const on = role === o.v;
-        return (
-          <button
-            key={o.v}
-            role="tab"
-            aria-selected={on}
-            onClick={() => setState({ role: o.v })}
-            title={`View as ${o.p.name} (${o.label.toLowerCase()})`}
-            className={cn("relative flex items-center gap-2 rounded-full h-9 pl-1 pr-3.5 text-left transition-colors", on ? "text-(--n-pill-fg)" : "text-(--n-fg-2) hover:text-(--n-fg)")}
-          >
-            {on && <motion.span layoutId="role-pill" className="absolute inset-0 rounded-full bg-(--n-pill-bg) shadow-[0_2px_10px_rgba(0,0,0,0.28)]" transition={{ type: "spring", duration: 0.35, bounce: 0.15 }} />}
-            <PersonFigure p={o.p} size={28} badge={o.badge} className={cn("relative transition-opacity", !on && "opacity-75")} />
-            <span className="relative leading-[1.1]">
-              <span className="block text-[12.5px] font-semibold">{o.p.name.split(" ")[0]}</span>
-              <span className={cn("block text-[10.5px] font-medium", on ? "opacity-60" : "opacity-70")}>{o.label}</span>
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 function Topbar({ onMenu }: { onMenu: () => void }) {
   const kill = useStore((s) => s.killSwitch);
   const live = useStore((s) => s.live);
@@ -372,7 +418,6 @@ function Topbar({ onMenu }: { onMenu: () => void }) {
             {events ? "No rules — allowing everything" : "Waiting for your first agent"}
           </span>
         )}
-        <RoleSwitch />
       </div>
     </header>
   );
