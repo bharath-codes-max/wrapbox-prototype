@@ -385,7 +385,7 @@ function Terminal() {
 
 function Showcase() {
   return (
-    <div className="hero-prism relative flex h-full flex-col justify-between overflow-hidden rounded-[28px] p-8 xl:p-10 text-white">
+    <div className="hero-prism relative flex h-full flex-col justify-between overflow-hidden rounded-none p-8 xl:p-10 text-white">
       <div>
         <div className="inline-flex items-center gap-2 rounded-full bg-white/20 ring-1 ring-white/40 backdrop-blur-md px-3 py-1 text-[12px] font-medium">
           <span className="size-1.5 rounded-full bg-[#5ef0b5] live-dot" /> Live · decided by the real policy engine
@@ -427,7 +427,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
           <span>Prototype · SSO and email are simulated</span>
         </div>
       </div>
-      <div className="hidden lg:block lg:sticky lg:top-0 lg:h-screen p-3 pl-0">
+      <div className="hidden lg:block lg:sticky lg:top-0 lg:h-screen">
         <Showcase />
       </div>
     </div>

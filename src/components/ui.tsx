@@ -2,6 +2,7 @@ import clsx, { type ClassValue } from "clsx";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, Copy, X } from "lucide-react";
 import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { ASSURANCE, type Assurance, type Decision } from "../data/agents";
 import { photoOf, type Person } from "../data/people";
 import { logoUrl } from "../lib/logos";
@@ -253,7 +254,8 @@ export function Drawer({ open, onClose, children, width = 560, title }: { open: 
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, [onClose]);
-  return (
+  // Portalled to <body> so the sheet always pins to the viewport edge, whatever transforms the page has.
+  return createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -263,8 +265,8 @@ export function Drawer({ open, onClose, children, width = 560, title }: { open: 
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: 40, opacity: 0 }}
             transition={{ type: "spring", duration: 0.4, bounce: 0.1 }}
-            className="fixed right-2 top-2 bottom-2 z-50 flex flex-col rounded-2xl border border-line bg-surface shadow-float overflow-hidden"
-            style={{ width: `min(${width}px, calc(100vw - 16px))` }}
+            className="fixed right-0 top-0 bottom-0 z-50 flex flex-col rounded-none border-l border-line bg-surface shadow-float overflow-hidden"
+            style={{ width: `min(${width}px, 100vw)` }}
           >
             <div className="flex items-center justify-between gap-3 px-5 h-13 border-b border-line shrink-0">
               <div className="font-semibold text-[14px] truncate">{title}</div>
@@ -276,12 +278,13 @@ export function Drawer({ open, onClose, children, width = 560, title }: { open: 
           </motion.aside>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
 
 export function Modal({ open, onClose, children, width = 520 }: { open: boolean; onClose: () => void; children: ReactNode; width?: number }) {
-  return (
+  return createPortal(
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-50 grid place-items-center p-4">
@@ -298,7 +301,8 @@ export function Modal({ open, onClose, children, width = 520 }: { open: boolean;
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
 
