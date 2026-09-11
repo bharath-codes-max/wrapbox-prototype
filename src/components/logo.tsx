@@ -12,7 +12,7 @@ export function WrapboxLogo({ size = 30, tone = "dark", className }: { size?: nu
       viewBox="0 0 40 40"
       fill="none"
       aria-hidden="true"
-      className={cn("shrink-0", tone === "dark" ? "drop-shadow-[0_2px_8px_rgba(79,123,255,0.35)]" : "text-fg drop-shadow-[0_2px_6px_rgba(24,72,255,0.18)]", className)}
+      className={cn("shrink-0", tone === "dark" ? "drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" : "text-fg drop-shadow-[0_2px_6px_rgba(24,72,255,0.18)]", className)}
     >
       <defs>
         <linearGradient id={`wbg-${id}`} x1="6" y1="6" x2="34" y2="34" gradientUnits="userSpaceOnUse">

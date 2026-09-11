@@ -322,7 +322,7 @@ const readNav = (): NavStyle => {
   }
 };
 
-/** Small switch between the navy bar and the off-white bar. */
+/** Small switch between the matte black bar and the off-white bar. */
 function NavStyleSwitch({ nav, onChange }: { nav: NavStyle; onChange: (v: NavStyle) => void }) {
   const light = nav === "light";
   return (
@@ -330,15 +330,15 @@ function NavStyleSwitch({ nav, onChange }: { nav: NavStyle; onChange: (v: NavSty
       role="switch"
       aria-checked={light}
       aria-label="Off-white top bar"
-      title={light ? "Switch to the navy bar" : "Switch to the off-white bar"}
+      title={light ? "Switch to the matte black bar" : "Switch to the off-white bar"}
       onClick={() => onChange(light ? "navy" : "light")}
       className="relative hidden sm:inline-flex h-6 w-11 shrink-0 items-center rounded-full ring-1 ring-(--n-ring-2) bg-(--n-soft-2) transition-colors"
     >
-      <span className="absolute left-[7px] size-2 rounded-full bg-[#0f1b35] ring-1 ring-white/30" />
+      <span className="absolute left-[7px] size-2 rounded-full bg-[#111113] ring-1 ring-white/30" />
       <span className="absolute right-[7px] size-2 rounded-full bg-[#fafaf8] ring-1 ring-black/15" />
       <motion.span
         className="absolute top-[3px] size-[18px] rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.3)] ring-1 ring-black/10"
-        style={{ background: light ? "#fafaf8" : "#0f1b35", border: light ? "none" : "1.5px solid rgba(255,255,255,0.85)" }}
+        style={{ background: light ? "#fafaf8" : "#111113", border: light ? "none" : "1.5px solid rgba(255,255,255,0.85)" }}
         animate={{ left: light ? 23 : 3 }}
         transition={{ type: "spring", duration: 0.3, bounce: 0.2 }}
       />

@@ -258,12 +258,11 @@ h3 {
   animation: blink 1s steps(1) infinite;
 }
 
-/* Top bar: two styles, switched from the bar itself. Navy is the default. */
+/* Top bar: two styles, switched from the bar itself. Matte black is the default. */
 .wb-nav {
   --n-bg:
-    radial-gradient(520px 140px at 150px -30px, rgba(79, 123, 255, 0.3), transparent 70%),
-    radial-gradient(420px 120px at 85% -40px, rgba(157, 182, 255, 0.12), transparent 70%),
-    linear-gradient(180deg, #13214a 0%, #0f1b35 55%, #0c1630 100%);
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, #161618 0%, #111113 60%, #0d0d0f 100%);
   --n-fg: #ffffff;
   --n-fg-2: rgba(255, 255, 255, 0.72);
   --n-fg-3: rgba(255, 255, 255, 0.5);
@@ -272,9 +271,9 @@ h3 {
   --n-ring: rgba(255, 255, 255, 0.12);
   --n-ring-2: rgba(255, 255, 255, 0.22);
   --n-edge: rgba(255, 255, 255, 0.08);
-  --n-glow: rgba(157, 182, 255, 0.45);
+  --n-glow: rgba(255, 255, 255, 0.1);
   --n-pill-bg: #ffffff;
-  --n-pill-fg: #0f1b35;
+  --n-pill-fg: #111113;
   --n-ok-bg: rgba(63, 212, 155, 0.1);
   --n-ok-ring: rgba(63, 212, 155, 0.25);
   --n-ok-fg: #b6f0d6;
