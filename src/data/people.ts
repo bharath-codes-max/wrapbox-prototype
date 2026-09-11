@@ -6,6 +6,10 @@ export interface Person {
   hue: number;
 }
 
+const PHOTOS = import.meta.glob("../assets/people/*.jpg", { eager: true, import: "default" }) as Record<string, string>;
+/** Portrait for a person, looked up by id so saved workspaces never carry image data. Unsplash License — see src/assets/people/CREDITS.md. */
+export const photoOf = (p: { id: string }): string | undefined => PHOTOS[`../assets/people/${p.id}.jpg`];
+
 const p = (id: string, name: string, role: string, hue: number): Person => ({
   id,
   name,

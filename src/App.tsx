@@ -17,12 +17,16 @@ import { Start } from "./pages/start";
 import { AdminSetup, EmployeeSetup } from "./pages/onboarding";
 import { Playground } from "./pages/playground";
 import { SettingsPage } from "./pages/settings";
+import { AuthPage } from "./pages/auth";
+import { useAccount } from "./lib/auth";
+import { go } from "./lib/router";
 
 export default function App() {
   const route = useRoute();
   const role = useStore((s) => s.role);
   const theme = useStore((s) => s.theme);
   const workspace = useStore((s) => s.workspace);
+  const account = useAccount();
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -32,6 +36,19 @@ export default function App() {
   const [path, qs] = route.split("?");
   const query = new URLSearchParams(qs ?? "");
   const seg = path.split("/").filter(Boolean);
+  const authRoute = seg[0] === "login" || seg[0] === "signup";
+
+  useEffect(() => {
+    if (!account && !authRoute) go("/login");
+    else if (account && authRoute) go("/start");
+  }, [account, authRoute]);
+
+  if (!account || authRoute)
+    return (
+      <MotionConfig reducedMotion="user">
+        <AuthPage mode={seg[0] === "signup" ? "signup" : "login"} />
+      </MotionConfig>
+    );
 
   let page: React.ReactNode;
   switch (seg[0]) {

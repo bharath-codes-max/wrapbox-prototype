@@ -1,7 +1,9 @@
-import { Compass, Moon, Sun } from "lucide-react";
+import { Compass, LogOut, Moon, Sun } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button, Card, PageHeader, cn } from "../components/ui";
 import { setNavStyle, useNavStyle, type NavStyle } from "../lib/navstyle";
+import { signOut, useAccount } from "../lib/auth";
+import { go } from "../lib/router";
 import { setState, setTheme, useStore } from "../lib/store";
 
 function Row({ title, sub, children, last }: { title: string; sub: string; children: ReactNode; last?: boolean }) {
@@ -41,6 +43,7 @@ function BarPreview({ style, active, onClick }: { style: NavStyle; active: boole
 export function SettingsPage() {
   const theme = useStore((s) => s.theme);
   const nav = useNavStyle();
+  const account = useAccount();
   return (
     <div className="mx-auto max-w-[880px] px-4 lg:px-8 py-7">
       <PageHeader eyebrow="Workspace" title="Settings" sub="How Wrapbox looks on this browser, and a guided walk-through whenever you want one." />
@@ -72,6 +75,20 @@ export function SettingsPage() {
             <BarPreview style="black" active={nav === "black"} onClick={() => setNavStyle("black")} />
             <BarPreview style="light" active={nav === "light"} onClick={() => setNavStyle("light")} />
           </div>
+        </Row>
+      </Card>
+
+      <div className="eyebrow mt-7 mb-2 px-1">Account</div>
+      <Card className="overflow-hidden">
+        <Row title={account?.name ?? account?.email ?? "Signed in"} sub={`Signed in as ${account?.email ?? "—"}${account?.company ? ` · ${account.company}` : ""}. Signing out returns you to the sign-in page.`} last>
+          <Button
+            onClick={() => {
+              signOut();
+              go("/login");
+            }}
+          >
+            <LogOut className="size-4" /> Sign out
+          </Button>
         </Row>
       </Card>
 

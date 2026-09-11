@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Check, Copy, X } from "lucide-react";
 import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { ASSURANCE, type Assurance, type Decision } from "../data/agents";
-import type { Person } from "../data/people";
+import { photoOf, type Person } from "../data/people";
 import { logoUrl } from "../lib/logos";
 
 export const cn = (...c: ClassValue[]) => clsx(c);
@@ -93,8 +93,12 @@ export function WrapboxMark({ size = 28 }: { size?: number }) {
 
 /** A person figure (head and shoulders) on the person's colour — used where we show who you are acting as. */
 export function PersonFigure({ p, size = 28, badge, className }: { p: Person; size?: number; badge?: ReactNode; className?: string }) {
+  const photo = photoOf(p);
   return (
     <span className={cn("relative inline-block shrink-0", className)} style={{ width: size, height: size }} title={`${p.name} · ${p.role}`}>
+      {photo ? (
+        <img src={photo} alt="" width={size} height={size} className="size-full rounded-full object-cover" draggable={false} />
+      ) : (
       <svg viewBox="0 0 32 32" width={size} height={size} className="rounded-full" aria-hidden="true">
         <defs>
           <linearGradient id={`pf-${p.id}`} x1="0" y1="0" x2="1" y2="1">
@@ -106,12 +110,27 @@ export function PersonFigure({ p, size = 28, badge, className }: { p: Person; si
         <circle cx="16" cy="12.6" r="5.4" fill="#fff" fillOpacity="0.95" />
         <path d="M5.5 29.2c1.6-5.6 5.8-8.6 10.5-8.6s8.9 3 10.5 8.6A15.9 15.9 0 0 1 16 32a15.9 15.9 0 0 1-10.5-2.8Z" fill="#fff" fillOpacity="0.95" />
       </svg>
+      )}
       {badge && <span className="absolute -right-1 -bottom-1 grid size-[15px] place-items-center rounded-full bg-[#111113] text-white ring-2 ring-white">{badge}</span>}
     </span>
   );
 }
 
 export function Avatar({ p, size = 26, className }: { p: Person; size?: number; className?: string }) {
+  const photo = photoOf(p);
+  if (photo)
+    return (
+      <img
+        src={photo}
+        alt={p.name}
+        title={`${p.name} · ${p.role}`}
+        width={size}
+        height={size}
+        draggable={false}
+        className={cn("inline-block shrink-0 rounded-full object-cover ring-2 ring-surface", className)}
+        style={{ width: size, height: size }}
+      />
+    );
   return (
     <span
       title={`${p.name} · ${p.role}`}
