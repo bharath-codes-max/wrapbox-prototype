@@ -574,15 +574,17 @@ const ADMIN_STEPS = [
   { t: "Create workspace", s: "SSO, company, data region" },
   { t: "Discover agents", s: "Find what already runs" },
   { t: "Intent contract", s: "Your rules + rollout mode" },
-  { t: "Connect agents", s: "Hooks, SDK, MCP, connectors" },
+  { t: "Connect & roll out", s: "Admin & IT · hooks, MDM, MCP, SDK" },
   { t: "Approvers & alerts", s: "Who signs what, where" },
-  { t: "Invite your team", s: "Directory, invites, laptop rollout" },
+  { t: "Invite your team", s: "Directory + invites" },
   { t: "Go live", s: "See the first decision" },
 ];
 
 export function AdminSetup() {
   const fresh = useStore((s) => s.workspace === "fresh");
-  const connectedNow = useStore((s) => s.connected);
+  // Onboarding connection state is ephemeral — it lives in local `conn` and resets on
+  // refresh, so the admin re-connects by hand each visit. It is committed to the store
+  // only when onboarding finishes (see finish()).
   const [step, setStep] = useState(0);
   const [reached, setReached] = useState(0);
   const next = () => {
@@ -657,7 +659,9 @@ export function AdminSetup() {
           ? `${customCount} ${customCount === 1 ? "rule" : "rules"} yours`
           : "Nothing in the contract yet";
   const ghOrg = (domain || "wrapbox").split(".")[0].replace(/[^a-z0-9-]/gi, "-").toLowerCase();
-  const connectedMap = useStore((s) => s.connected);
+  // Derived from local, ephemeral `conn` — NOT the persisted store — so Step 4 always
+  // starts disconnected on a fresh load and the admin connects each agent themselves.
+  const connectedMap: Record<string, boolean> = Object.fromEntries(Object.entries(conn).filter(([, c]) => c.stage === "connected").map(([id]) => [id, true]));
   // How many of the 7 product categories the admin has selected (Coding counts once).
   const selectedProductCount = PRODUCT_CATS.filter((pc) => (pc.id === "other" ? otherSel : pc.cats.length > 0 && pc.cats.every((c) => cats.includes(c)))).length;
   const blocks = BLOCKS.filter((b) => b.cats.some((c) => cats.includes(c)));
@@ -723,8 +727,6 @@ export function AdminSetup() {
     await sleep(750);
     const device = registrationId(a);
     setConn((c) => ({ ...c, [id]: { stage: "connected", method, device, at: Date.now(), phase: 3 } }));
-    const m = METHODS[a.category].find((x) => x.recommended) ?? METHODS[a.category][0];
-    connectAgent(id, method, m.assurance); // persists the connected fact
     setBusy((b) => ({ ...b, [id]: false }));
     toast(`${a.name} connected`, `checked in · ${device}`, "allow");
   }
@@ -763,7 +765,17 @@ export function AdminSetup() {
   }
 
   function finish() {
-    if (fresh) grantConnectedAgents();
+    if (fresh) {
+      // Commit the agents connected during this session to the store, then grant access.
+      for (const [id, c] of Object.entries(conn)) {
+        if (c.stage !== "connected") continue;
+        const a = regById(id);
+        if (!a) continue;
+        const m = METHODS[a.category].find((x) => x.recommended) ?? METHODS[a.category][0];
+        connectAgent(id, c.method, m.assurance);
+      }
+      grantConnectedAgents();
+    }
     markOnboarded("admin");
     setState({ role: "admin" });
     toast("Wrapbox is live", fresh ? "Every page now reflects what you set up. Invite employees next, or send an action from the playground." : "The demo workspace keeps its 30 days of traffic.", "allow");
@@ -1224,11 +1236,11 @@ export function AdminSetup() {
           <StepHead
             n={4}
             total={total}
-            title="Connect your agents"
-            sub="Choose how each discovered agent connects to Wrapbox — pushed by IT with MDM, or installed on the device. Wrapbox marks an integration connected when it checks in. Policy decisions are proven later, in Go live."
+            title="Connect & roll out agents"
+            sub="An admin / IT task: connect each discovered agent to Wrapbox and roll it out — push it to laptops with MDM, or install it on the device. Wrapbox marks an integration connected when it checks in. Policy decisions are proven later, in Go live."
           />
           <div className="mb-4 rounded-xl border border-line bg-surface-2 px-4 py-2.5 text-[12px] text-fg-2">
-            <span className="font-semibold text-fg">Step 4 = the tools. Step 6 = the people.</span> Here you put Wrapbox on the tools where agents run and confirm each one is connected. You invite the people who use them in Step 6.
+            <span className="font-semibold text-fg">Step 4 = the tools (admin / IT). Step 6 = the people.</span> Here you put Wrapbox on the tools where agents run and roll it out — MDM push or manual — then confirm each one is connected. You invite the people who use them in Step 6.
           </div>
           <div className="mb-4 flex items-center gap-3">
             <div className="h-1.5 flex-1 rounded-full bg-surface-3 overflow-hidden">
@@ -1403,9 +1415,9 @@ export function AdminSetup() {
       {step === 5 && (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
           <Card className="p-6 min-w-0">
-            <StepHead n={6} total={total} title="Invite your team" sub="Step 4 connected the tools. This step brings in the people who use them: sync your directory, then hand out two things — a sign-in link for employees and one laptop rollout for IT." />
+            <StepHead n={6} total={total} title="Invite your team" sub="Step 4 connected and rolled out the tools. This step brings in the people who use them — sync your directory and send the sign-in link. Their agents are already governed." />
             <div className="mb-4 rounded-xl border border-line bg-surface-2 px-4 py-2.5 text-[12px] text-fg-2">
-              <span className="font-semibold text-fg">Step 4 = the tools. Step 6 = the people.</span> You already put Wrapbox on the tools where agents run. Here you only add who uses them — no hooks, MCP URLs or keys to touch again.
+              <span className="font-semibold text-fg">Step 4 = the tools. Step 6 = the people.</span> IT already connected and rolled out Wrapbox in Step 4 — no hooks, MDM push, MCP URLs or keys to touch again here. You only add who uses them.
             </div>
             <div className="rounded-xl border border-line p-4">
               <div className="flex flex-wrap items-center gap-3">
@@ -1437,20 +1449,16 @@ export function AdminSetup() {
                 </div>
               )}
             </div>
-            <div className="mt-4 text-[13px] font-semibold mb-2">What you hand out</div>
+            <div className="mt-4 text-[13px] font-semibold mb-2">Invite people</div>
             <div className="space-y-2">
-              <ShareRow n={1} title="Invite link — for employees" desc="They sign in with SSO and land in their own view. Nothing for them to configure.">
+              <ShareRow n={1} title="Invite link" desc="Employees sign in with SSO and land in their own view. The agents you connected in Step 4 are governed the moment they sign in — nothing for them to install.">
                 <CopyField value="https://app.wrapbox.ai/join/7Hq2-dK4v" />
-              </ShareRow>
-              <ShareRow n={2} title="Laptop rollout — for IT" desc="IT pushes it to managed laptops with Jamf or Intune; an unmanaged machine runs one command. It installs exactly what you configured in Step 4.">
-                <InlineCmd cmd="npx @wrapbox/cli install --all --org wrapbox" />
-                <div className="mt-2 font-mono text-[11.5px] text-fg-3">Jamf: Wrapbox-1.4.2.pkg · Intune: Wrapbox-1.4.2.msi · both run `wrapbox install --all --managed`</div>
               </ShareRow>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11.5px] text-fg-3">
-              You share
-              <ChevronRight className="size-3" /> IT pushes with MDM, or the person runs one command
-              <ChevronRight className="size-3" /> they sign in — their agents are governed
+              You send the link
+              <ChevronRight className="size-3" /> they sign in with SSO
+              <ChevronRight className="size-3" /> their connected agents are governed
             </div>
             <Footer
               onBack={back}
@@ -1485,7 +1493,7 @@ export function AdminSetup() {
                 const run = tests.find((x) => x.key === t.key);
                 const agent = agentById(t.agentId);
                 const native = nativeFor(agent, t.gate);
-                const on = previewMode || !!connectedNow[t.agentId];
+                const on = previewMode || !!connectedMap[t.agentId];
                 const dv = run?.v;
                 return (
                   <div key={t.key} className="rounded-xl border border-line">
