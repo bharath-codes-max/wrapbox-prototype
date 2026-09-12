@@ -1546,7 +1546,7 @@ export function AdminSetup() {
                   [true, `Contract · ${rules.length} rules · ${mode === "observe" ? "observe 7 days, then enforce" : "enforcing"}`],
                   [connectedCount > 0, `${connectedCount} of ${agentTargets.length} integrations connected`],
                   [true, `Approvals via ${Object.entries(channels).filter(([, v]) => v).map(([k]) => k).join(", ")} · passkey ${passkeyReq ? "required" : "optional"}`],
-                  [invited, invited ? `${getState().members.length} people in the directory · laptops rolling out` : "Team not invited yet"],
+                  [invited, invited ? `${getState().members.length} ${getState().members.length === 1 ? "person" : "people"} in the directory` : "Team not invited yet"],
                 ] as const
               ).map(([ok, t]) => (
                 <li key={t} className="flex items-start gap-2">
