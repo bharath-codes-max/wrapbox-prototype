@@ -255,6 +255,18 @@ const PRODUCT_CATS: ProductCat[] = [
   { id: "other", name: "Other Agent Systems", sub: "Internal or emerging agent systems", cats: [], enforcement: "roadmap", mechanism: "Inventory only" },
 ];
 
+/* Governance honesty: only products with a verified enforcement mechanism today offer a
+   real connect flow. Enterprise (connector), Browser and A2A are roadmap — they appear in
+   the inventory with an honest "enforcement on roadmap" badge, never a fake connector. */
+function enforcementOf(a: Agent): "connectable" | "roadmap" {
+  return a.adapter === "connector" || a.adapter === "browser" || a.adapter === "a2a" ? "roadmap" : "connectable";
+}
+const PLANNED_MECHANISM: Partial<Record<Adapter, string>> = {
+  connector: "Custom connector / API proxy + evidence export",
+  browser: "Controlled executor + semantic action gate",
+  a2a: "A2A gateway + attenuated delegation tokens",
+};
+
 /** The Wrapbox adapter version reported at check-in (same across vendors). */
 const ADAPTER_VER = "1.4.2";
 /** A registration identifier Wrapbox assigns when the integration first checks in. */
@@ -634,7 +646,11 @@ export function AdminSetup() {
   const blocks = BLOCKS.filter((b) => b.cats.some((c) => cats.includes(c)));
   // Step 4 is driven by discovery: each block lists the agents Step 2 actually found.
   const blockAgents = (b: (typeof BLOCKS)[number]) => DISCOVERED.filter((d) => b.cats.includes(d.cat) && cats.includes(d.cat));
-  const supportedIn = (b: (typeof BLOCKS)[number]) => blockAgents(b).filter((d) => regById(d.id));
+  const supportedIn = (b: (typeof BLOCKS)[number]) =>
+    blockAgents(b).filter((d) => {
+      const a = regById(d.id);
+      return a && enforcementOf(a) === "connectable";
+    });
   const agentTargets = blocks.flatMap(supportedIn);
   const connectedCount = agentTargets.filter((d) => !!connectedMap[d.id]).length;
 
@@ -1189,18 +1205,24 @@ export function AdminSetup() {
           <div className="space-y-2">
             {blocks.map((b) => {
               const found = blockAgents(b);
-              const supported = found.filter((d) => regById(d.id));
-              const nConn = supported.filter((d) => !!connectedMap[d.id]).length;
-              const status =
-                nConn === 0
+              // Only products with a verified enforcement mechanism count toward "connected".
+              const connectable = found.filter((d) => {
+                const a = regById(d.id);
+                return a && enforcementOf(a) === "connectable";
+              });
+              const roadmapOnly = connectable.length === 0 && found.length > 0;
+              const nConn = connectable.filter((d) => !!connectedMap[d.id]).length;
+              const status = roadmapOnly
+                ? { label: "Inventory only", tone: "muted" as const }
+                : nConn === 0
                   ? { label: "Not connected", tone: "muted" as const }
-                  : nConn === supported.length
+                  : nConn === connectable.length
                     ? { label: "Connected", tone: "allow" as const }
-                    : { label: `Partially connected · ${nConn} of ${supported.length}`, tone: "review" as const };
+                    : { label: `Partially connected · ${nConn} of ${connectable.length}`, tone: "review" as const };
               const open = openBlock === b.id;
               const blockBusy = found.some((d) => busy[d.id]);
               return (
-                <div key={b.id} className={cn("rounded-xl border", nConn > 0 && nConn === supported.length ? "border-allow/40" : "border-line")}>
+                <div key={b.id} className={cn("rounded-xl border", nConn > 0 && nConn === connectable.length ? "border-allow/40" : "border-line")}>
                   <button onClick={() => setOpenBlock(open ? "" : b.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
                     <div className="flex -space-x-1.5">
                       {found.slice(0, 5).map((d) => (
@@ -1210,7 +1232,7 @@ export function AdminSetup() {
                     <div className="min-w-0 flex-1">
                       <div className="text-[13.5px] font-semibold">{b.title}</div>
                       <div className="text-[12px] text-fg-3 truncate">
-                        {found.length} discovered · {supported.length} connectable
+                        {found.length} discovered · {roadmapOnly ? "enforcement on roadmap" : `${connectable.length} connectable`}
                       </div>
                     </div>
                     <Chip tone={status.tone}>{status.tone === "allow" ? (<><Check className="size-3" /> {status.label}</>) : status.label}</Chip>
@@ -1219,10 +1241,16 @@ export function AdminSetup() {
                   {open && (
                     <div className="border-t border-line px-4 py-4 space-y-3">
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <p className="min-w-[240px] flex-1 text-[12px] text-fg-3">Discovered from your environment. Deploy each integration through its native mechanism; Wrapbox marks it connected when it checks in.</p>
-                        <Button size="sm" onClick={() => deployAll(b)} disabled={blockBusy || !supported.length}>
-                          {blockBusy ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />} Set up all
-                        </Button>
+                        <p className="min-w-[240px] flex-1 text-[12px] text-fg-3">
+                          {roadmapOnly
+                            ? "In your inventory and governable by policy — a Wrapbox enforcement point for these is on the roadmap."
+                            : "Discovered from your environment. Deploy each integration through its native mechanism; Wrapbox marks it connected when it checks in."}
+                        </p>
+                        {!roadmapOnly && (
+                          <Button size="sm" onClick={() => deployAll(b)} disabled={blockBusy || !connectable.length}>
+                            {blockBusy ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />} Set up all
+                          </Button>
+                        )}
                       </div>
                       {found.map((d) => (
                         <IntegrationRow key={d.id} d={d} conn={conn[d.id]} connected={!!connectedMap[d.id]} busy={!!busy[d.id]} onDeploy={(method) => deploy(d.id, method)} />
@@ -1498,11 +1526,12 @@ function IntegrationRow({ d, conn, connected, busy, onDeploy }: { d: Discovered;
   const a = regById(d.id);
   const isConnected = connected || conn?.stage === "connected";
   const configuring = busy || conn?.stage === "configured";
+  const roadmap = !!a && enforcementOf(a) === "roadmap";
   const isSdk = !!a && (a.adapter === "sdk-ts" || a.adapter === "sdk-py" || a.adapter === "adk");
   const options = a ? deployOptions(a) : [];
   const methodLabel = options.find((o) => o.key === conn?.method)?.label ?? "manual";
-  // Honest assurance level for this integration (never higher than it can guarantee).
-  const assurance = a ? ASSURANCE[(METHODS[a.category].find((m) => m.recommended) ?? METHODS[a.category][0]).assurance] : null;
+  // Honest assurance level — only for products that actually have an enforcement point today.
+  const assurance = a && !roadmap ? ASSURANCE[(METHODS[a.category].find((m) => m.recommended) ?? METHODS[a.category][0]).assurance] : null;
 
   return (
     <div className="rounded-xl border border-line p-3.5">
@@ -1527,6 +1556,8 @@ function IntegrationRow({ d, conn, connected, busy, onDeploy }: { d: Discovered;
         </div>
         {!a ? (
           <Chip>Discovered · setup unavailable</Chip>
+        ) : roadmap ? (
+          <Chip>Inventory only — enforcement on roadmap</Chip>
         ) : isConnected ? (
           <Chip tone="allow">
             <Check className="size-3" /> Connected
@@ -1538,7 +1569,15 @@ function IntegrationRow({ d, conn, connected, busy, onDeploy }: { d: Discovered;
         )}
       </div>
 
-      {a && !isConnected && !configuring && (
+      {a && roadmap && (
+        <div className="mt-3 rounded-lg border border-line bg-surface-2 px-3.5 py-3">
+          <p className="text-[12px] text-fg-2">
+            In your inventory now and targetable by policy in Step 3. Planned enforcement: <span className="font-medium">{PLANNED_MECHANISM[a.adapter] ?? "connector"}</span>. Until it ships, Wrapbox flags any policy that targets it as “no enforcement point connected yet”.
+          </p>
+        </div>
+      )}
+
+      {a && !roadmap && !isConnected && !configuring && (
         <div className="mt-3 space-y-2">
           <div className="grid gap-2 sm:grid-cols-2">
             {options.map((o) => (
