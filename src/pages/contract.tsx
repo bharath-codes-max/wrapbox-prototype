@@ -5,6 +5,7 @@ import { AGENTS, CATEGORIES, agentById, type Decision } from "../data/agents";
 import { EFFECTS, PACKS, effectInfo, fmtValue, fromYaml, replay, ruleChips, ruleSig, rulesForPacks, toYaml, type ParseIssue, type ReplayResult, type Rule, type Tier } from "../data/contract";
 import { ACTS } from "../data/scenarios";
 import { ActionComposer, TraceView, type Composed } from "../components/composer";
+import { RuleTester } from "../components/rule-tester";
 import { orgSlug as orgSlugOf } from "../data/contract";
 import { getState as storeState } from "../lib/store";
 import { DESCRIBE_EXAMPLES, describeToRule } from "../lib/describe";
@@ -243,8 +244,6 @@ export function RuleBuilder({ open, initial, onClose, onSave, existingIds, start
   const groups = useStore((s) => s.groups);
   const blank = () => ruleFromAct({ effect: "shell.exec", command: "terraform destroy -auto-approve" });
   const [r, setR] = useState<Rule>(initial ?? blank());
-  const [sample, setSample] = useState<Composed | null>(null);
-  const [agentId, setAgentId] = useState("claude-code");
   const [mode, setMode] = useState<BuildMode>(startMode);
   const [text, setText] = useState("");
   const [draft, setDraft] = useState<DraftResult>(() => ({ ...describeToRule("", []), source: "builtin" }));
@@ -281,14 +280,12 @@ export function RuleBuilder({ open, initial, onClose, onSave, existingIds, start
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial]);
   const effect = r.when.effect[0];
-  useEffect(() => setAgentId(agentForEffect(effect)), [effect]);
   const info = effectInfo(effect);
   const fields = info?.fields ?? [];
   const setWhen = (w: Partial<Rule["when"]>) => setR((x) => ({ ...x, when: { ...x.when, ...w } }));
   const editing = !!initial?.id;
   const groupOptions = Array.from(new Set([...Object.keys(groups), ...GROUP_DEFAULTS]));
   const decisionOptions: Decision[] = info?.constrain ? ["ALLOW", "CONSTRAIN", "REVIEW", "BLOCK"] : ["ALLOW", "REVIEW", "BLOCK"];
-  const v = sample ? evaluate(sample.act, [{ ...r, id: r.id || "this-rule", mode: undefined }], categoryOf(agentId)) : null;
   const toggle = <T,>(list: T[] | undefined, item: T) => {
     const has = list?.includes(item);
     const next = has ? list!.filter((x) => x !== item) : [...(list ?? []), item];
@@ -472,28 +469,8 @@ export function RuleBuilder({ open, initial, onClose, onSave, existingIds, start
               <div className="text-[12.5px] font-semibold flex items-center gap-1.5">
                 <FlaskConical className="size-3.5" /> Test this rule
               </div>
-              <select value={agentId} onChange={(e) => setAgentId(e.target.value)} className="h-7 rounded-lg border border-line bg-surface px-2 text-[11.5px] max-w-[170px]">
-                {AGENTS.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
             </div>
-            <ActionComposer key={agentId + effect} agentId={agentId} onChange={setSample} initial={sampleFor(r)} />
-            {v && (
-              <div className="rounded-lg bg-surface-2 px-3 py-2 text-[12.5px]">
-                {v.rule === "default" ? (
-                  <>
-                    Doesn't match — this action would fall through to the rest of the contract. <span className="text-fg-3">({v.trace[0]?.why})</span>
-                  </>
-                ) : (
-                  <span className="flex flex-wrap items-center gap-2">
-                    Matches → <DecisionPill d={v.decision} size="sm" /> <span className="text-fg-3">{v.reason}</span>
-                  </span>
-                )}
-              </div>
-            )}
+            <RuleTester rule={{ ...r, id: r.id || slug(r.title) || "new.rule" }} />
           </div>
         </div>
         )}
@@ -514,7 +491,11 @@ export function RuleBuilder({ open, initial, onClose, onSave, existingIds, start
 }
 
 function DescribePanel({ text, setText, draft, drafting, onUse }: { text: string; setText: (v: string) => void; draft: DraftResult; drafting: boolean; onUse: () => void }) {
-  const ready = !!draft.rule;
+  const [ack, setAck] = useState(false);
+  useEffect(() => setAck(false), [text]);
+  const lost = [...new Set([...(draft.requirements ?? []).filter((q) => !q.represented).map((q) => q.text), ...draft.unsupported])];
+  const partial = !!draft.rule && lost.length > 0;
+  const ready = !!draft.rule && (!partial || ack);
   return (
     <div className="space-y-4">
       <div>
@@ -575,17 +556,17 @@ function DescribePanel({ text, setText, draft, drafting, onUse }: { text: string
                 </ul>
               </div>
             )}
-            {!!draft.unsupported.length && (
+            {!!lost.length && (
               <div className="mt-3 border-t border-line pt-2.5">
                 <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-block">
-                  <AlertTriangle className="size-3.5" /> The engine can't check this yet
+                  <AlertTriangle className="size-3.5" /> Not in the rule — the engine can't check these
                 </div>
                 <ul className="mt-1 space-y-1 text-[12px] text-fg-2">
-                  {draft.unsupported.map((m) => (
+                  {lost.map((m) => (
                     <li key={m}>· {m}</li>
                   ))}
                 </ul>
-                <div className="mt-1 text-[11.5px] text-fg-3">Left out of the rule rather than silently ignored.</div>
+                <div className="mt-1 text-[11.5px] text-fg-3">Left out rather than silently dropped. Write them into a runbook, or split them into rules the engine can enforce.</div>
               </div>
             )}
           </div>
@@ -604,11 +585,29 @@ function DescribePanel({ text, setText, draft, drafting, onUse }: { text: string
 
       {!!draft.note && <div className="rounded-lg bg-review-soft px-3 py-2 text-[12px] text-review">{draft.note}</div>}
 
+      {!!draft.rule && (
+        <div className={cn("rounded-xl border px-3.5 py-3", partial ? "border-review/40 bg-review-soft" : "border-allow/30 bg-allow-soft")}>
+          <div className={cn("flex items-center gap-1.5 text-[12.5px] font-semibold", partial ? "text-review" : "text-allow")}>
+            {partial ? <AlertTriangle className="size-3.5" /> : <Check className="size-3.5" />}
+            {partial ? `Partially represented — ${lost.length} requirement${lost.length > 1 ? "s" : ""} did not reach the rule` : "Fully represented — every requirement is in the rule"}
+          </div>
+          {partial && (
+            <>
+              <p className="mt-1 text-[12px] text-fg-2">The YAML below enforces only what is listed above it. Publishing this rule will not enforce the rest.</p>
+              <label className="mt-2 flex items-start gap-2 text-[12px] text-fg-2">
+                <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5" />
+                I understand this rule covers only part of what I described.
+              </label>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
         <Button variant="primary" onClick={onUse} disabled={!ready || drafting}>
           <Check className="size-3.5" /> Use this draft
         </Button>
-        <span className="text-[12px] text-fg-3">Opens in the builder so you can check every field before it joins the contract.</span>
+        <span className="text-[12px] text-fg-3">{partial && !ack ? "Tick the box above to continue with the supported parts." : "Opens in the builder so you can check every field before it joins the contract."}</span>
       </div>
     </div>
   );

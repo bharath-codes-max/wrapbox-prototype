@@ -61,31 +61,67 @@ export const globMatch = (pattern: string, value: string, kind: "path" | "text" 
   return globToRe(pattern, kind).test(kind === "text" ? v.replace(/\s+/g, " ").trim() : v);
 };
 
-function matchRule(r: Rule, a: Act, category: CategoryId): { ok: boolean; why: string } {
+/** One condition of a rule, checked against an action. */
+export interface Check {
+  /** The `when:` field this check came from. */
+  field: string;
+  ok: boolean;
+  /** Human sentence: what was required and what the action actually carried. */
+  detail: string;
+}
+
+/* Every condition the engine knows how to check, in the order it checks them. The tester and the
+   runtime evaluator both go through here, so a rule can never be explained one way and enforced
+   another. */
+export function checkRule(r: Rule, a: Act, category: CategoryId): { ok: boolean; checks: Check[]; why: string } {
   const w = r.when;
-  if (!w.effect.some((e) => e === a.effect || (e.endsWith(".*") && a.effect.startsWith(e.slice(0, -1)))))
-    return { ok: false, why: `effect is ${a.effect}` };
-  if (w.subject && !w.subject.includes(category)) return { ok: false, why: `applies to ${w.subject.join("/")} agents only` };
-  if (w.env && !w.env.includes(a.env ?? "production")) return { ok: false, why: `env is ${a.env ?? "production"}` };
+  const checks: Check[] = [];
+
+  const effectOk = w.effect.some((e) => e === a.effect || (e.endsWith(".*") && a.effect.startsWith(e.slice(0, -1))));
+  checks.push({ field: "effect", ok: effectOk, detail: effectOk ? `effect: ${a.effect}` : `effect: ${a.effect} is not ${w.effect.join(" or ")}` });
+
+  if (w.subject) {
+    const ok = w.subject.includes(category);
+    checks.push({ field: "agents", ok, detail: ok ? `agent category: ${category}` : `agent category: ${category} is not ${w.subject.join("/")}` });
+  }
+  if (w.env) {
+    const env = a.env ?? "production";
+    const ok = w.env.includes(env);
+    checks.push({ field: "env", ok, detail: ok ? `environment: ${env}` : `environment: ${env} is not ${w.env.join("/")}` });
+  }
   if (w.path) {
-    if (!a.path || !w.path.some((p) => globMatch(p, a.path!, "path"))) return { ok: false, why: `path ${a.path ?? "—"} doesn't match ${w.path.join(", ")}` };
+    const ok = !!a.path && w.path.some((p) => globMatch(p, a.path!, "path"));
+    checks.push({ field: "path", ok, detail: ok ? `path ${a.path} matches ${w.path.join(", ")}` : `path ${a.path ?? "—"} does not match ${w.path.join(", ")}` });
   }
   if (w.command) {
-    if (!a.command || !w.command.some((p) => globMatch(p, a.command!))) return { ok: false, why: `command doesn't match ${w.command[0]}` };
+    const ok = !!a.command && w.command.some((p) => globMatch(p, a.command!));
+    checks.push({ field: "command", ok, detail: ok ? `command matches ${w.command.join(", ")}` : `command ${a.command ?? "—"} does not match ${w.command.join(", ")}` });
   }
   if (w.branch) {
-    if (!a.branch || !w.branch.some((p) => globMatch(p, a.branch!))) return { ok: false, why: `branch ${a.branch ?? "—"} isn't ${w.branch.join(", ")}` };
+    const ok = !!a.branch && w.branch.some((p) => globMatch(p, a.branch!));
+    checks.push({ field: "branch", ok, detail: ok ? `branch ${a.branch} matches ${w.branch.join(", ")}` : `branch ${a.branch ?? "—"} is not ${w.branch.join(", ")}` });
   }
   if (w.columns) {
     const hit = (a.columns ?? []).filter((c) => w.columns!.includes(c.toLowerCase()));
-    if (!hit.length) return { ok: false, why: `no ${w.columns.join("/")} column touched` };
+    checks.push({ field: "columns", ok: !!hit.length, detail: hit.length ? `touches ${hit.join(", ")}` : `no ${w.columns.join("/")} column touched` });
   }
   if (w.destinationNotIn) {
-    if (!a.destination) return { ok: false, why: "no destination" };
-    if (w.destinationNotIn.some((d) => a.destination === d || a.destination!.endsWith("." + d))) return { ok: false, why: `${a.destination} is on the allowlist` };
+    const allowed = !!a.destination && w.destinationNotIn.some((d) => a.destination === d || a.destination!.endsWith("." + d));
+    const ok = !!a.destination && !allowed;
+    checks.push({ field: "destination", ok, detail: !a.destination ? "no destination in the action" : allowed ? `${a.destination} is on the allowlist` : `${a.destination} is not on the allowlist` });
   }
-  if (w.credentials && !a.credentials) return { ok: false, why: "no credentials in the payload" };
-  return { ok: true, why: "matched" };
+  if (w.credentials) {
+    const ok = !!a.credentials;
+    checks.push({ field: "credentials", ok, detail: ok ? "carries credentials" : "no credentials in the payload" });
+  }
+
+  const failed = checks.find((c) => !c.ok);
+  return { ok: !failed, checks, why: failed ? failed.detail : "matched" };
+}
+
+function matchRule(r: Rule, a: Act, category: CategoryId): { ok: boolean; why: string } {
+  const { ok, why } = checkRule(r, a, category);
+  return { ok, why };
 }
 
 function decide(r: Rule, a: Act): { d: Decision; why: string; approvers?: string; quorum?: number } {

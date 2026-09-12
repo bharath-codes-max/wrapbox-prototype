@@ -12,8 +12,15 @@ export interface Chip {
   label: string;
   value: string;
 }
+export interface Requirement {
+  text: string;
+  field?: string | null;
+  represented: boolean;
+}
 export interface Draft {
   rule: Rule | null;
+  /** Every requirement found in the sentence and whether it reached the rule. */
+  requirements?: Requirement[];
   /** What the sentence was understood to mean. */
   understood: Chip[];
   /** Recognised, but the engine has no field for it — said out loud instead of silently dropped. */
@@ -221,7 +228,11 @@ export function describeToRule(input: string, existingIds: string[] = []): Draft
     scope: /payment|claim|discount|purchase/.test(base) ? "business" : subject || /git|filesystem|shell/.test(base) ? "coding" : "all",
     custom: true,
   };
-  return { rule, understood, unsupported, missing };
+  const requirements: Requirement[] = [
+    ...understood.filter((u) => u.label !== "Note").map((u) => ({ text: `${u.label}: ${u.value}`, field: u.label.toLowerCase(), represented: true })),
+    ...unsupported.map((u) => ({ text: u, field: null, represented: false })),
+  ];
+  return { rule, understood, unsupported, missing, requirements };
 }
 
 /** A short sentence-case title from the sentence the person typed. */

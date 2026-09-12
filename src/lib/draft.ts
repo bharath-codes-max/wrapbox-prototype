@@ -9,7 +9,7 @@
  */
 
 import { EFFECTS, effectInfo, type Rule } from "../data/contract";
-import { describeToRule, type Chip, type Draft } from "./describe";
+import { describeToRule, type Chip, type Draft, type Requirement } from "./describe";
 
 export type DraftSource = "openai" | "builtin";
 export interface DraftResult extends Draft {
@@ -94,12 +94,12 @@ export async function draftRule(sentence: string, existingIds: string[], signal?
       return builtin();
     }
     if (!r.ok) return builtin(`the drafting service answered ${r.status} — used the built-in parser`);
-    const j = (await r.json()) as { rule?: unknown; understood?: Chip[]; unsupported?: string[]; missing?: string[]; model?: string };
+    const j = (await r.json()) as { rule?: unknown; understood?: Chip[]; unsupported?: string[]; missing?: string[]; requirements?: Requirement[]; model?: string };
 
-    if (!j.rule) return { rule: null, understood: j.understood ?? [], unsupported: j.unsupported ?? [], missing: j.missing ?? [], source: "openai", model: j.model };
+    if (!j.rule) return { rule: null, understood: j.understood ?? [], unsupported: j.unsupported ?? [], missing: j.missing ?? [], requirements: j.requirements ?? [], source: "openai", model: j.model };
     const check = validateRule(j.rule);
     if (!check.ok) return builtin(`the drafted rule failed validation (${check.why}) — used the built-in parser`);
-    return { rule: check.rule, understood: j.understood ?? [], unsupported: j.unsupported ?? [], missing: j.missing ?? [], source: "openai", model: j.model };
+    return { rule: check.rule, understood: j.understood ?? [], unsupported: j.unsupported ?? [], missing: j.missing ?? [], requirements: j.requirements ?? [], source: "openai", model: j.model };
   } catch (e) {
     if (e instanceof DOMException && e.name === "AbortError") throw e;
     return builtin("could not reach the drafting service — used the built-in parser");

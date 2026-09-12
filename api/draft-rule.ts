@@ -51,13 +51,14 @@ Rules of the output:
 - understood: short label/value pairs describing what you extracted, for a non-technical reader.
 - unsupported: things the sentence asks for that this schema cannot express — time-of-day windows, rate limits, per-person approvers, geography, spend budgets over time. Never silently drop them.
 - missing: what the sentence still needs before it can become a rule.
+- requirements: EVERY distinct requirement in the sentence, one entry each, in the sentence's own words. Set representable=true only when it maps onto a field above (effect, path, command, branch, env, columns, destination, credentials, agent category, decision, tiers, approvers, quorum, constrain). Provenance, CI status, commit SHAs, inherited authority, permit lifetimes, bindings, invalidation, table counts and conditional escalation are NOT representable — mark them false.
 - Never invent a threshold, an approver or a decision that the sentence does not imply.
 - title: a short sentence-case title. why: the reason an employee sees when stopped.`;
 
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["effect", "path", "command", "branch", "env", "columns", "destination_not_in", "credentials", "subject", "decision", "tiers", "unit", "approvers", "quorum", "constrain", "title", "why", "understood", "unsupported", "missing"],
+  required: ["effect", "path", "command", "branch", "env", "columns", "destination_not_in", "credentials", "subject", "decision", "tiers", "unit", "approvers", "quorum", "constrain", "title", "why", "understood", "unsupported", "missing", "requirements"],
   properties: {
     effect: { type: ["string", "null"], enum: [...EFFECT_IDS, null] },
     path: { type: "array", items: { type: "string" } },
@@ -95,6 +96,15 @@ const SCHEMA = {
     },
     unsupported: { type: "array", items: { type: "string" } },
     missing: { type: "array", items: { type: "string" } },
+    requirements: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["text", "representable", "field"],
+        properties: { text: { type: "string" }, representable: { type: "boolean" }, field: { type: ["string", "null"] } },
+      },
+    },
   },
 };
 
@@ -139,14 +149,16 @@ function toRule(d: Record<string, unknown>, existingIds: string[]) {
   if (approvers && !GROUPS.includes(approvers)) approvers = approvers.toLowerCase().replace(/[^a-z0-9-]+/g, "-").slice(0, 40) || "admin";
   if (decision === "REVIEW" && !approvers) approvers = "admin";
 
+  // The engine checks these on any effect, so keep every one the model returned rather than
+  // filtering by the effect's UI fields (that silently dropped conditions).
   const when: Record<string, unknown> = { effect: [effect] };
-  if (fields.includes("path")) when.path = clean(arr(d.path));
-  if (fields.includes("command")) when.command = clean(arr(d.command));
-  if (fields.includes("branch")) when.branch = clean(arr(d.branch));
-  if (fields.includes("columns")) when.columns = clean(arr(d.columns));
-  if (fields.includes("destination")) when.destinationNotIn = clean(arr(d.destination_not_in));
-  if (fields.includes("env")) when.env = clean(arr(d.env)?.filter((e) => ENVS.includes(e)));
-  if (effect === "network.egress" && d.credentials === true) when.credentials = true;
+  when.path = clean(arr(d.path));
+  when.command = clean(arr(d.command));
+  when.branch = clean(arr(d.branch));
+  when.columns = clean(arr(d.columns));
+  when.destinationNotIn = clean(arr(d.destination_not_in));
+  when.env = clean(arr(d.env)?.filter((e) => ENVS.includes(e)));
+  if (d.credentials === true) when.credentials = true;
   const subject = clean(arr(d.subject)?.filter((s) => SUBJECTS.includes(s)));
   if (subject) when.subject = subject;
   for (const k of Object.keys(when)) if (when[k] === undefined) delete when[k];
@@ -212,13 +224,44 @@ export default async function handler(req: { method?: string; body?: unknown }, 
 
     const parsed = JSON.parse(content) as Record<string, unknown>;
     const { rule, reason } = toRule(parsed, existingIds);
+    const built = (rule ?? {}) as { when?: Record<string, unknown>; decision?: string; tiers?: unknown[]; approvers?: string; quorum?: number; constrain?: string };
+    const landed = (field: string | undefined) => {
+      if (!field) return false;
+      const f = field.toLowerCase();
+      const w = built.when ?? {};
+      if (f.includes("effect")) return !!w.effect;
+      if (f.includes("path")) return !!w.path;
+      if (f.includes("command")) return !!w.command;
+      if (f.includes("branch")) return !!w.branch;
+      if (f.includes("env")) return !!w.env;
+      if (f.includes("column") || f.includes("pii")) return !!w.columns;
+      if (f.includes("destination") || f.includes("domain")) return !!w.destinationNotIn;
+      if (f.includes("credential")) return !!w.credentials;
+      if (f.includes("agent") || f.includes("subject")) return !!w.subject;
+      if (f.includes("tier") || f.includes("amount") || f.includes("limit")) return !!built.tiers;
+      if (f.includes("approver")) return !!(built.approvers || (built.tiers as { approvers?: string }[] | undefined)?.some((t) => t.approvers));
+      if (f.includes("quorum")) return !!built.quorum || !!(built.tiers as { quorum?: number }[] | undefined)?.some((t) => t.quorum);
+      if (f.includes("constrain") || f.includes("rewrite") || f.includes("mask")) return !!built.constrain;
+      if (f.includes("decision")) return !!built.decision || !!built.tiers;
+      return false;
+    };
+    const reqRaw = Array.isArray(parsed.requirements) ? (parsed.requirements as { text?: unknown; representable?: unknown; field?: unknown }[]) : [];
+    const requirements = reqRaw
+      .filter((q) => str(q.text))
+      .map((q) => {
+        const text = String(q.text).slice(0, 200);
+        const field = str(q.field);
+        const represented = q.representable === true && landed(field);
+        return { text, field: field ?? null, represented };
+      });
     const understood = Array.isArray(parsed.understood)
       ? (parsed.understood as { label?: unknown; value?: unknown }[]).filter((u) => str(u.label) && str(u.value)).map((u) => ({ label: String(u.label).slice(0, 40), value: String(u.value).slice(0, 120) }))
       : [];
     const unsupported = (arr(parsed.unsupported) ?? []).map((s) => s.slice(0, 160));
     const missing = rule ? (arr(parsed.missing) ?? []) : [...(arr(parsed.missing) ?? []), reason].filter(Boolean);
 
-    return res.status(200).json({ rule, understood, unsupported, missing, source: "openai", model: MODEL });
+    const notRepresented = requirements.filter((q) => !q.represented).map((q) => q.text);
+    return res.status(200).json({ rule, understood, unsupported: [...unsupported, ...notRepresented.filter((t) => !unsupported.includes(t))], missing, requirements, source: "openai", model: MODEL });
   } catch (e) {
     return res.status(502).json({ error: "could not reach openai", detail: e instanceof Error ? e.message.slice(0, 120) : undefined });
   }
