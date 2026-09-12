@@ -560,7 +560,7 @@ const ADMIN_STEPS = [
   { t: "Intent contract", s: "Your rules + rollout mode" },
   { t: "Connect agents", s: "Hooks, SDK, MCP, connectors" },
   { t: "Approvers & alerts", s: "Who signs what, where" },
-  { t: "Invite your team", s: "Directory, installer, links" },
+  { t: "Invite your team", s: "Directory, invites, laptop rollout" },
   { t: "Go live", s: "See the first decision" },
 ];
 
@@ -1205,6 +1205,9 @@ export function AdminSetup() {
             title="Connect your agents"
             sub="Choose how each discovered agent connects to Wrapbox — pushed by IT with MDM, or installed on the device. Wrapbox marks an integration connected when it checks in. Policy decisions are proven later, in Go live."
           />
+          <div className="mb-4 rounded-xl border border-line bg-surface-2 px-4 py-2.5 text-[12px] text-fg-2">
+            <span className="font-semibold text-fg">Step 4 = the tools. Step 6 = the people.</span> Here you put Wrapbox on the tools where agents run and confirm each one is connected. You invite the people who use them in Step 6.
+          </div>
           <div className="mb-4 flex items-center gap-3">
             <div className="h-1.5 flex-1 rounded-full bg-surface-3 overflow-hidden">
               <motion.div className="h-full bg-allow" animate={{ width: `${(connectedCount / Math.max(1, agentTargets.length)) * 100}%` }} />
@@ -1378,7 +1381,10 @@ export function AdminSetup() {
       {step === 5 && (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
           <Card className="p-6 min-w-0">
-            <StepHead n={6} total={total} title="Invite your team" sub="People come from your directory; laptops get Wrapbox from your MDM. Here is exactly what an admin shares — nothing else is needed from employees." />
+            <StepHead n={6} total={total} title="Invite your team" sub="Step 4 connected the tools. This step brings in the people who use them: sync your directory, then hand out two things — a sign-in link for employees and one laptop rollout for IT." />
+            <div className="mb-4 rounded-xl border border-line bg-surface-2 px-4 py-2.5 text-[12px] text-fg-2">
+              <span className="font-semibold text-fg">Step 4 = the tools. Step 6 = the people.</span> You already put Wrapbox on the tools where agents run. Here you only add who uses them — no hooks, MCP URLs or keys to touch again.
+            </div>
             <div className="rounded-xl border border-line p-4">
               <div className="flex flex-wrap items-center gap-3">
                 <Logo name="okta" size={26} rounded="rounded-md" />
@@ -1409,25 +1415,20 @@ export function AdminSetup() {
                 </div>
               )}
             </div>
-            <div className="mt-4 text-[13px] font-semibold mb-2">What you share</div>
+            <div className="mt-4 text-[13px] font-semibold mb-2">What you hand out</div>
             <div className="space-y-2">
-              <ShareRow n={1} title="Invite link" desc="Employees sign in with SSO and land in their own view.">
+              <ShareRow n={1} title="Invite link — for employees" desc="They sign in with SSO and land in their own view. Nothing for them to configure.">
                 <CopyField value="https://app.wrapbox.ai/join/7Hq2-dK4v" />
               </ShareRow>
-              <ShareRow n={2} title="Laptop rollout" desc="Push through Jamf or Intune — or share one command for unmanaged machines.">
+              <ShareRow n={2} title="Laptop rollout — for IT" desc="IT pushes it to managed laptops with Jamf or Intune; an unmanaged machine runs one command. It installs exactly what you configured in Step 4.">
                 <InlineCmd cmd="npx @wrapbox/cli install --all --org wrapbox" />
                 <div className="mt-2 font-mono text-[11.5px] text-fg-3">Jamf: Wrapbox-1.4.2.pkg · Intune: Wrapbox-1.4.2.msi · both run `wrapbox install --all --managed`</div>
               </ShareRow>
-              <ShareRow n={3} title="MCP endpoints" desc="Replace upstream MCP URLs with the Wrapbox ones in any client.">
-                <CodeBlock
-                  file=".mcp.json"
-                  lang="json"
-                  code={`{\n  "mcpServers": {\n    "stripe":   { "url": "https://mcp.wrapbox.ai/stripe" },\n    "github":   { "url": "https://mcp.wrapbox.ai/github" },\n    "postgres": { "url": "https://mcp.wrapbox.ai/postgres-prod" }\n  }\n}`}
-                />
-              </ShareRow>
-              <ShareRow n={4} title="SDK keys — platform team only" desc="For custom agents. Scoped per agent identity, rotated every 30 days.">
-                <CopyField value="WRAPBOX_TOKEN=wbx_sdk_live_claimsagentprod_••••••••3f9a" />
-              </ShareRow>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11.5px] text-fg-3">
+              You share
+              <ChevronRight className="size-3" /> IT pushes with MDM, or the person runs one command
+              <ChevronRight className="size-3" /> they sign in — their agents are governed
             </div>
             <Footer
               onBack={back}
