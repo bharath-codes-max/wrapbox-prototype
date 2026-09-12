@@ -308,24 +308,34 @@ export const AGENTS: Agent[] = [
     adapter: "claude",
     surface: "terminal",
     file: ".claude/settings.json",
-    fileNote: "Push org-wide as managed settings · 90s timeout lets a REVIEW hold while the approver decides",
+    fileNote: "Commit to the repo, or push org-wide as managed settings. Fires before every tool call — including MCP tools and subagents. An HTTP hook that times out fails open, so pair high-risk actions with the MCP gateway or a service-side permit.",
     lang: "json",
     install: `npx @wrapbox/cli install claude-code --org ${ORG}`,
     hookEvents: ["PreToolUse", "UserPromptSubmit", "PostToolUse", "SessionStart"],
     docs: "code.claude.com/docs/en/hooks",
     snippet: `{
   "hooks": {
-    "UserPromptSubmit": [
-      { "hooks": [{ "type": "command", "command": "wrapbox hook claude-code", "timeout": 15 }] }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": ".*",
-        "hooks": [{ "type": "command", "command": "wrapbox hook claude-code", "timeout": 90 }]
-      }
-    ]
+    "PreToolUse": [{
+      "matcher": "*",
+      "hooks": [{
+        "type": "http",
+        "url": "https://api.wrapbox.ai/v1/check",
+        "headers": { "Authorization": "Bearer $WRAPBOX_TOKEN" },
+        "allowedEnvVars": ["WRAPBOX_TOKEN"],
+        "timeout": 5
+      }]
+    }]
   }
-}`,
+}
+
+// Wrapbox returns, to deny:
+// {
+//   "hookSpecificOutput": {
+//     "hookEventName": "PreToolUse",
+//     "permissionDecision": "deny",
+//     "permissionDecisionReason": "wrapbox: secrets are never read autonomously (rule secrets.read)"
+//   }
+// }`,
     connected: true,
     owner: "Platform team",
     env: "dev workstations",

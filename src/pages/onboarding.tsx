@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Building2, Check, Wand2, Trash2, ChevronDown, ChevronRight, CircleCheck, FileCode2, KeyRound, Loader2, Lock, Mail, Play, ShieldCheck, Terminal as TerminalIcon, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AGENTS, CATEGORIES, METHODS, agentById, type Adapter, type Agent, type CategoryId, type Decision, type Surface } from "../data/agents";
+import { AGENTS, ASSURANCE, CATEGORIES, METHODS, agentById, type Adapter, type Agent, type CategoryId, type Decision, type Surface } from "../data/agents";
 import { PACKS, orgSlug, rulesForPacks, toYaml, type Rule } from "../data/contract";
 import { PEOPLE } from "../data/people";
 import { SCENARIOS, actOf, nativeFor, type Gate } from "../data/scenarios";
@@ -1459,6 +1459,8 @@ function IntegrationRow({ d, conn, connected, busy, onDeploy }: { d: Discovered;
   const isSdk = !!a && (a.adapter === "sdk-ts" || a.adapter === "sdk-py" || a.adapter === "adk");
   const options = a ? deployOptions(a) : [];
   const methodLabel = options.find((o) => o.key === conn?.method)?.label ?? "manual";
+  // Honest assurance level for this integration (never higher than it can guarantee).
+  const assurance = a ? ASSURANCE[(METHODS[a.category].find((m) => m.recommended) ?? METHODS[a.category][0]).assurance] : null;
 
   return (
     <div className="rounded-xl border border-line p-3.5">
@@ -1469,7 +1471,14 @@ function IntegrationRow({ d, conn, connected, busy, onDeploy }: { d: Discovered;
             <span className="text-[13px] font-semibold">{a?.name ?? d.agent}</span>
             {a && <span className="text-[11.5px] text-fg-3">{a.vendor}</span>}
           </div>
-          <div className="mt-0.5 text-[12px] text-fg-2">{a ? `${RUNS_ON[a.surface]} · ${CONTROL[a.adapter]}` : "No Wrapbox adapter yet"}</div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-fg-2">
+            {a ? `${RUNS_ON[a.surface]} · ${CONTROL[a.adapter]}` : "No Wrapbox adapter yet"}
+            {assurance && (
+              <span title={assurance.desc} className="rounded-full bg-surface-3 px-1.5 py-0.5 text-[10px] font-semibold text-fg-2">
+                {assurance.label}
+              </span>
+            )}
+          </div>
           <div className="mt-0.5 font-mono text-[11px] text-fg-3 truncate">
             Found in {d.repos.length} {d.repos.length === 1 ? "repo" : "repos"} · {[...d.paths].join(" · ")}
           </div>
