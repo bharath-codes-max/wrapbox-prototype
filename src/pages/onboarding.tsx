@@ -144,6 +144,19 @@ const BLOCKS: { id: string; cats: CategoryId[]; title: string; agents: string[];
   { id: "a2a", cats: ["a2a"], title: "Multi-agent delegation", agents: ["openai-handoffs"], what: "Handoffs carry an attenuated token; children can't exceed parents." },
 ];
 
+/* Verifying a block replays one representative action for that adapter.
+   Installing the hook on the vendor's platform is SIMULATED; the decision is NOT —
+   it comes from evaluateNow(), the same evaluator the runtime and step 7 use. */
+const PROBES: Record<string, { gate: Gate; agentId: string }> = {
+  coding: { gate: SCENARIOS.ide.gates[0], agentId: "claude-code" },
+  cloud: { gate: SCENARIOS.cloud.gates[1], agentId: "copilot-cloud" },
+  sdk: { gate: SCENARIOS.custom.gates[0], agentId: "langgraph" },
+  mcp: { gate: SCENARIOS["mcp-stripe"].gates[1], agentId: "stripe-mcp" },
+  saas: { gate: SCENARIOS.saas.gates[0], agentId: "agentforce" },
+  browser: { gate: SCENARIOS.browser.gates[0], agentId: "browser-use" },
+  a2a: { gate: SCENARIOS.a2a.gates[0], agentId: "openai-handoffs" },
+};
+
 /* What a real read-only GitHub App sees: the small config files each agent leaves behind.
    Scanning reads only these paths — never source code. */
 interface Hit {
@@ -461,6 +474,8 @@ export function AdminSetup() {
   const [reviewMax, setReviewMax] = useState(5000);
   // Step 4
   const [linked, setLinked] = useState<Record<string, "busy" | "done">>({});
+  // What the real evaluator actually returned for each block's synthetic action.
+  const [probe, setProbe] = useState<Record<string, { v: Verdict; ms: number; display: string; effect: string; agentId: string }>>({});
   const [openBlock, setOpenBlock] = useState<string>("coding");
   const [codingMode, setCodingMode] = useState<"mdm" | "cmd">("mdm");
   const [sdkKey, setSdkKey] = useState(false);
@@ -534,13 +549,24 @@ export function AdminSetup() {
 
   async function link(id: string) {
     setLinked((l) => ({ ...l, [id]: "busy" }));
-    await sleep(1100);
-    setLinked((l) => ({ ...l, [id]: "done" }));
     const b = BLOCKS.find((x) => x.id === id)!;
+    // SIMULATED: pushing the hook file through MDM / issuing the gateway token.
+    await sleep(700);
     for (const a of b.agents) {
       const m = METHODS[agentById(a).category].find((x) => x.recommended) ?? METHODS[agentById(a).category][0];
       connectAgent(a, m.id, m.assurance);
     }
+    // REAL: replay one representative action through the canonical evaluator and
+    // report whatever it decides — including a plain ALLOW when no rule matches.
+    const p = PROBES[id];
+    if (p) {
+      const act = actOf(p.gate);
+      const t0 = performance.now();
+      const v = evaluateNow(act, p.agentId);
+      const ms = performance.now() - t0;
+      setProbe((x) => ({ ...x, [id]: { v, ms, display: p.gate.display, effect: act.effect, agentId: p.agentId } }));
+    }
+    setLinked((l) => ({ ...l, [id]: "done" }));
     toast(`${b.title} connected`, b.agents.map((a) => agentById(a).name).join(" · "), "allow");
     const nextOpen = blocks.find((x) => x.id !== id && linked[x.id] !== "done");
     if (nextOpen) setOpenBlock(nextOpen.id);
@@ -1024,6 +1050,7 @@ export function AdminSetup() {
             {blocks.map((b) => {
               const open = openBlock === b.id;
               const st = linked[b.id];
+              const pr = probe[b.id];
               return (
                 <div key={b.id} className={cn("rounded-xl border", st === "done" ? "border-allow/40" : "border-line")}>
                   <button onClick={() => setOpenBlock(open ? "" : b.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
@@ -1042,13 +1069,32 @@ export function AdminSetup() {
                   {open && (
                     <div className="border-t border-line px-4 py-4 space-y-3">
                       <BlockBody id={b.id} codingMode={codingMode} setCodingMode={setCodingMode} sdkKey={sdkKey} setSdkKey={setSdkKey} />
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-3">
                         <Button variant={st === "done" ? "secondary" : "primary"} onClick={() => link(b.id)} disabled={st === "busy"}>
                           {st === "busy" ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
-                          {st === "busy" ? "Sending test events…" : st === "done" ? "Verify again" : "Verify connection"}
+                          {st === "busy" ? "Installing adapter…" : st === "done" ? "Run the check again" : "Verify connection"}
                         </Button>
-                        <span className="text-[12px] text-fg-3">Wrapbox sends a synthetic action through the adapter and checks the decision comes back.</span>
+                        <span className="min-w-[240px] flex-1 text-[12px] text-fg-3">Installing on the vendor is simulated. The action below is evaluated by the real engine against your published contract.</span>
                       </div>
+                      {pr && (
+                        <div className="rounded-xl border border-line bg-surface-2 p-3.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Chip>adapter simulated</Chip>
+                            <Chip tone="allow">real policy decision</Chip>
+                            <span className="ml-auto font-mono text-[11px] text-fg-3">evaluated in {pr.ms.toFixed(2)} ms</span>
+                          </div>
+                          <div className="mt-2.5 font-mono text-[11.5px] text-fg-3">
+                            {agentById(pr.agentId).name} · {pr.effect}
+                          </div>
+                          <div className="mt-0.5 text-[12.5px]">{pr.display}</div>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <DecisionPill d={pr.v.decision} size="sm" />
+                            {pr.v.observed && <span className="text-[11.5px] text-fg-3">observe mode — would {pr.v.observed}</span>}
+                            <span className="font-mono text-[11.5px] text-fg-3">rule {pr.v.rule}</span>
+                          </div>
+                          <p className="mt-1.5 text-[12px] text-fg-2">{pr.v.reason}</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

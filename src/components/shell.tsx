@@ -410,7 +410,7 @@ function Topbar({ onMenu }: { onMenu: () => void }) {
         ) : ruleCount ? (
           <span className="hidden xl:inline-flex items-center gap-2 rounded-full bg-(--n-ok-bg) ring-1 ring-(--n-ok-ring) px-3 h-8 text-[12px] font-medium text-(--n-ok-fg)">
             <span className={cn("size-1.5 rounded-full bg-(--n-ok-dot)", live && "live-dot")} />
-            Enforcing {ruleCount} rules · 3 ms
+            Enforcing {ruleCount} {ruleCount === 1 ? "rule" : "rules"}
           </span>
         ) : (
           <span className="hidden xl:inline-flex items-center gap-2 rounded-full ring-1 ring-(--n-ring) px-3 h-8 text-[12px] text-(--n-fg-2)">
