@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Building2, Check, Wand2, Trash2, ChevronDown, ChevronRight, CircleCheck, FileCode2, KeyRound, Loader2, Lock, Mail, Play, ShieldCheck, Terminal as TerminalIcon, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AGENTS, ASSURANCE, CATEGORIES, METHODS, agentById, type Adapter, type Agent, type CategoryId, type Decision, type Surface } from "../data/agents";
+import { AGENTS, ASSURANCE, METHODS, agentById, type Adapter, type Agent, type CategoryId, type Decision, type Surface } from "../data/agents";
 import { PACKS, orgSlug, rulesForPacks, toYaml, type Rule } from "../data/contract";
 import { PEOPLE } from "../data/people";
 import { SCENARIOS, actOf, nativeFor, type Gate } from "../data/scenarios";
@@ -233,6 +233,28 @@ function deployOptions(a: Agent): DeployOption[] {
       return [{ key: "manual", label: "Install", desc: "", cmd: a.install }];
   }
 }
+/* Step 2 taxonomy: PRODUCTS, not execution surfaces. Coding merges the engine's
+   ide/cli/cloud classes into one product family; every product-category maps to the
+   engine CategoryId(s) it governs, so the evaluator's category model is untouched.
+   enforcement drives Step 4: connectable = real connect flow; roadmap = inventory card. */
+interface ProductCat {
+  id: string;
+  name: string;
+  sub: string;
+  cats: CategoryId[];
+  enforcement: "connectable" | "roadmap";
+  mechanism?: string;
+}
+const PRODUCT_CATS: ProductCat[] = [
+  { id: "coding", name: "Coding Agents", sub: "Agents that read, write, test, and ship code", cats: ["ide", "cli", "cloud"], enforcement: "connectable" },
+  { id: "custom", name: "Custom AI Agents", sub: "Agents your company built — products, services, APIs and data systems", cats: ["custom"], enforcement: "connectable" },
+  { id: "mcp", name: "MCP Tools & Servers", sub: "Tools and data your agents reach through MCP", cats: ["mcp"], enforcement: "connectable" },
+  { id: "enterprise", name: "Enterprise AI Agents", sub: "Agents operating across business applications", cats: ["saas"], enforcement: "roadmap", mechanism: "Custom connector / API proxy" },
+  { id: "browser", name: "Browser & Computer Agents", sub: "Agents that browse, click, type and operate apps", cats: ["browser"], enforcement: "roadmap", mechanism: "Controlled executor + semantic action gate" },
+  { id: "a2a", name: "Agent-to-Agent Systems", sub: "Agents that delegate to or call other agents", cats: ["a2a"], enforcement: "roadmap", mechanism: "A2A gateway + attenuated delegation tokens" },
+  { id: "other", name: "Other Agent Systems", sub: "Internal or emerging agent systems", cats: [], enforcement: "roadmap", mechanism: "Inventory only" },
+];
+
 /** The Wrapbox adapter version reported at check-in (same across vendors). */
 const ADAPTER_VER = "1.4.2";
 /** A registration identifier Wrapbox assigns when the integration first checks in. */
@@ -557,6 +579,9 @@ export function AdminSetup() {
   const [log, setLog] = useState<{ repo: string; hits: Hit[] }[]>([]);
   const [openAgent, setOpenAgent] = useState<string | null>(null);
   const [cats, setCats] = useState<CategoryId[]>([]);
+  // Step 2 "Other agent systems" — inventory-only, does not affect engine categories.
+  const [otherSel, setOtherSel] = useState(false);
+  const [otherNote, setOtherNote] = useState("");
   // Step 3
   // Starter packs are an optional accelerator, so the admin chooses how to start first.
   const [start, setStart] = useState<"recommended" | "scratch" | null>(null);
@@ -604,6 +629,8 @@ export function AdminSetup() {
           : "Nothing in the contract yet";
   const ghOrg = (domain || "wrapbox").split(".")[0].replace(/[^a-z0-9-]/gi, "-").toLowerCase();
   const connectedMap = useStore((s) => s.connected);
+  // How many of the 7 product categories the admin has selected (Coding counts once).
+  const selectedProductCount = PRODUCT_CATS.filter((pc) => (pc.id === "other" ? otherSel : pc.cats.length > 0 && pc.cats.every((c) => cats.includes(c)))).length;
   const blocks = BLOCKS.filter((b) => b.cats.some((c) => cats.includes(c)));
   // Step 4 is driven by discovery: each block lists the agents Step 2 actually found.
   const blockAgents = (b: (typeof BLOCKS)[number]) => DISCOVERED.filter((d) => b.cats.includes(d.cat) && cats.includes(d.cat));
@@ -870,31 +897,46 @@ export function AdminSetup() {
               <div className="text-[13px] font-semibold">Platforms to govern</div>
               {scan === "done" && <span className="rounded-full bg-allow-soft px-2 py-0.5 text-[10.5px] font-semibold text-allow">pre-selected from your scan</span>}
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              {CATEGORIES.map((c) => {
-                const on = cats.includes(c.id);
-                const found = scan === "done" && DISCOVERED.some((d) => d.cat === c.id);
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {PRODUCT_CATS.map((pc) => {
+                const isOther = pc.id === "other";
+                const on = isOther ? otherSel : pc.cats.length > 0 && pc.cats.every((c) => cats.includes(c));
+                const found = !isOther && scan === "done" && DISCOVERED.some((d) => pc.cats.includes(d.cat));
+                const logos = AGENTS.filter((a) => pc.cats.includes(a.category)).slice(0, 4);
+                const toggle = () => {
+                  if (isOther) return setOtherSel((v) => !v);
+                  setCats((x) => (on ? x.filter((y) => !pc.cats.includes(y)) : [...x, ...pc.cats.filter((c) => !x.includes(c))]));
+                };
                 return (
-                  <button key={c.id} onClick={() => setCats((x) => (on ? x.filter((y) => y !== c.id) : [...x, c.id]))} className={cn("rounded-xl border p-3 text-left transition-colors", on ? "border-fg bg-surface" : "border-line opacity-70 hover:opacity-100")}>
+                  <button key={pc.id} onClick={toggle} className={cn("rounded-xl border p-3 text-left transition-colors", on ? "border-fg bg-surface" : "border-line opacity-70 hover:opacity-100")}>
                     <div className="flex items-center justify-between">
                       <div className="flex -space-x-1.5">
-                        {AGENTS.filter((a) => a.category === c.id)
-                          .slice(0, 3)
-                          .map((a) => (
-                            <Logo key={a.id} name={a.logo} bleed={a.bleed} size={20} rounded="rounded-full" className="ring-2 ring-surface" />
-                          ))}
+                        {logos.map((a) => (
+                          <Logo key={a.id} name={a.logo} bleed={a.bleed} size={20} rounded="rounded-full" className="ring-2 ring-surface" />
+                        ))}
                       </div>
                       <span className={cn("grid size-4.5 place-items-center rounded border", on ? "bg-ink border-ink text-ink-fg" : "border-line-strong")}>{on && <Check className="size-3" strokeWidth={3} />}</span>
                     </div>
-                    <div className="mt-2 text-[12.5px] font-semibold">{c.name}</div>
-                    <div className="text-[11px] text-fg-3">{c.method}</div>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-1.5 text-[12.5px] font-semibold">
+                      {pc.name}
+                      {pc.enforcement === "roadmap" && <span className="rounded-full bg-surface-3 px-1.5 py-0.5 text-[9.5px] font-semibold text-fg-3">roadmap</span>}
+                    </div>
+                    <div className="text-[11px] text-fg-3 leading-snug">{pc.sub}</div>
                     {found && <div className="mt-1.5 text-[10.5px] font-semibold text-allow">found in your org</div>}
                   </button>
                 );
               })}
             </div>
+            {otherSel && (
+              <input
+                value={otherNote}
+                onChange={(e) => setOtherNote(e.target.value)}
+                placeholder="Name the internal / emerging agent systems you run (inventory only)"
+                className="mt-2 h-10 w-full rounded-xl border border-line bg-surface px-3 text-[13px] outline-none focus:border-fg-3"
+              />
+            )}
           </div>
-          <Footer onBack={back} onNext={next} disabled={!cats.length} hint={cats.length ? `${cats.length} of 8 platforms selected` : "Scan GitHub or tick a platform to continue"} />
+          <Footer onBack={back} onNext={next} disabled={!cats.length && !otherSel} hint={cats.length || otherSel ? `${selectedProductCount} of ${PRODUCT_CATS.length} categories selected` : "Scan GitHub or tick a category to continue"} />
           <GitHubInstall open={ghModal} onClose={() => setGhModal(false)} org={ghOrg} onDone={() => setGh("connected")} />
         </Card>
       )}
@@ -1425,7 +1467,7 @@ export function AdminSetup() {
               {(
                 [
                   [true, `Workspace “${company}” · ${idp ?? "SSO"} · ${region.toUpperCase()}`],
-                  [true, `${cats.length} agent platforms selected`],
+                  [true, `${selectedProductCount} agent ${selectedProductCount === 1 ? "category" : "categories"} selected`],
                   [true, `Contract · ${rules.length} rules · ${mode === "observe" ? "observe 7 days, then enforce" : "enforcing"}`],
                   [connectedCount > 0, `${connectedCount} of ${agentTargets.length} integrations connected`],
                   [true, `Approvals via ${Object.entries(channels).filter(([, v]) => v).map(([k]) => k).join(", ")} · passkey ${passkeyReq ? "required" : "optional"}`],
