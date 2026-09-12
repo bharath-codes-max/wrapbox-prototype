@@ -5,6 +5,8 @@ import { AGENTS, CATEGORIES, agentById, type Decision } from "../data/agents";
 import { EFFECTS, PACKS, effectInfo, fmtValue, fromYaml, replay, ruleChips, ruleSig, rulesForPacks, toYaml, type ParseIssue, type ReplayResult, type Rule, type Tier } from "../data/contract";
 import { ACTS } from "../data/scenarios";
 import { ActionComposer, TraceView, type Composed } from "../components/composer";
+import { orgSlug as orgSlugOf } from "../data/contract";
+import { getState as storeState } from "../lib/store";
 import { CodeBlock } from "../components/code";
 import { Button, Card, CardHead, Chip, DecisionPill, Drawer, Logo, Modal, PageHeader, Segmented, Toggle, cn } from "../components/ui";
 import { evaluate, type Act } from "../lib/engine";
@@ -762,7 +764,7 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
   const removed = published.filter((p) => !rules.some((r) => r.id === p.id)).length;
   const changes = dirtyIds.length + removed;
   const shown = readOnly ? published.filter((r) => r.scope !== "business") : rules;
-  const yaml = toYaml(readOnly ? shown : rules, changes ? version + 1 : version);
+  const yaml = toYaml(readOnly ? shown : rules, changes ? version + 1 : version, orgSlugOf(storeState().domain, storeState().company));
 
   const update = (r: Rule) => setState((s) => ({ rules: s.rules.map((x) => (x.id === r.id ? r : x)) }));
   const remove = (id: string) => {
@@ -913,7 +915,7 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
           <div className={cn("space-y-4 min-w-0", view === "visual" && "hidden xl:block")}>
             {editingYaml && !readOnly ? (
               <YamlEditor
-                initial={toYaml(rules, version + 1)}
+                initial={toYaml(rules, version + 1, orgSlugOf(storeState().domain, storeState().company))}
                 onCancel={() => setEditingYaml(false)}
                 onApply={(r) => {
                   setState({ rules: r });

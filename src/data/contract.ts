@@ -230,8 +230,12 @@ export function ruleChips(r: Rule): [string, string][] {
 const q = (s: string) => JSON.stringify(s);
 const list = (xs: string[]) => (xs.length === 1 && /^[\w.\-/]+$/.test(xs[0]) ? xs[0] : `[${xs.map(q).join(", ")}]`);
 
-export function toYaml(rules: Rule[], version: number): string {
-  const out: string[] = [`# wrapbox.yaml · v${version}`, `# One contract for every agent in the org`, `version: 1`, `org: wrapbox`, `default: ALLOW`, ``, `rules:`];
+/** Slug used as the `org:` line in the contract — taken from the company's email domain. */
+export const orgSlug = (domain?: string, company?: string) =>
+  (domain || company || "wrapbox").split(".")[0].trim().replace(/[^a-z0-9-]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "wrapbox";
+
+export function toYaml(rules: Rule[], version: number, org = "wrapbox"): string {
+  const out: string[] = [`# wrapbox.yaml · v${version}`, `# One contract for every agent in the org`, `version: 1`, `org: ${org}`, `default: ALLOW`, ``, `rules:`];
   if (!rules.length) out.push(`  []   # empty — every action is allowed by default`);
   for (const r of rules) {
     out.push(`  - id: ${r.id}`);

@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Building2, Check, ChevronDown, ChevronRight, CircleCheck, FileCode2, KeyRound, Loader2, Lock, Mail, Play, ShieldCheck, Terminal as TerminalIcon, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AGENTS, CATEGORIES, METHODS, agentById, type CategoryId, type Decision } from "../data/agents";
-import { INITIAL_RULES, toYaml, type Rule } from "../data/contract";
+import { INITIAL_RULES, orgSlug, toYaml, type Rule } from "../data/contract";
 import { PEOPLE } from "../data/people";
 import { SCENARIOS, actOf, nativeFor, type Gate } from "../data/scenarios";
 import { CodeBlock, InlineCmd, json } from "../components/code";
@@ -827,7 +827,7 @@ export function AdminSetup() {
             />
           </Card>
           <div className="min-w-0 xl:sticky xl:top-6 self-start">
-            <CodeBlock file="wrapbox.yaml" note={mode === "observe" ? "observe mode" : "enforce"} lang="yaml" code={toYaml(rules, 1)} numbers maxH={640} />
+            <CodeBlock file="wrapbox.yaml" note={mode === "observe" ? "observe mode" : "enforce"} lang="yaml" code={toYaml(rules, 1, orgSlug(domain, company))} numbers maxH={640} />
           </div>
         </div>
       )}
