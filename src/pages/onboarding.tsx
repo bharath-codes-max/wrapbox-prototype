@@ -749,9 +749,9 @@ export function AdminSetup() {
   const mcpOn = previewMode || connectedIds.some((id) => ["stripe-mcp", "postgres-mcp", "github-mcp"].includes(id));
   const sdkOn = previewMode || connectedIds.some((id) => ["langgraph", "openai-agents", "google-adk"].includes(id));
   const TESTS: { key: string; label: string; agentId: string; gate: Gate }[] = [
-    ...(codingOn ? [{ key: "coding", label: `${agentById(codingAgent).name} reads .env.production`, agentId: codingAgent, gate: SCENARIOS.ide.gates[0] }] : []),
-    ...(mcpOn ? [{ key: "mcp", label: `Refund of $8,000 through the MCP gateway (${agentById(mcpAgent).name})`, agentId: mcpAgent, gate: SCENARIOS["mcp-stripe"].gates[1] }] : []),
-    ...(sdkOn ? [{ key: "sdk", label: `${agentById(sdkAgent).name} pays a ₹3,00,000 claim via the SDK`, agentId: sdkAgent, gate: SCENARIOS.custom.gates[0] }] : []),
+    ...(codingOn ? [{ key: "coding", label: `Self-test as ${agentById(codingAgent).name} · read .env.production`, agentId: codingAgent, gate: SCENARIOS.ide.gates[0] }] : []),
+    ...(mcpOn ? [{ key: "mcp", label: `Self-test as ${agentById(mcpAgent).name} · refund $8,000 through the MCP gateway`, agentId: mcpAgent, gate: SCENARIOS["mcp-stripe"].gates[1] }] : []),
+    ...(sdkOn ? [{ key: "sdk", label: `Self-test as ${agentById(sdkAgent).name} · pay a ₹3,00,000 claim via the SDK`, agentId: sdkAgent, gate: SCENARIOS.custom.gates[0] }] : []),
   ];
   async function runTest(key: string) {
     const t = TESTS.find((x) => x.key === key)!;
@@ -1482,7 +1482,7 @@ export function AdminSetup() {
       {step === 6 && (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
           <Card className="p-6 min-w-0">
-            <StepHead n={7} total={total} title="Go live — watch the first decisions" sub="Send a real test action through a connected agent. It runs through the same policy engine as production traffic and shows up in the live stream." />
+            <StepHead n={7} total={total} title="Go live — check the rules are live" sub="A self-test you send from this console — nobody on your team has to do anything yet. Wrapbox runs the action below through your published contract, the same engine production traffic uses, so you can confirm the rules really fire. Real decisions start appearing here once your team's agents run on their own machines." />
             {previewMode && (
               <div className="mb-3 rounded-xl border border-line bg-surface-2 px-4 py-2.5 text-[12px] text-fg-2">
                 Preview mode — no agent is connected yet. These run against the same evaluator on sample products so you can see the decision; connect an agent in Step 4 to prove it live.
@@ -1507,7 +1507,7 @@ export function AdminSetup() {
                       {run?.stage === 4 && dv?.observed && <Chip tone="review">would {dv.observed}</Chip>}
                       {previewMode ? <Chip>preview</Chip> : !on && <Chip>connect in step 4</Chip>}
                       <Button size="sm" onClick={() => runTest(t.key)} disabled={!on || (!!run && run.stage < 4)}>
-                        {run && run.stage < 4 ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3 fill-current" />} {run ? "Run again" : "Send test"}
+                        {run && run.stage < 4 ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3 fill-current" />} {run ? "Run again" : "Run self-test"}
                       </Button>
                     </div>
                     {run && (
@@ -1534,7 +1534,7 @@ export function AdminSetup() {
                 );
               })}
             </div>
-            <Footer onBack={back} onNext={finish} next="Open the control plane" hint={tests.some((t) => t.stage === 4) ? "Your first decisions are in the live stream" : "Send at least one test to see it end to end"} />
+            <Footer onBack={back} onNext={finish} next="Open the control plane" hint={tests.some((t) => t.stage === 4) ? "Rules confirmed live · real decisions appear as your team's agents run" : "Run one self-test to confirm the rules fire end to end"} />
           </Card>
           <Card className="p-5 h-fit">
             <div className="text-[13.5px] font-semibold">Setup summary</div>
