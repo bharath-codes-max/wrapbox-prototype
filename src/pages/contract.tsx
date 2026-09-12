@@ -8,6 +8,7 @@ import { ActionComposer, TraceView, type Composed } from "../components/composer
 import { orgSlug as orgSlugOf } from "../data/contract";
 import { getState as storeState } from "../lib/store";
 import { DESCRIBE_EXAMPLES, describeToRule } from "../lib/describe";
+import { draftRule, type DraftResult } from "../lib/draft";
 import { CodeBlock } from "../components/code";
 import { Button, Card, CardHead, Chip, DecisionPill, Drawer, Logo, Modal, PageHeader, Segmented, Toggle, cn } from "../components/ui";
 import { evaluate, type Act } from "../lib/engine";
@@ -246,7 +247,31 @@ function RuleBuilder({ open, initial, onClose, onSave, existingIds, startMode = 
   const [agentId, setAgentId] = useState("claude-code");
   const [mode, setMode] = useState<BuildMode>(startMode);
   const [text, setText] = useState("");
-  const draft = useMemo(() => describeToRule(text, existingIds), [text, existingIds]);
+  const [draft, setDraft] = useState<DraftResult>(() => ({ ...describeToRule("", []), source: "builtin" }));
+  const [drafting, setDrafting] = useState(false);
+  const idsKey = existingIds.join(",");
+  useEffect(() => {
+    if (!text.trim()) {
+      setDraft({ ...describeToRule("", []), source: "builtin" });
+      setDrafting(false);
+      return;
+    }
+    const ctl = new AbortController();
+    setDrafting(true);
+    const t = setTimeout(async () => {
+      try {
+        setDraft(await draftRule(text, idsKey ? idsKey.split(",") : [], ctl.signal));
+      } catch {
+        /* superseded by the next keystroke */
+      } finally {
+        setDrafting(false);
+      }
+    }, 450);
+    return () => {
+      clearTimeout(t);
+      ctl.abort();
+    };
+  }, [text, idsKey]);
   useEffect(() => {
     if (open) {
       setR(initial ?? blank());
@@ -304,6 +329,7 @@ function RuleBuilder({ open, initial, onClose, onSave, existingIds, startMode = 
             text={text}
             setText={setText}
             draft={draft}
+            drafting={drafting}
             onUse={() => {
               if (!draft.rule) return;
               setR(draft.rule);
@@ -487,7 +513,7 @@ function RuleBuilder({ open, initial, onClose, onSave, existingIds, startMode = 
   );
 }
 
-function DescribePanel({ text, setText, draft, onUse }: { text: string; setText: (v: string) => void; draft: ReturnType<typeof describeToRule>; onUse: () => void }) {
+function DescribePanel({ text, setText, draft, drafting, onUse }: { text: string; setText: (v: string) => void; draft: DraftResult; drafting: boolean; onUse: () => void }) {
   const ready = !!draft.rule;
   return (
     <div className="space-y-4">
@@ -513,7 +539,20 @@ function DescribePanel({ text, setText, draft, onUse }: { text: string; setText:
       {!!text.trim() && (
         <div className="grid gap-3 lg:grid-cols-2">
           <div className="rounded-xl border border-line p-3.5">
-            <div className="text-[12.5px] font-semibold">What Wrapbox understood</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[12.5px] font-semibold">What Wrapbox understood</div>
+              <span className="flex items-center gap-1.5 text-[10.5px] text-fg-3">
+                {drafting ? (
+                  <>
+                    <Loader2 className="size-3 animate-spin" /> drafting…
+                  </>
+                ) : draft.source === "openai" ? (
+                  <span className="rounded-full bg-accent-soft px-2 py-0.5 font-semibold text-accent">drafted by {draft.model ?? "OpenAI"}</span>
+                ) : (
+                  <span className="rounded-full bg-surface-2 px-2 py-0.5 font-semibold text-fg-2">built-in parser</span>
+                )}
+              </span>
+            </div>
             {draft.understood.length ? (
               <div className="mt-2 space-y-1.5">
                 {draft.understood.map((u) => (
@@ -563,8 +602,10 @@ function DescribePanel({ text, setText, draft, onUse }: { text: string; setText:
         </div>
       )}
 
+      {!!draft.note && <div className="rounded-lg bg-review-soft px-3 py-2 text-[12px] text-review">{draft.note}</div>}
+
       <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
-        <Button variant="primary" onClick={onUse} disabled={!ready}>
+        <Button variant="primary" onClick={onUse} disabled={!ready || drafting}>
           <Check className="size-3.5" /> Use this draft
         </Button>
         <span className="text-[12px] text-fg-3">Opens in the builder so you can check every field before it joins the contract.</span>

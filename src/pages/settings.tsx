@@ -1,10 +1,63 @@
-import { Compass, LogOut, Moon, Sun } from "lucide-react";
-import type { ReactNode } from "react";
+import { Compass, LogOut, Moon, ShieldCheck, Sparkles, Sun } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button, Card, PageHeader, cn } from "../components/ui";
 import { setNavStyle, useNavStyle, type NavStyle } from "../lib/navstyle";
 import { signOut, useAccount } from "../lib/auth";
 import { go } from "../lib/router";
 import { setState, setTheme, useStore } from "../lib/store";
+import { aiPreferred, aiStatus, setAiPreferred } from "../lib/draft";
+
+/** OpenAI drafting status. The key lives in a server environment variable — this screen never holds it. */
+function AiDrafting() {
+  const [status, setStatus] = useState<{ configured: boolean; model: string | null } | null>(null);
+  const [on, setOn] = useState(aiPreferred());
+  useEffect(() => {
+    aiStatus(true).then(setStatus);
+  }, []);
+  return (
+    <>
+      <Row
+        title="Draft rules with OpenAI"
+        sub="On the Intent contract page you can describe a rule in plain English. With a key configured on the server, OpenAI drafts the rule; without one, the built-in parser does. Either way a person reviews it in the builder before it can be published, and no model ever makes a live allow or block decision."
+      >
+        <div className="flex items-center gap-3">
+          {status === null ? (
+            <span className="text-[12.5px] text-fg-3">checking…</span>
+          ) : status.configured ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-allow-soft px-2.5 py-1 text-[12px] font-semibold text-allow">
+              <ShieldCheck className="size-3.5" /> Configured · {status.model}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2.5 py-1 text-[12px] font-semibold text-fg-2">
+              <Sparkles className="size-3.5" /> Not configured
+            </span>
+          )}
+          <button
+            role="switch"
+            aria-checked={on}
+            aria-label="Prefer OpenAI drafting"
+            onClick={() => {
+              setAiPreferred(!on);
+              setOn(!on);
+            }}
+            className={cn("relative h-6 w-11 shrink-0 rounded-full transition-colors", on ? "bg-allow" : "bg-line-strong")}
+          >
+            <span className={cn("absolute top-0.5 size-5 rounded-full bg-white shadow transition-all", on ? "left-[22px]" : "left-0.5")} />
+          </button>
+        </div>
+      </Row>
+      <div className="border-t border-line px-6 py-4 text-[12.5px] text-fg-2">
+        <div className="font-semibold">How to turn it on</div>
+        <ol className="mt-1.5 space-y-1 text-fg-3">
+          <li>1. In Vercel → your project → Settings → Environment Variables, add <code className="font-mono text-[11.5px] text-fg-2">OPENAI_API_KEY</code>. Optionally add <code className="font-mono text-[11.5px] text-fg-2">OPENAI_MODEL</code>.</li>
+          <li>2. Redeploy. The key is read only by the server function at <code className="font-mono text-[11.5px] text-fg-2">/api/draft-rule</code>.</li>
+          <li>3. It is never sent to the browser, never bundled into the page, never written into a rule, a log or wrapbox.yaml.</li>
+        </ol>
+        <div className="mt-2 text-fg-3">Never paste a key into this page, a chat, or a repository. If a key has been shared anywhere, revoke it and issue a new one.</div>
+      </div>
+    </>
+  );
+}
 
 function Row({ title, sub, children, last }: { title: string; sub: string; children: ReactNode; last?: boolean }) {
   return (
@@ -76,6 +129,11 @@ export function SettingsPage() {
             <BarPreview style="light" active={nav === "light"} onClick={() => setNavStyle("light")} />
           </div>
         </Row>
+      </Card>
+
+      <div className="eyebrow mt-7 mb-2 px-1">Rule drafting</div>
+      <Card className="overflow-hidden">
+        <AiDrafting />
       </Card>
 
       <div className="eyebrow mt-7 mb-2 px-1">Account</div>
