@@ -11,7 +11,7 @@
  * POST → { rule, understood, unsupported, missing, source }
  */
 
-const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const MODEL = process.env.OPENAI_MODEL || "gpt-4o";
 
 /* The vocabulary the engine understands. Kept in step with src/data/contract.ts. */
 const EFFECTS = [
@@ -36,28 +36,49 @@ const ENVS = ["production", "staging", "development"];
 const SUBJECTS = ["ide", "cli", "cloud", "custom", "mcp", "saas", "browser", "a2a"];
 const GROUPS = ["oncall-sre", "payments-manager", "claims-manager", "sales-manager", "vp-sales", "finance-controller", "security", "admin"];
 
-const SYSTEM = `You turn a plain-English sentence from a company admin into ONE draft authorization rule for Wrapbox, a runtime permit layer for AI agents.
+const SYSTEM = `You turn a company admin's policy sentence into ONE draft authorization rule for Wrapbox, a runtime permit layer for AI agents.
 
-Effects you may use (pick exactly one):
+Work through the WHOLE text clause by clause. Enterprise policies run to several paragraphs and every paragraph usually carries a different construct. Losing a clause is the worst failure mode — map each one onto the closest field below.
+
+Effects (pick exactly one):
 ${EFFECTS.map((e) => `- ${e.id} — ${e.label}${"unit" in e && e.unit ? ` (amount in ${e.unit})` : ""}`).join("\n")}
 
-Rules of the output:
-- decision is one of ALLOW, CONSTRAIN, REVIEW, BLOCK. Use tiers instead of decision when the sentence sets a money or percentage threshold.
-- CONSTRAIN is only valid for database.read (constrain "mask") and git.push (constrain "force-with-lease"). If the sentence asks to limit something else, use REVIEW.
-- approver groups available: ${GROUPS.join(", ")}. Use the closest one; use "admin" if unclear.
-- quorum 2 when the sentence asks for two people / dual approval.
-- env only when the sentence names production, staging or development.
-- subject only when the sentence names a kind of agent (coding agents → ide, cli, cloud).
-- understood: short label/value pairs describing what you extracted, for a non-technical reader.
-- unsupported: things the sentence asks for that this schema cannot express — time-of-day windows, rate limits, per-person approvers, geography, spend budgets over time. Never silently drop them.
-- missing: what the sentence still needs before it can become a rule.
-- requires: context the action must prove before the rule allows it. Use dotted keys such as pr.approvals, sha.deployment_matches_reviewed, ci.required_checks_passed, security.checks_passed, parent.holds_production_authority, delegation.explicit, delegation.privilege_escalation, sql.matches_reviewed_artifact, tables.count, tables.sensitive. ops: is, not, gte, lte, gt, lt, in, not_in.
-- forbid: content that must never run, matched against the SQL or command (for example "drop table", "truncate", "disable row level security").
-- escalations: raise the decision when context holds — for example more than N tables, or a sensitive schema — each with its own approvers and quorum.
-- permit: when the sentence asks for a single-use or time-limited permit, set ttl_seconds, single_use and the attributes it must be bound to.
-- fail_closed: true when the sentence says missing, stale or unverifiable context must block.
-- requirements: EVERY distinct requirement in the sentence, one entry each, in the sentence's own words. Set representable=true only when it maps onto a field above (effect, path, command, branch, env, columns, destination, credentials, agent category, decision, tiers, approvers, quorum, constrain). Provenance, CI status, commit SHAs, inherited authority, permit lifetimes, bindings, invalidation, table counts and conditional escalation are NOT representable — mark them false.
-- Never invent a threshold, an approver or a decision that the sentence does not imply.
+HOW TO MAP CLAUSES
+- "only if / only when / provided that / must have / must match / must hold" → requires (context that must be proven).
+- "must never / may not / is forbidden to" applied to CONTENT the action carries (SQL, a command) → forbid (short lowercase fragments such as "drop table", "truncate", "disable row level security").
+- "if X then require approval from …", thresholds on counts, or categories of data/schema → escalations, one entry per branch, each with its own approvers and quorum.
+- "single-use / one-time / valid for N seconds / bound to …" → permit (ttl_seconds, single_use, bind).
+- "if anything is missing / unverifiable / stale / cannot be proven → block", or "default: BLOCK" → fail_closed: true.
+- money or percentage thresholds → tiers (not escalations).
+
+CONTEXT KEY VOCABULARY (reuse these names; invent new dotted keys only when nothing fits)
+pr.approvals, pr.number, sha.reviewed, sha.deployment, sha.deployment_matches_reviewed,
+ci.required_checks_passed, security.checks_passed,
+parent.holds_production_authority, parent.id, delegation.explicit, delegation.privilege_escalation,
+agent.id, repo, env, db.id, artifact.hash, sql.hash, sql.matches_reviewed_artifact,
+tables.count, tables.sensitive, tables.set, approvals.set, policy.version.
+
+WORKED EXAMPLE (a different policy — follow its SHAPE, never copy its content)
+Sentence: "A cloud agent may deploy to staging only when the build passed and the release was signed off by one reviewer. It must never run rm -rf or curl piped to a shell. If it touches more than 5 services, require the release manager; if it touches a billing service, require the release manager and the finance controller. Give it a one-time permit good for 30 seconds tied to the repo and build id. If anything cannot be verified, block."
+Produces: effect shell.exec; subject ["cloud"]; env ["staging"];
+requires [{key: build.passed, op: is, value: true}, {key: release.approvals, op: gte, value: 1}];
+forbid ["rm -rf", "curl | sh"];
+escalations [{when:[{key: services.count, op: gt, value: 5}], decision: REVIEW, approvers: "release-manager", quorum: 1},
+             {when:[{key: services.billing, op: is, value: true}], decision: REVIEW, approvers: "release-manager,finance-controller", quorum: 2}];
+permit {ttl_seconds: 30, single_use: true, bind: ["repo", "build.id"]};
+fail_closed true.
+
+OTHER FIELDS
+- decision: ALLOW, CONSTRAIN, REVIEW or BLOCK. Use tiers instead when the threshold is money or a percentage.
+- CONSTRAIN is only valid for database.read (constrain "mask") and git.push (constrain "force-with-lease"); otherwise use REVIEW.
+- approver groups: ${GROUPS.join(", ")}. Combine with commas when a clause names several. Use "admin" only if genuinely unclear.
+- quorum: the number of people that clause requires.
+- env only when the text names production, staging or development. subject only when it names a kind of agent (coding agents → ide, cli, cloud).
+- understood: short label/value pairs for a non-technical reader, one per clause you mapped.
+- unsupported: only things this schema genuinely cannot express — time-of-day windows, rate limits, per-person approvers, geography, spend budgets over time, or re-evaluation/invalidation timing beyond the permit fields.
+- missing: what the text still needs before it can become a rule.
+- requirements: every distinct requirement in the text, in the author's own words, with representable=true and the field it mapped to whenever you did map it.
+- Never invent a threshold, approver or decision the text does not state.
 - title: a short sentence-case title. why: the reason an employee sees when stopped.`;
 
 const OPS = ["is", "not", "gte", "lte", "gt", "lt", "in", "not_in"];
@@ -65,7 +86,11 @@ const COND = {
   type: "object",
   additionalProperties: false,
   required: ["key", "op", "value"],
-  properties: { key: { type: "string" }, op: { type: "string", enum: OPS }, value: { type: ["string", "number", "boolean", "array"], items: { type: "string" } } },
+  properties: {
+    key: { type: "string", description: "dotted context key, e.g. pr.approvals, ci.required_checks_passed, tables.count, tables.sensitive" },
+    op: { type: "string", enum: OPS },
+    value: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "array", items: { type: "string" } }] },
+  },
 };
 
 const SCHEMA = {
@@ -260,7 +285,9 @@ export default async function handler(req: { method?: string; body?: unknown }, 
   } catch {
     return res.status(400).json({ error: "bad request body" });
   }
-  const sentence = (body.sentence ?? "").toString().trim().slice(0, 500);
+  // Enterprise policy language runs to paragraphs. 500 chars truncated real intents mid-clause and
+  // everything after the cut never reached the model.
+  const sentence = (body.sentence ?? "").toString().trim().slice(0, 8000);
   const existingIds = Array.isArray(body.existingIds) ? body.existingIds.map(String).slice(0, 200) : [];
   if (sentence.length < 4) return res.status(400).json({ error: "sentence too short" });
 
