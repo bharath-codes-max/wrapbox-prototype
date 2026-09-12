@@ -5,7 +5,7 @@ import { DecisionStream } from "../components/stream";
 import { Button, Card, CardHead, Chip, DecisionPill, Logo, Modal, PageHeader, cn } from "../components/ui";
 import { approveWithPasskey } from "../lib/actions";
 import { ago, go } from "../lib/router";
-import { EMPLOYEE, setState, toast, useStore, type Evt } from "../lib/store";
+import { EMPLOYEE, adminPerson, setState, toast, useStore, type Evt } from "../lib/store";
 import { EvidenceDrawer } from "./evidence";
 
 export const HOW_TO: Record<string, string> = {
@@ -28,6 +28,8 @@ export function EmployeeHome() {
   const [doctor, setDoctor] = useState<"idle" | "run" | "ok">("idle");
   const device = useStore((s) => s.devices.find((d) => d.ownerId === EMPLOYEE.id));
   const onboarded = useStore((s) => s.onboarded.employee);
+  const domain = useStore((s) => s.domain);
+  const first = EMPLOYEE.name.split(" ")[0];
   const mine = useMemo(() => events.filter((e) => e.human === EMPLOYEE.id), [events]);
   const waiting = approvals.filter((a) => a.status === "pending" && a.approvers.some((p) => p.id === EMPLOYEE.id));
   const blocked = useMemo(() => Array.from(new Map(mine.filter((e) => e.decision === "BLOCK" || e.decision === "CONSTRAIN").map((e) => [e.rule, e])).values()).slice(0, 4), [mine]);
@@ -37,8 +39,8 @@ export function EmployeeHome() {
   return (
     <div className="mx-auto max-w-[1280px] px-4 lg:px-8 py-7">
       <PageHeader
-        eyebrow="Employee view · Dev Kapoor · on-call SRE"
-        title={device ? "Hi Dev — your agents are covered." : "Hi Dev — let's get your agents covered."}
+        eyebrow={`Employee view · ${EMPLOYEE.name} · ${EMPLOYEE.role}`}
+        title={device ? `Hi ${first} — your agents are covered.` : `Hi ${first} — let's get your agents covered.`}
         sub={`Your coding agents follow the Wrapbox contract v${version}. Almost everything is allowed instantly; you'll only notice Wrapbox when an action touches secrets, main, customer data or production.`}
       />
 
@@ -109,14 +111,14 @@ export function EmployeeHome() {
               </div>
               {doctor === "ok" && (
                 <div className="mt-3 rounded-xl bg-code border border-code-line p-3 font-mono text-[11.5px] leading-[1.75] text-[#a2acc5]">
-                  <div className="text-[#3fd49b]">✓ identity dev.k@wrapbox.ai · device key in Secure Enclave</div>
+                  <div className="text-[#3fd49b]">✓ identity {EMPLOYEE.id}@{domain} · device key in Secure Enclave</div>
                   {device.agents.map((a) => (
                     <div key={a.name} className="text-[#3fd49b]">
                       ✓ {a.name.toLowerCase()} · {a.note}
                     </div>
                   ))}
                   <div className="text-[#3fd49b]">✓ endpoint runtime · file/process/network mediation on</div>
-                  <div>policy cache v{version} · api.wrapbox.ai reachable · 38 ms</div>
+                  <div>policy cache v{version} · api.wrapbox.ai reachable</div>
                 </div>
               )}
             </Card>
@@ -289,7 +291,7 @@ function ExceptionModal({ e, onClose }: { e: Evt | null; onClose: () => void }) 
                     ...s.requests,
                   ],
                 }));
-                toast("Exception requested", `${mins} minutes · waiting for Priya Menon`, "review");
+                toast("Exception requested", `${mins} minutes · waiting for ${adminPerson().name}`, "review");
                 setWhy("");
                 onClose();
               }}

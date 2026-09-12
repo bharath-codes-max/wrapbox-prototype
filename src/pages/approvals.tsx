@@ -125,6 +125,7 @@ function Detail({ a, mine }: { a: Approval; mine: boolean }) {
   const [checks, setChecks] = useState<VCheck[] | null>(null);
   const [probe, setProbe] = useState<{ label: string; checks: VCheck[] } | null>(null);
   const [why, setWhy] = useState("");
+  const version = useStore((s) => s.version);
 
   useEffect(() => {
     sha256(canonical(approvalArgs(a))).then((h) => setHash("sha256:" + h));
@@ -231,7 +232,7 @@ function Detail({ a, mine }: { a: Approval; mine: boolean }) {
                     <div className="flex items-start gap-2 text-[12px] text-fg-2">
                       <Lightbulb className="size-3.5 mt-0.5 text-review shrink-0" /> {g.history.suggestion}
                     </div>
-                    <Button size="sm" className="mt-2" onClick={() => toast("Draft rule added", "Contract v15 draft · replay it before publishing", "review")}>
+                    <Button size="sm" className="mt-2" onClick={() => toast("Draft rule added", `Contract v${version + 1} draft · replay it before publishing`, "review")}>
                       Draft a rule
                     </Button>
                   </div>
@@ -283,7 +284,7 @@ function Detail({ a, mine }: { a: Approval; mine: boolean }) {
               })}
             </div>
             <p className="mt-2.5 text-[11.5px] text-fg-3">
-              {a.human.name} requested this, so {a.human.name.split(" ")[0]} can't approve it. {mine ? "You can only sign as yourself." : "Prototype: as admin you can sign for each approver to simulate their device."}
+              {a.human.name} requested this, so {a.human.name.split(" ")[0]} can't approve it. {mine ? "You can only sign as yourself." : "As the workspace admin you can act as each approver to walk this request through."}
             </p>
             {a.status === "pending" && (
               <div className="mt-3 border-t border-line pt-3">

@@ -4,8 +4,9 @@ import { AGENTS, ASSURANCE, CATEGORIES, agentById, agentsIn, type Assurance, typ
 import { DecisionSpace } from "../components/insight";
 import { DecisionStream } from "../components/stream";
 import { Avatar, Button, Card, CardHead, D_DOT, DecisionPill, Logo, PageHeader, Segmented, Toggle, cn } from "../components/ui";
+import { useAccount } from "../lib/auth";
 import { ago, go } from "../lib/router";
-import { getState, setState, spaceOf, tickTraffic, toast, useStore, type Evt } from "../lib/store";
+import { adminPerson, getState, setState, spaceOf, tickTraffic, toast, useStore, type Evt } from "../lib/store";
 import { EvidenceDrawer } from "./evidence";
 
 function greeting() {
@@ -95,7 +96,16 @@ export function Overview() {
   const live = useStore((s) => s.live);
   const [filter, setFilter] = useState<"all" | Decision>("all");
   const [open, setOpen] = useState<Evt | null>(null);
+  const account = useAccount();
+  const members = useStore((s) => s.members);
+  const first = (account?.name?.trim() || adminPerson({ members } as never).name).split(" ")[0];
   const pending = approvals.filter((a) => a.status === "pending");
+  // Real latency percentiles from the decisions on screen — never a typed-in number.
+  const lat = useMemo(() => {
+    const xs = allEvents.map((e) => e.latency).filter((n): n is number => typeof n === "number").sort((a, b) => a - b);
+    const q = (p: number) => (xs.length ? xs[Math.min(xs.length - 1, Math.floor(p * xs.length))] : 0);
+    return { p50: q(0.5), p99: q(0.99) };
+  }, [allEvents]);
   const shown = filter === "all" ? events : events.filter((e) => e.decision === filter);
   const live_ = allEvents.filter((e) => e.source !== "seed");
   const total = baseline.decisions + (fresh ? allEvents.length : live_.length);
@@ -127,7 +137,7 @@ export function Overview() {
   );
 
   const kpis = [
-    { label: "Decisions today", value: total.toLocaleString("en-US"), sub: total ? "p50 3 ms · p99 11 ms" : "none yet" },
+    { label: "Decisions today", value: total.toLocaleString("en-US"), sub: total ? `p50 ${lat.p50} ms · p99 ${lat.p99} ms` : "none yet" },
     { label: "Blocked before execution", value: blocked.toLocaleString("en-US"), sub: total ? `${((blocked / Math.max(1, total)) * 100).toFixed(1)}% of actions` : "—", tone: "text-block" },
     { label: "Rewritten to a safe variant", value: rewritten.toLocaleString("en-US"), sub: "PII masked, force-with-lease…", tone: "text-constrain" },
     { label: "Waiting for a human", value: String(pending.length), sub: "oldest " + (pending.length ? ago(Math.min(...pending.map((p) => p.createdAt))) : "—"), tone: "text-review", href: "/approvals" },
@@ -139,7 +149,7 @@ export function Overview() {
       <PageHeader
         eyebrow={`${greeting()} · ${fresh ? "fresh workspace" : "Wrapbox production control plane"}`}
         title={total ? (blocked === 0 && wouldStop > 0 ? `${total.toLocaleString("en-US")} agent actions checked. ${wouldStop} would be stopped once you enforce.` : `${total.toLocaleString("en-US")} agent actions checked. ${blocked.toLocaleString("en-US")} stopped before they ran.`) : nConnected ? "Agents connected. Waiting for their first action." : "Nothing to govern yet — connect your first agent."}
-        sub={total ? `${greeting()}, Priya. Across ${nConnected} connected agents — every action checked against contract v${getState().version}, every risky one stopped, rewritten or held for a person.` : "Every page fills in as you go: connect an agent, write a rule, send an action from the playground or run a happy flow."}
+        sub={total ? `${greeting()}, ${first}. Across ${nConnected} connected agents — every action checked against contract v${getState().version}, every risky one stopped, rewritten or held for a person.` : "Every page fills in as you go: connect an agent, write a rule, send an action from the playground or run a happy flow."}
         right={
           <>
             <Button onClick={() => go("/agents")}>
@@ -220,10 +230,10 @@ export function Overview() {
                   <Zap className="size-4.5" />
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-semibold">Team traffic</div>
-                  <div className="text-[12.5px] text-fg-3 mt-0.5">{nConnected ? "Simulate your team's agents working, evaluated against your contract." : "Connect agents first — traffic only comes from connected agents."}</div>
+                  <div className="text-[14px] font-semibold">Test traffic</div>
+                  <div className="text-[12.5px] text-fg-3 mt-0.5">{nConnected ? "Send test actions from your connected agents. Each one is decided by your published contract." : "Connect agents first — traffic only comes from connected agents."}</div>
                 </div>
-                <Toggle on={live} onChange={(v) => setState({ live: v })} label="Simulate traffic" />
+                <Toggle on={live} onChange={(v) => setState({ live: v })} label="Continuous test traffic" />
               </div>
               <Button
                 size="sm"
@@ -231,10 +241,10 @@ export function Overview() {
                 disabled={!nConnected}
                 onClick={() => {
                   const n = tickTraffic(20);
-                  toast(n ? `${n} actions simulated` : "No connected agents", n ? "Decided by your published contract" : undefined, "allow");
+                  toast(n ? `${n} test actions sent` : "No connected agents", n ? "Decided by your published contract" : undefined, "allow");
                 }}
               >
-                <Zap className="size-3.5" /> Simulate 20 actions
+                <Zap className="size-3.5" /> Send 20 test actions
               </Button>
             </Card>
           )}
@@ -355,7 +365,7 @@ export function Overview() {
       </div>
 
       <Card className="mt-4 overflow-hidden">
-        <CardHead title="Coverage by platform" sub="The eight categories from the Wrapbox market map" right={<Button size="sm" variant="ghost" onClick={() => go("/agents")}>Manage <ArrowRight className="size-3" /></Button>} />
+        <CardHead title="Coverage by surface" sub={`${CATEGORIES.length} surfaces across ${AGENTS.length} agents — connect one and the contract follows it`} right={<Button size="sm" variant="ghost" onClick={() => go("/agents")}>Manage <ArrowRight className="size-3" /></Button>} />
         <div className="grid sm:grid-cols-2 xl:grid-cols-4 border-t border-line">
           {CATEGORIES.map((c) => {
             const list = agentsIn(c.id);

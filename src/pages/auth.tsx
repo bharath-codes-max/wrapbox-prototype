@@ -62,7 +62,7 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
   const sso = (who: string) => {
     setError(null);
-    setNotice(`${who} sign-in is coming soon. Use your email and password for now.`);
+    setNotice(`${who} sign-in isn't enabled for this workspace. Use your email and access code.`);
     emailRef.current?.focus();
   };
 

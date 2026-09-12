@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Building2, Check, Wand2, Trash2, ChevronDown, ChevronRight, CircleCheck, FileCode2, KeyRound, Loader2, Lock, Mail, Play, ShieldCheck, Terminal as TerminalIcon, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AGENTS, ASSURANCE, METHODS, agentById, type Adapter, type Agent, type CategoryId, type Decision, type Surface } from "../data/agents";
+import { AGENTS, ASSURANCE, METHODS, PLANNED_MECHANISM, PRODUCT_CATS, agentById, enforcementOf, type Adapter, type Agent, type CategoryId, type Decision, type Surface } from "../data/agents";
 import { PACKS, orgSlug, rulesForPacks, toYaml, type Rule } from "../data/contract";
 import { PEOPLE } from "../data/people";
 import { SCENARIOS, actOf, nativeFor, type Gate } from "../data/scenarios";
@@ -168,6 +168,12 @@ const CONTROL: Record<Adapter, string> = {
   connector: "Authorized platform connector",
   browser: "Controlled executor",
   a2a: "Delegation gateway (attenuated token)",
+  windsurf: "Cascade hooks · .windsurf/hooks.json",
+  cline: "Cline hooks · .clinerules/hooks",
+  opencode: "OpenCode plugin · tool.execute.before",
+  droid: "Droid hooks · .factory/hooks.json",
+  kiro: "Kiro CLI hooks · .kiro/agents",
+  auggie: "Auggie hooks · ~/.augment/settings.json",
 };
 const RUNS_ON: Record<Surface, string> = {
   terminal: "Developer laptop / terminal",
@@ -181,7 +187,7 @@ const RUNS_ON: Record<Surface, string> = {
 };
 // MDM applies only to laptop-class hook adapters. Copilot hooks are repo-scoped; cloud,
 // MCP, SDK and browser deploy through their own mechanisms — so MDM is never offered there.
-const MDM_ADAPTERS = new Set<Adapter>(["claude", "cursor", "codex", "gemini", "runtime"]);
+const MDM_ADAPTERS = new Set<Adapter>(["claude", "cursor", "codex", "gemini", "runtime", "windsurf", "cline", "droid", "kiro", "auggie", "opencode"]);
 
 /** How Wrapbox confirms a genuine connection for each adapter (the check-in / heartbeat). */
 const HEARTBEAT: Record<Adapter, string> = {
@@ -199,6 +205,12 @@ const HEARTBEAT: Record<Adapter, string> = {
   connector: "The platform's first authorized action call registers the connector.",
   browser: "The controlled executor registers on its first authorized action.",
   a2a: "The first delegated handoff registers the peer.",
+  windsurf: "The Cascade pre-hook checks in on the agent's first run, then heartbeats.",
+  cline: "The PreToolUse hook script checks in on the first tool call, then heartbeats.",
+  opencode: "The plugin registers the device when OpenCode loads it, then heartbeats.",
+  droid: "The PreToolUse hook checks in on the first tool call, then heartbeats.",
+  kiro: "The preToolUse hook checks in on the first tool call, then heartbeats.",
+  auggie: "The PreToolUse hook checks in on the first tool call, then heartbeats.",
 };
 
 export interface DeployOption {
@@ -233,39 +245,8 @@ function deployOptions(a: Agent): DeployOption[] {
       return [{ key: "manual", label: "Install", desc: "", cmd: a.install }];
   }
 }
-/* Step 2 taxonomy: PRODUCTS, not execution surfaces. Coding merges the engine's
-   ide/cli/cloud classes into one product family; every product-category maps to the
-   engine CategoryId(s) it governs, so the evaluator's category model is untouched.
-   enforcement drives Step 4: connectable = real connect flow; roadmap = inventory card. */
-interface ProductCat {
-  id: string;
-  name: string;
-  sub: string;
-  cats: CategoryId[];
-  enforcement: "connectable" | "roadmap";
-  mechanism?: string;
-}
-const PRODUCT_CATS: ProductCat[] = [
-  { id: "coding", name: "Coding Agents", sub: "Agents that read, write, test, and ship code", cats: ["ide", "cli", "cloud"], enforcement: "connectable" },
-  { id: "custom", name: "Custom AI Agents", sub: "Agents your company built — products, services, APIs and data systems", cats: ["custom"], enforcement: "connectable" },
-  { id: "mcp", name: "MCP Tools & Servers", sub: "Tools and data your agents reach through MCP", cats: ["mcp"], enforcement: "connectable" },
-  { id: "enterprise", name: "Enterprise AI Agents", sub: "Agents operating across business applications", cats: ["saas"], enforcement: "roadmap", mechanism: "Custom connector / API proxy" },
-  { id: "browser", name: "Browser & Computer Agents", sub: "Agents that browse, click, type and operate apps", cats: ["browser"], enforcement: "roadmap", mechanism: "Controlled executor + semantic action gate" },
-  { id: "a2a", name: "Agent-to-Agent Systems", sub: "Agents that delegate to or call other agents", cats: ["a2a"], enforcement: "roadmap", mechanism: "A2A gateway + attenuated delegation tokens" },
-  { id: "other", name: "Other Agent Systems", sub: "Internal or emerging agent systems", cats: [], enforcement: "roadmap", mechanism: "Inventory only" },
-];
-
-/* Governance honesty: only products with a verified enforcement mechanism today offer a
-   real connect flow. Enterprise (connector), Browser and A2A are roadmap — they appear in
-   the inventory with an honest "enforcement on roadmap" badge, never a fake connector. */
-function enforcementOf(a: Agent): "connectable" | "roadmap" {
-  return a.adapter === "connector" || a.adapter === "browser" || a.adapter === "a2a" ? "roadmap" : "connectable";
-}
-const PLANNED_MECHANISM: Partial<Record<Adapter, string>> = {
-  connector: "Custom connector / API proxy + evidence export",
-  browser: "Controlled executor + semantic action gate",
-  a2a: "A2A gateway + attenuated delegation tokens",
-};
+/* Step 2 taxonomy (PRODUCT_CATS), enforcementOf and PLANNED_MECHANISM live in
+   src/data/agents.ts, so onboarding, Agents and Overview all read one list. */
 
 /** The visible rollout steps for a deployment method (0..3), shown while connecting. */
 function phaseLabels(method: string): [string, string, string, string] {
@@ -871,7 +852,7 @@ export function AdminSetup() {
                     github.com/{ghOrg} <span className="font-normal text-fg-3">· connected</span>
                   </div>
                   <div className="text-[11.5px] text-fg-3">
-                    {TOTAL_REPOS} repositories · read-only · installed by Priya Menon
+                    {TOTAL_REPOS} repositories · read-only · installed by you
                   </div>
                 </div>
                 <Button className="ml-auto" onClick={runScan} disabled={scan === "scanning"} variant={scan === "done" ? "secondary" : "primary"}>
@@ -1436,7 +1417,7 @@ export function AdminSetup() {
                   }}
                   disabled={scim === "busy"}
                 >
-                  {scim === "busy" ? <Loader2 className="size-3.5 animate-spin" /> : null} {scim === "done" ? "Synced · 11 people" : "Connect Okta"}
+                  {scim === "busy" ? <Loader2 className="size-3.5 animate-spin" /> : null} {scim === "done" ? `Synced · ${Object.values(PEOPLE).length} people` : "Connect Okta"}
                 </Button>
               </div>
               {scim === "done" && (
@@ -1465,7 +1446,7 @@ export function AdminSetup() {
               onNext={() => {
                 if (!invited) {
                   setInvited(true);
-                  toast("Invites sent", "11 people · rollout policy queued in Jamf and Intune", "allow");
+                  toast("Invites sent", `${scim === "done" ? Object.values(PEOPLE).length : 1} ${scim === "done" ? "people" : "person"} · they sign in with SSO and land in their own view`, "allow");
                 }
                 next();
               }}

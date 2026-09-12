@@ -771,6 +771,55 @@ export function nativeFor(agent: Agent, gate: Gate): Native {
           c.pending ? HELD : d === "BLOCK" ? { exit_code: 2, stdout: { permission: "deny", user_message: denyReason(c) } } : { exit_code: 0, stdout: { permission: "allow" } },
         denyLine: (r) => `Blocked by Wrapbox: ${r}`,
       };
+    case "windsurf":
+      return {
+        adapter,
+        hook: isRead ? "pre_read_code · command hook (stdin)" : "pre_run_command · command hook (stdin)",
+        request: {
+          agent_action_name: isRead ? "pre_read_code" : "pre_run_command",
+          trajectory_id: "t_4f81",
+          execution_id: "e_209",
+          timestamp: "2026-09-12T09:14:02Z",
+          model_name: "SWE-1.5",
+          tool_info: isRead ? { file_path: path } : { command_line: cmd, cwd },
+        },
+        respond: (d, c) => (c.pending ? HELD : d === "BLOCK" ? { exit_code: 2, stderr: denyReason(c), note: "Pre-hooks block with exit 2; Cascade shows the stderr line" } : { exit_code: 0, stdout: "" }),
+        denyLine: (r) => `Hook blocked this step — wrapbox: ${r}`,
+      };
+    case "cline":
+      return {
+        adapter,
+        hook: "PreToolUse · executable hook (stdin)",
+        request: { hookName: "PreToolUse", clineVersion: "3.42.0", taskId: "t-81f2", workspaceRoots: ["/wrapbox/web"], toolName: isRead ? "read_file" : "execute_command", toolInput: isRead ? { path } : { command: cmd } },
+        respond: (d, c) => (c.pending ? HELD : d === "BLOCK" ? { exit_code: 0, stdout: { cancel: true, errorMessage: denyReason(c) } } : { exit_code: 0, stdout: { cancel: false } }),
+        denyLine: (r) => `Tool cancelled by hook — wrapbox: ${r}`,
+      };
+    case "opencode":
+      return {
+        adapter,
+        hook: "tool.execute.before · plugin (in-process)",
+        request: { event: "tool.execute.before", input: { tool: isRead ? "read" : "bash", sessionID: "ses_9c1", callID: "call_3e" }, output: { args: isRead ? { filePath: path } : { command: cmd, workdir: cwd } } },
+        respond: (d, c) => (c.pending ? HELD : d === "BLOCK" ? { thrown: "Error", message: denyReason(c), note: "Throwing inside tool.execute.before stops the call" } : { returned: null, ...(c.rewritten ? { "output.args": c.rewritten } : {}) }),
+        denyLine: (r) => `✗ tool blocked by plugin — wrapbox: ${r}`,
+      };
+    case "droid":
+    case "kiro":
+    case "auggie": {
+      const ev = adapter === "kiro" ? "preToolUse" : "PreToolUse";
+      const tool = adapter === "kiro" ? (isRead ? "fs_read" : "execute_bash") : adapter === "droid" ? (isRead ? "Read" : "Execute") : isRead ? "view" : "launch-process";
+      return {
+        adapter,
+        hook: `${ev} · command hook (stdin)`,
+        request: { hook_event_name: ev, session_id: session, cwd, tool_name: tool, tool_input: isRead ? (adapter === "kiro" ? { path } : { file_path: path }) : { command: cmd } },
+        respond: (d, c) =>
+          c.pending
+            ? HELD
+            : d === "BLOCK"
+              ? { exit_code: 2, stderr: denyReason(c), ...(adapter === "kiro" ? {} : { stdout: { hookSpecificOutput: { hookEventName: ev, permissionDecision: "deny", permissionDecisionReason: denyReason(c) } } }) }
+              : { exit_code: 0, stdout: "" },
+        denyLine: (r) => `✗ blocked by ${ev} hook — wrapbox: ${r}`,
+      };
+    }
     case "runtime":
       return {
         adapter,

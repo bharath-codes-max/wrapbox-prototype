@@ -32,7 +32,7 @@ import { AGENTS, CATEGORIES } from "../data/agents";
 import { SCENARIOS } from "../data/scenarios";
 import type { Env } from "../lib/engine";
 import { go } from "../lib/router";
-import { ADMIN, EMPLOYEE, TOUR, getState, resetFresh, setState, switchWorkspace, useStore, workspaceHasData, type Role, type WorkspaceId } from "../lib/store";
+import { ADMIN, EMPLOYEE, TOUR, getState, resetFresh, setState, switchWorkspace, useStore, workspaceHasData, workspaceSummary, type Role, type WorkspaceId } from "../lib/store";
 import { PasskeyModal } from "./insight";
 import { WrapboxWordmark } from "./logo";
 import { useNavStyle } from "../lib/navstyle";
@@ -322,7 +322,7 @@ function WorkspaceMenu() {
             <div className="px-2 space-y-1">
               {(
                 [
-                  { id: "demo", title: `${company === "Wrapbox" || workspace === "fresh" ? "Wrapbox" : company} — demo`, desc: "30 days of live traffic · 12 agents connected · 4 approvals waiting" },
+                  { id: "demo", title: `${company === "Wrapbox" || workspace === "fresh" ? "Wrapbox" : company} — demo`, desc: (({ agents, approvals, version }) => `${agents} agents connected · ${approvals} approvals waiting · contract v${version}`)(workspaceSummary("demo")) },
                   { id: "fresh", title: "Fresh workspace", desc: workspaceHasData("fresh") ? `Your own build · ${workspace === "fresh" ? connectedCount : "…"} agents · resumes where you left off` : "Completely empty. Start from zero and watch every page fill in." },
                 ] as const
               ).map((w) => (

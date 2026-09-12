@@ -877,6 +877,12 @@ const HOW: Record<string, string> = {
   connector: "connector action · live",
   browser: "controlled executor · reloaded",
   a2a: "A2A gateway · delegation tokens reissued",
+  windsurf: ".windsurf/hooks.json · policy cache",
+  cline: ".clinerules/hooks · policy cache",
+  opencode: ".opencode/plugins · policy cache",
+  droid: ".factory/hooks.json · policy cache",
+  kiro: ".kiro/agents · policy cache",
+  auggie: "~/.augment/settings.json · policy cache",
 };
 
 function PublishModal({ open, onClose, version }: { open: boolean; onClose: () => void; version: number }) {

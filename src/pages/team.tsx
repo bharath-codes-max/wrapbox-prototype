@@ -5,7 +5,7 @@ import { personById, type Person } from "../data/people";
 import { DecisionStream } from "../components/stream";
 import { Avatar, Button, Card, CardHead, Chip, Drawer, Logo, PageHeader, Segmented, cn } from "../components/ui";
 import { ago, go } from "../lib/router";
-import { pushEvent, setState, syncDirectory, toast, useStore, type Device } from "../lib/store";
+import { adminPerson, pushEvent, setState, syncDirectory, toast, useStore, type Device } from "../lib/store";
 
 function deviceHealth(d: Device) {
   if (d.agents.some((a) => a.state === "shadow")) return "shadow";
@@ -23,6 +23,7 @@ export function Team() {
   const groups = useStore((s) => s.groups);
   const allowed = useStore((s) => s.allowed);
   const workspace = useStore((s) => s.workspace);
+  const domain = useStore((s) => s.domain);
   const [tab, setTab] = useState<"members" | "devices" | "groups" | "identities">("members");
   const [open, setOpen] = useState<Person | null>(null);
   const pending = requests.filter((r) => r.status === "pending");
@@ -228,7 +229,9 @@ export function Team() {
                               {p.name}
                               {m.status === "invited" && <Chip>invited</Chip>}
                             </div>
-                            <div className="text-[11.5px] text-fg-3">{p.id}@wrapbox.ai</div>
+                            <div className="text-[11.5px] text-fg-3">
+                              {p.id}@{domain}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -311,7 +314,7 @@ export function Team() {
 
       {tab === "identities" && (
         <Card className="overflow-hidden">
-          {AGENTS.filter((a) => connected[a.id]).map((a, i) => (
+          {AGENTS.filter((a) => connected[a.id]).map((a) => (
             <div key={a.id} className="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
               <Logo name={a.logo} bleed={a.bleed} size={24} rounded="rounded-md" />
               <div className="min-w-0 flex-1">
@@ -321,7 +324,7 @@ export function Team() {
                 </div>
               </div>
               <span className="flex items-center gap-1 text-[11.5px] text-fg-3">
-                <KeyRound className="size-3" /> rotates in {30 - ((i * 7) % 29)}d
+                <KeyRound className="size-3" /> rotates in {30 - (Math.floor((Date.now() - connected[a.id].at) / 86_400_000) % 30)}d
               </span>
             </div>
           ))}
@@ -374,6 +377,7 @@ function DeviceCard({ d }: { d: Device }) {
 function MemberDrawer({ p, onClose }: { p: Person | null; onClose: () => void }) {
   const events = useStore((s) => s.events);
   const devices = useStore((s) => s.devices);
+  const domain = useStore((s) => s.domain);
   const mine = useMemo(() => (p ? events.filter((e) => e.human === p.id) : []), [events, p]);
   const devs = p ? devices.filter((d) => d.ownerId === p.id) : [];
   return (
@@ -381,7 +385,7 @@ function MemberDrawer({ p, onClose }: { p: Person | null; onClose: () => void })
       {p && (
         <div className="p-5 space-y-5">
           <div className="text-[12.5px] text-fg-2">
-            {p.role} · {p.id}@wrapbox.ai
+            {p.role} · {p.id}@{domain}
           </div>
           <div>
             <div className="eyebrow mb-2">Laptops</div>
@@ -406,7 +410,7 @@ export function Locked({ what }: { what: string }) {
       </span>
       <h1 className="mt-4 text-[22px] font-semibold">{what} is admin-only</h1>
       <p className="mt-2 text-[13.5px] text-fg-2 leading-relaxed">
-        Employees don't see org-wide configuration. In Admin mode this page lets Priya{" "}
+        Employees don't see org-wide configuration. In Admin mode this page lets {adminPerson().name.split(" ")[0]}{" "}
         {what === "MCP gateway" ? "wrap Stripe, Razorpay, GitHub and database MCP servers behind one policy" : "see every laptop's hook health, shadow agents, requests and approver groups"}.
       </p>
       <Button className="mt-5" variant="primary" onClick={() => setState({ role: "admin" })}>

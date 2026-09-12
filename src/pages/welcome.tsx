@@ -1,6 +1,6 @@
 import { ArrowRight, Compass, Eye, Lock, ShieldCheck, UserCog, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
-import { AGENTS, ASSURANCE, CATEGORIES, agentsIn, type Assurance } from "../data/agents";
+import { AGENTS, ASSURANCE, CATEGORIES, agentsIn, productOf, type Assurance } from "../data/agents";
 import { toYaml, INITIAL_RULES } from "../data/contract";
 import { CodeBlock } from "../components/code";
 import { PermitTicket } from "../components/permit";
@@ -175,17 +175,17 @@ export function Welcome() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <div className="eyebrow">Canonical market map</div>
-            <h2 className="mt-2 text-[28px] font-semibold">Eight agent platforms. One permit.</h2>
+            <h2 className="mt-2 text-[28px] font-semibold">Every agent surface. One permit.</h2>
           </div>
           <Button onClick={() => go("/agents")}>
-            See all 25 integrations <ArrowRight className="size-3.5" />
+            See all {AGENTS.length} agents <ArrowRight className="size-3.5" />
           </Button>
         </div>
         <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {CATEGORIES.map((c) => (
             <a key={c.id} href={`#/flows/${c.scenario}`} className="group flex flex-col rounded-2xl border border-line bg-surface p-4 hover:border-line-strong hover:shadow-card transition-all">
               <div className="flex items-center justify-between">
-                <span className="font-mono text-[11px] text-fg-3">Category {c.n}</span>
+                <span className="text-[11px] text-fg-3 truncate">{productOf(c.id).name}</span>
                 <Chip tone={c.timing === "NOW" ? "allow" : c.timing === "NEXT" ? "accent" : "muted"}>{c.timing}</Chip>
               </div>
               <div className="mt-2 text-[15px] font-semibold tracking-tight">{c.name}</div>
@@ -294,7 +294,7 @@ export function Welcome() {
           </div>
         </Card>
         <p className="mt-4 flex items-center gap-2 text-[12px] text-fg-3">
-          <Eye className="size-3.5" /> This is a prototype. The control plane and agents are simulated; config formats follow each vendor's documentation; permits are really signed and verified in your browser.
+          <Eye className="size-3.5" /> Preview build. Config formats follow each vendor's published documentation; permits are signed and verified in your browser with real ECDSA keys.
           <Lock className="size-3.5 ml-1" />
         </p>
       </section>

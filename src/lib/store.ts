@@ -571,6 +571,24 @@ export const workspaceHasData = (id: WorkspaceId) => {
   const s = id === state.workspace ? state : spaces[id];
   return s.events.length > 0 || Object.keys(s.connected).length > 0 || s.rules.length > 0;
 };
+/** Headline numbers for a workspace — the switcher and the start page read these instead of hard-coding them. */
+export function workspaceSummary(id: WorkspaceId) {
+  const s = id === state.workspace ? state : spaces[id];
+  return {
+    agents: Object.keys(s.connected).length,
+    approvals: s.approvals.filter((a) => a.status === "pending").length,
+    version: s.version,
+    rules: s.published.length,
+    members: s.members.length,
+    devices: s.devices.length,
+    decisions: s.baseline.decisions + s.events.length,
+  };
+}
+/** Who runs this workspace: the member holding the Admin role. Every "waiting for …" line derives from this. */
+export function adminPerson(s: State = state): Person {
+  const m = s.members.find((x) => x.roles.includes("Admin"));
+  return (m && Object.values(PEOPLE).find((p) => p.id === m.id)) || ADMIN;
+}
 
 /* ================= actions ================= */
 let toastId = 0;

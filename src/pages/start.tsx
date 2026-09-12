@@ -1,10 +1,10 @@
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, Check, Database, Plus, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
-import { agentById, type Decision } from "../data/agents";
+import { AGENTS, agentById, type Decision } from "../data/agents";
 import { Button, Card, DecisionPill, Logo, cn } from "../components/ui";
 import { go } from "../lib/router";
-import { setState, switchWorkspace, useStore, workspaceHasData } from "../lib/store";
+import { setState, switchWorkspace, useStore, workspaceHasData, workspaceSummary } from "../lib/store";
 
 const TICKER: { agent: string; action: string; d: Decision; why: string }[] = [
   { agent: "claude-code", action: "Read .env.production", d: "BLOCK", why: "secrets are never read autonomously" },
@@ -60,10 +60,11 @@ export function Start() {
   const workspace = useStore((s) => s.workspace);
   const s = useStore((x) => x);
   const freshHasData = workspaceHasData("fresh");
+  const demo = workspaceSummary("demo");
 
   const steps: { label: string; done: boolean; path: string; hint: string }[] = [
     { label: "Create the workspace", done: s.onboarded.admin || !!s.idp, path: "/onboarding/admin", hint: "SSO, company, data region" },
-    { label: "Connect your first agent", done: Object.keys(s.connected).length > 0, path: "/agents", hint: `${Object.keys(s.connected).length} of 25 connected` },
+    { label: "Connect your first agent", done: Object.keys(s.connected).length > 0, path: "/agents", hint: `${Object.keys(s.connected).length} of ${AGENTS.length} connected` },
     { label: "Publish your intent contract", done: s.version > 0 && s.published.length > 0, path: "/contract", hint: s.published.length ? `v${s.version} · ${s.published.length} rules` : "empty — everything is allowed" },
     { label: "Send your first action", done: s.events.length > 0, path: "/playground", hint: `${s.events.length} decisions so far` },
     { label: "Bring in your team", done: s.members.length > 1, path: "/team", hint: `${s.members.length} ${s.members.length === 1 ? "person" : "people"}` },
@@ -140,7 +141,7 @@ export function Start() {
           icon={<Database className="size-4.5" />}
           tag="Demo workspace"
           title="Explore a live company"
-          body="30 days of traffic across 12 connected agents, a 14-version contract, approvals waiting, laptops reporting. Poke anything."
+          body={`${demo.decisions.toLocaleString("en-US")} decisions across ${demo.agents} connected agents, a contract at v${demo.version}, ${demo.approvals} approvals waiting, ${demo.devices} laptops reporting. Poke anything.`}
           cta="Open the demo"
           active={workspace === "demo"}
           onClick={() => {

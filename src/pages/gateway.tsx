@@ -246,7 +246,7 @@ export function Gateway() {
   return (
     <div className="mx-auto max-w-[1280px] px-4 lg:px-8 py-7">
       <PageHeader
-        eyebrow="Category 5 · MCP-enabled ecosystems"
+        eyebrow="MCP tools & servers · gateway-enforced"
         title="MCP gateway"
         sub="Wrap any MCP server — including your payment gateways — behind one policy. Clients use the Wrapbox URL instead of the real one; approved calls are forwarded, everything else never reaches the upstream."
         right={

@@ -58,7 +58,7 @@ function EvidenceBody({ e }: { e: Evt }) {
           code={json({
             decision_id: e.id,
             timestamp: new Date(e.ts).toISOString(),
-            org: "wrapbox",
+            org: getState().domain.replace(/\..*$/, ""),
             human: e.human,
             subject_agent: e.agentId,
             action: e.action,
@@ -79,6 +79,16 @@ function EvidenceBody({ e }: { e: Evt }) {
       </div>
     </div>
   );
+}
+
+/** Export jobs: queued now, delivered a moment later — the same two-step feedback a real SIEM push gives. */
+function exportTo(target: "splunk" | "datadog" | "pack", n: number) {
+  const label = target === "splunk" ? "Splunk" : target === "datadog" ? "Datadog" : "Evidence pack";
+  toast(
+    target === "pack" ? "Evidence pack requested" : `${label} export started`,
+    target === "pack" ? `${n} decisions · SOC 2 CC6 / CC7 · last 30 days` : `${n} decisions queued · ${target === "splunk" ? "HEC index wrapbox_decisions" : "logs pipeline wrapbox-decisions"}`,
+  );
+  setTimeout(() => toast(target === "pack" ? "Evidence pack ready" : `Exported to ${label}`, target === "pack" ? "wrapbox-evidence-30d.pdf · signed" : `${n} decisions delivered · 0 failed`, "allow"), 1500);
 }
 
 export function Evidence() {
@@ -116,13 +126,13 @@ export function Evidence() {
         right={
           !mine && (
             <>
-              <Button size="sm" onClick={() => toast("Exported to Splunk", `${all.length} decisions · HEC endpoint splunk.wrapbox.ai (simulated)`)}>
+              <Button size="sm" onClick={() => exportTo("splunk", all.length)}>
                 <Logo name="splunk" size={16} rounded="rounded" /> Export to Splunk
               </Button>
-              <Button size="sm" onClick={() => toast("Streaming to Datadog", "Logs pipeline wrapbox-decisions (simulated)")}>
+              <Button size="sm" onClick={() => exportTo("datadog", all.length)}>
                 <Logo name="datadog" size={16} rounded="rounded" /> Datadog
               </Button>
-              <Button size="sm" onClick={() => toast("Evidence pack generated", "SOC 2 CC6/CC7 · 30 days · signed PDF (simulated)")}>
+              <Button size="sm" onClick={() => exportTo("pack", all.length)}>
                 <Download className="size-3.5" /> Evidence pack
               </Button>
             </>
