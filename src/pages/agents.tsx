@@ -179,7 +179,7 @@ export function AgentsPage({ query }: { query: URLSearchParams }) {
                         Happy flow <ArrowRight className="size-3" />
                       </a>
                     </div>
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                       {items.map((a) => (
                         <AgentCard key={a.id} a={a} mine={mine} allowed={allowed} requested={!!requests.find((r) => r.agentId === a.id && r.person.id === EMPLOYEE.id)} onRequest={() => setReq(a)} />
                       ))}

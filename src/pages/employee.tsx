@@ -37,7 +37,7 @@ export function EmployeeHome() {
   mine.forEach((e) => counts[e.decision]++);
 
   return (
-    <div className="mx-auto max-w-[1280px] px-4 lg:px-8 py-7">
+    <div className="mx-auto max-w-[1280px] px-4 lg:px-8 py-8">
       <PageHeader
         eyebrow={`Employee view · ${EMPLOYEE.name} · ${EMPLOYEE.role}`}
         title={device ? `Hi ${first} — your agents are covered.` : `Hi ${first} — let's get your agents covered.`}
@@ -51,15 +51,15 @@ export function EmployeeHome() {
           ["Rewritten safely", counts.CONSTRAIN, "text-constrain"],
           ["Blocked", counts.BLOCK, "text-block"],
         ].map(([l, v, c]) => (
-          <div key={l as string} className="px-5 py-4">
+          <div key={l as string} className="px-6 py-5">
             <div className="text-[12px] text-fg-3">{l}</div>
             <div className={cn("mt-1 text-[22px] font-semibold tnum", c as string)}>{v as number}</div>
           </div>
         ))}
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
-        <div className="space-y-4 min-w-0">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+        <div className="space-y-5 min-w-0">
           {!device ? (
             <Card className="p-6">
               <div className="flex flex-wrap items-center gap-4">
@@ -76,7 +76,7 @@ export function EmployeeHome() {
               </div>
             </Card>
           ) : (
-            <Card className="p-5">
+            <Card className="p-6">
               <div className="flex flex-wrap items-center gap-2">
                 <Laptop className="size-4 text-fg-2" />
                 <span className="font-mono text-[13px] font-medium">{device.id}</span>
@@ -127,7 +127,7 @@ export function EmployeeHome() {
           <Card className="overflow-hidden">
             <CardHead title="What your agents did" sub="Click any row to see exactly why." right={<Button size="sm" variant="ghost" onClick={() => go("/evidence")}>All activity <ArrowRight className="size-3" /></Button>} />
             <div className="border-t border-line">
-              {mine.length ? <DecisionStream events={mine} limit={8} onPick={setOpen} /> : <div className="px-5 py-8 text-[12.5px] text-fg-3">No actions yet today.</div>}
+              {mine.length ? <DecisionStream events={mine} limit={8} onPick={setOpen} /> : <div className="px-6 py-10 text-[12.5px] text-fg-3">No actions yet today.</div>}
             </div>
           </Card>
 
@@ -135,7 +135,7 @@ export function EmployeeHome() {
             <CardHead title="Stopped or changed today — and how to get it done" sub="Wrapbox explains every decision in plain language." />
             <div className="border-t border-line">
               {blocked.map((e) => (
-                <div key={e.rule} className="flex flex-wrap items-start gap-3 px-5 py-3 border-b border-line last:border-0">
+                <div key={e.rule} className="flex flex-wrap items-start gap-3 px-6 py-4 border-b border-line last:border-0">
                   <DecisionPill d={e.decision} size="sm" />
                   <div className="min-w-[240px] flex-1">
                     <div className="font-mono text-[11.5px] text-fg-2 truncate">{e.action}</div>
@@ -154,7 +154,7 @@ export function EmployeeHome() {
           </Card>
         </div>
 
-        <div className="space-y-4 min-w-0">
+        <div className="space-y-5 min-w-0">
           <Card className={cn("overflow-hidden", waiting.length && "border-review/40")}>
             <CardHead title={<span className="flex items-center gap-2"><Hand className="size-4 text-review" /> Waiting on you</span>} sub="You're on call — production deletes need your signature." />
             <div className="border-t border-line">
@@ -175,11 +175,11 @@ export function EmployeeHome() {
                   </div>
                 );
               })}
-              {!waiting.length && <div className="px-5 py-5 text-[12.5px] text-fg-3">Nothing needs you right now.</div>}
+              {!waiting.length && <div className="px-6 py-6 text-[12.5px] text-fg-3">Nothing needs you right now.</div>}
             </div>
           </Card>
 
-          <Card className="p-5">
+          <Card className="p-6">
             <div className="text-[13.5px] font-semibold">When you'll notice Wrapbox</div>
             <ul className="mt-3 space-y-2">
               {(
@@ -203,7 +203,7 @@ export function EmployeeHome() {
             </Button>
           </Card>
 
-          <Card className="p-5">
+          <Card className="p-6">
             <div className="text-[13.5px] font-semibold">Your requests</div>
             <div className="mt-3 space-y-2">
               {requests.map((r) => {
@@ -261,7 +261,7 @@ function ExceptionModal({ e, onClose }: { e: Evt | null; onClose: () => void }) 
   return (
     <Modal open={!!e} onClose={onClose}>
       {e && (
-        <div className="p-5">
+        <div className="p-6">
           <div className="text-[15px] font-semibold">Request a time-boxed exception</div>
           <p className="mt-1 text-[12.5px] text-fg-3">Your admin sees it in Team & devices. If granted, Wrapbox mints a permit for this one command only — the rule stays in force for everything else.</p>
           <div className="mt-4 rounded-lg border border-line bg-surface-2 px-3 py-2 font-mono text-[12px]">{e.action}</div>

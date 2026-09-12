@@ -98,7 +98,7 @@ export function SettingsPage() {
   const nav = useNavStyle();
   const account = useAccount();
   return (
-    <div className="mx-auto max-w-[880px] px-4 lg:px-8 py-7">
+    <div className="mx-auto max-w-[880px] px-4 lg:px-8 py-8">
       <PageHeader eyebrow="Workspace" title="Settings" sub="How Wrapbox looks on this browser, and a guided walk-through whenever you want one." />
 
       <div className="eyebrow mb-2 px-1">Appearance</div>

@@ -81,7 +81,7 @@ export function Playground() {
   }
 
   return (
-    <div className="mx-auto max-w-[1320px] px-4 lg:px-8 py-7">
+    <div className="mx-auto max-w-[1320px] px-4 lg:px-8 py-8">
       <PageHeader
         eyebrow="Try anything"
         title="Action playground"
@@ -89,9 +89,9 @@ export function Playground() {
         right={<Chip>contract v{version}</Chip>}
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <div className="space-y-4 min-w-0">
-          <Card className="p-5">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+        <div className="space-y-5 min-w-0">
+          <Card className="p-6">
             <div className="text-[13px] font-semibold mb-2.5">1 · Which agent</div>
             <div className="space-y-2.5 max-h-[300px] overflow-y-auto scroll-thin pr-1">
               {CATEGORIES.map((cat) => {
@@ -131,7 +131,7 @@ export function Playground() {
             )}
           </Card>
 
-          <Card className="p-5">
+          <Card className="p-6">
             <div className="flex items-center justify-between mb-2.5">
               <div className="text-[13px] font-semibold">2 · What it tries to do</div>
               <span className="font-mono text-[11px] text-fg-3">{agent.adapter} adapter</span>
@@ -154,8 +154,8 @@ export function Playground() {
           )}
         </div>
 
-        <div className="space-y-4 min-w-0">
-          <Card className="p-5">
+        <div className="space-y-5 min-w-0">
+          <Card className="p-6">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div className="text-[13px] font-semibold flex items-center gap-2">
                 <FlaskConical className="size-4 text-fg-2" /> 3 · What Wrapbox decides

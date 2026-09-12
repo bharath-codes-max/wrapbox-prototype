@@ -64,7 +64,7 @@ export function Team() {
   const onlyOwner = members.length <= 1;
 
   return (
-    <div className="mx-auto max-w-[1280px] px-4 lg:px-8 py-7">
+    <div className="mx-auto max-w-[1280px] px-4 lg:px-8 py-8">
       <PageHeader
         eyebrow="People, laptops and approvers"
         title="Team & devices"
@@ -88,7 +88,7 @@ export function Team() {
 
       <Card className="grid grid-cols-2 md:grid-cols-5 divide-x divide-y md:divide-y-0 divide-line overflow-hidden mb-4">
         {kpis.map((k) => (
-          <div key={k.l} className="px-5 py-4">
+          <div key={k.l} className="px-6 py-5">
             <div className="text-[12px] text-fg-3">{k.l}</div>
             <div className={cn("mt-1 text-[22px] font-semibold tnum", k.tone)}>{k.v}</div>
             <div className="text-[11.5px] text-fg-3">{k.s}</div>
@@ -113,14 +113,14 @@ export function Team() {
       )}
 
       {(alerts.length > 0 || pending.length > 0) && (
-        <div className="grid gap-4 xl:grid-cols-2 mb-4">
+        <div className="grid gap-5 xl:grid-cols-2 mb-4">
           <Card className="overflow-hidden">
             <CardHead title="Needs attention" sub="Signals from the endpoint runtime and hook heartbeats" />
             <div className="border-t border-line">
               {alerts.map((a) => {
                 const Icon = a.kind === "hook" ? ShieldAlert : a.kind === "shadow" ? AlertTriangle : KeyRound;
                 return (
-                  <div key={a.id} className="flex items-start gap-3 px-5 py-3 border-b border-line last:border-0">
+                  <div key={a.id} className="flex items-start gap-3 px-6 py-4 border-b border-line last:border-0">
                     <span className={cn("grid size-8 place-items-center rounded-lg shrink-0", a.tone === "block" ? "bg-block-soft text-block" : "bg-review-soft text-review")}>
                       <Icon className="size-4" />
                     </span>
@@ -140,7 +140,7 @@ export function Team() {
                   </div>
                 );
               })}
-              {!alerts.length && <div className="px-5 py-6 text-[12.5px] text-fg-3">All clear.</div>}
+              {!alerts.length && <div className="px-6 py-8 text-[12.5px] text-fg-3">All clear.</div>}
             </div>
           </Card>
           <Card className="overflow-hidden">
@@ -149,7 +149,7 @@ export function Team() {
               {pending.map((r) => {
                 const a = agentById(r.agentId);
                 return (
-                  <div key={r.id} className="flex flex-wrap items-start gap-3 px-5 py-3 border-b border-line last:border-0">
+                  <div key={r.id} className="flex flex-wrap items-start gap-3 px-6 py-4 border-b border-line last:border-0">
                     <Avatar p={r.person} size={30} />
                     <div className="min-w-[220px] flex-1">
                       <div className="text-[13px]">
@@ -179,7 +179,7 @@ export function Team() {
                   </div>
                 );
               })}
-              {!pending.length && <div className="px-5 py-6 text-[12.5px] text-fg-3">No open requests.</div>}
+              {!pending.length && <div className="px-6 py-8 text-[12.5px] text-fg-3">No open requests.</div>}
             </div>
           </Card>
         </div>
@@ -204,12 +204,12 @@ export function Team() {
             <table className="w-full min-w-[860px] text-left">
               <thead>
                 <tr className="text-[11.5px] text-fg-3 border-b border-line">
-                  <th className="font-medium px-5 py-2.5">Person</th>
-                  <th className="font-medium px-2 py-2.5">Roles</th>
-                  <th className="font-medium px-2 py-2.5">Agents</th>
-                  <th className="font-medium px-2 py-2.5 text-right">Actions</th>
-                  <th className="font-medium px-2 py-2.5 text-right">Blocked</th>
-                  <th className="font-medium px-5 py-2.5">Laptops</th>
+                  <th className="font-medium px-6 py-3.5">Person</th>
+                  <th className="font-medium px-3 py-3.5">Roles</th>
+                  <th className="font-medium px-3 py-3.5">Agents</th>
+                  <th className="font-medium px-3 py-3.5 text-right">Actions</th>
+                  <th className="font-medium px-3 py-3.5 text-right">Blocked</th>
+                  <th className="font-medium px-6 py-3.5">Laptops</th>
                 </tr>
               </thead>
               <tbody>
@@ -221,7 +221,7 @@ export function Team() {
                   const devs = devices.filter((d) => d.ownerId === m.id);
                   return (
                     <tr key={m.id} onClick={() => setOpen(p)} className="border-b border-line last:border-0 hover:bg-surface-2 cursor-pointer">
-                      <td className="px-5 py-2.5">
+                      <td className="px-6 py-3.5">
                         <div className="flex items-center gap-2.5">
                           <Avatar p={p} size={28} className={m.status === "invited" ? "opacity-60" : ""} />
                           <div>
@@ -235,7 +235,7 @@ export function Team() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-2 py-2.5">
+                      <td className="px-3 py-3.5">
                         <div className="flex flex-wrap gap-1">
                           {m.roles.map((r) => (
                             <Chip key={r} tone={r === "Admin" ? "accent" : r.startsWith("Approver") ? "review" : "muted"}>
@@ -244,7 +244,7 @@ export function Team() {
                           ))}
                         </div>
                       </td>
-                      <td className="px-2 py-2.5">
+                      <td className="px-3 py-3.5">
                         {agents[0] === "*" ? (
                           <span className="text-[12px] text-fg-2">All agents</span>
                         ) : agents.length ? (
@@ -258,9 +258,9 @@ export function Team() {
                           <span className="text-[12px] text-fg-3">{m.roles.some((r) => r.startsWith("Approver")) && !m.roles.includes("Developer") ? "Approves only" : "None yet"}</span>
                         )}
                       </td>
-                      <td className="px-2 py-2.5 text-right font-mono text-[12.5px] tnum">{st.n}</td>
-                      <td className={cn("px-2 py-2.5 text-right font-mono text-[12.5px] tnum", st.b ? "text-block" : "text-fg-3")}>{st.b}</td>
-                      <td className="px-5 py-2.5">
+                      <td className="px-3 py-3.5 text-right font-mono text-[12.5px] tnum">{st.n}</td>
+                      <td className={cn("px-3 py-3.5 text-right font-mono text-[12.5px] tnum", st.b ? "text-block" : "text-fg-3")}>{st.b}</td>
+                      <td className="px-6 py-3.5">
                         <div className="flex gap-1.5">
                           {devs.map((d) => {
                             const h = deviceHealth(d);
@@ -296,7 +296,7 @@ export function Team() {
       {tab === "groups" && (
         <Card className="overflow-hidden">
           {Object.entries(groups).map(([g, ids]) => (
-            <div key={g} className="flex flex-wrap items-center gap-3 px-5 py-3 border-b border-line last:border-0">
+            <div key={g} className="flex flex-wrap items-center gap-3 px-6 py-4 border-b border-line last:border-0">
               <span className="font-mono text-[12.5px] text-review w-[170px]">{g}</span>
               <div className="flex -space-x-1.5 flex-1">
                 {ids.map((id) => {
@@ -307,7 +307,7 @@ export function Team() {
               <span className="text-[12px] text-fg-2">{ids.map((id) => personById(id)?.name).join(", ")}</span>
             </div>
           ))}
-          {!Object.keys(groups).length && <div className="px-5 py-6 text-[12.5px] text-fg-3">No approver groups yet — they're created in admin setup or when you sync the directory. Until then REVIEW goes to the admin.</div>}
+          {!Object.keys(groups).length && <div className="px-6 py-8 text-[12.5px] text-fg-3">No approver groups yet — they're created in admin setup or when you sync the directory. Until then REVIEW goes to the admin.</div>}
           <div className="px-5 py-3 text-[12px] text-fg-3 bg-surface-2">Separation of duties is on: whoever requested an action can never approve it, even if they're in the group.</div>
         </Card>
       )}
@@ -315,7 +315,7 @@ export function Team() {
       {tab === "identities" && (
         <Card className="overflow-hidden">
           {AGENTS.filter((a) => connected[a.id]).map((a) => (
-            <div key={a.id} className="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
+            <div key={a.id} className="flex items-center gap-3 px-6 py-3.5 border-b border-line last:border-0">
               <Logo name={a.logo} bleed={a.bleed} size={24} rounded="rounded-md" />
               <div className="min-w-0 flex-1">
                 <div className="font-mono text-[12.5px] truncate">{a.id}@wrapbox</div>
@@ -328,7 +328,7 @@ export function Team() {
               </span>
             </div>
           ))}
-          {!Object.keys(connected).length && <div className="px-5 py-6 text-[12.5px] text-fg-3">No agent identities yet — every connected agent gets its own scoped credential.</div>}
+          {!Object.keys(connected).length && <div className="px-6 py-8 text-[12.5px] text-fg-3">No agent identities yet — every connected agent gets its own scoped credential.</div>}
         </Card>
       )}
 

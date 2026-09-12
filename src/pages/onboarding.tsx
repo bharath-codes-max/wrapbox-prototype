@@ -41,7 +41,7 @@ function SetupLayout({
   children: ReactNode;
 }) {
   return (
-    <div className="mx-auto max-w-[1280px] px-4 lg:px-8 py-7">
+    <div className="mx-auto max-w-[1280px] px-4 lg:px-8 py-8">
       <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="lg:sticky lg:top-6 self-start">
           <div className="flex items-center gap-2.5">
@@ -363,7 +363,7 @@ function GitHubInstall({ open, onClose, org, onDone }: { open: boolean; onClose:
         </button>
       </div>
       {screen === "account" && (
-        <div className="p-5">
+        <div className="p-6">
           <div className="text-[15px] font-semibold">Install Wrapbox on your account</div>
           <p className="mt-1 text-[13px] text-fg-2">Wrapbox by wrapbox.ai wants to see which AI agents your repositories use.</p>
           <div className="mt-4 space-y-1.5">
@@ -390,7 +390,7 @@ function GitHubInstall({ open, onClose, org, onDone }: { open: boolean; onClose:
         </div>
       )}
       {screen === "permissions" && (
-        <div className="p-5">
+        <div className="p-6">
           <div className="text-[15px] font-semibold">
             Install on <span className="font-mono text-[14px]">{account}</span>
           </div>
@@ -786,7 +786,7 @@ export function AdminSetup() {
               <Avatar p={ADMIN} size={24} /> Signed in as <b>priya@{domain}</b> via {idp} · MFA verified
             </motion.div>
           )}
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div className="mt-5 grid gap-5 sm:grid-cols-2">
             <CompanyField
               company={company}
               onType={setCompany}
@@ -984,7 +984,7 @@ export function AdminSetup() {
       )}
 
       {step === 2 && (
-        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_480px] xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_480px] xl:grid-cols-[minmax(0,1fr)_380px]">
           <Card className="p-6 min-w-0">
             <StepHead n={3} total={total} title="Write your intent contract" sub="The contract is the set of rules Wrapbox enforces on every agent, whatever vendor it comes from. Use our recommended baseline, or publish only the rules you write." />
             {start === null && (
@@ -1295,7 +1295,7 @@ export function AdminSetup() {
       )}
 
       {step === 4 && (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
           <Card className="p-6 min-w-0">
             <StepHead n={5} total={total} title="Approvers and alerts" sub="REVIEW decisions go to people, not to a queue nobody watches. Map each approver group in your contract to real people, and choose where they get asked." />
             <div className="rounded-xl border border-line overflow-hidden">
@@ -1323,7 +1323,7 @@ export function AdminSetup() {
                 </div>
               ))}
             </div>
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="mt-5 grid gap-5 md:grid-cols-2">
               <div className="rounded-xl border border-line p-4 space-y-3">
                 <div className="text-[13px] font-semibold">Where approvers get asked</div>
                 {(
@@ -1394,7 +1394,7 @@ export function AdminSetup() {
       )}
 
       {step === 5 && (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
           <Card className="p-6 min-w-0">
             <StepHead n={6} total={total} title="Invite your team" sub="Step 4 connected and rolled out the tools. This step brings in the people who use them — sync your directory and send the sign-in link. Their agents are already governed." />
             <div className="mb-4 rounded-xl border border-line bg-surface-2 px-4 py-2.5 text-[12px] text-fg-2">
@@ -1461,7 +1461,7 @@ export function AdminSetup() {
       )}
 
       {step === 6 && (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
           <Card className="p-6 min-w-0">
             <StepHead n={7} total={total} title="Go live — check the rules are live" sub="A self-test you send from this console — nobody on your team has to do anything yet. Wrapbox runs the action below through your published contract, the same engine production traffic uses, so you can confirm the rules really fire. Real decisions start appearing here once your team's agents run on their own machines." />
             {previewMode && (
@@ -1740,7 +1740,7 @@ function InviteEmail({ onAccept, accepted }: { onAccept?: () => void; accepted?:
       <div className="flex items-center gap-2 px-4 h-10 border-b border-line bg-surface-2 text-[12px] text-fg-2">
         <Mail className="size-3.5" /> Inbox · dev.k@wrapbox.ai
       </div>
-      <div className="p-5">
+      <div className="p-6">
         <div className="text-[12px] text-fg-3">From: Priya Menon via Wrapbox &lt;no-reply@wrapbox.ai&gt;</div>
         <div className="mt-1 text-[15px] font-semibold">Priya invited you to the Wrapbox workspace</div>
         <div className="mt-4 rounded-xl bg-nav p-5 text-white">
@@ -1917,7 +1917,7 @@ export function EmployeeSetup() {
   return (
     <SetupLayout who="employee" title="Join Wrapbox" steps={EMP_STEPS} step={step} reached={reached} onJump={setStep}>
       {step === 0 && (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <Card className="p-6">
             <StepHead n={1} total={total} title="You've been invited" sub="Priya set up Wrapbox for the company and added you. Nothing about how you use Cursor, Claude Code or Codex changes — Wrapbox only steps in for risky actions." />
             <ul className="space-y-2 text-[13px] text-fg-2">
@@ -2004,7 +2004,7 @@ export function EmployeeSetup() {
       {step === 3 && (
         <Card className="p-6">
           <StepHead n={4} total={total} title="What changes for you" sub="Set by your admin, written in plain English. You can always read them under “Rules for me”." />
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-5 lg:grid-cols-2">
             <ul className="space-y-2">
               {(
                 [
@@ -2041,7 +2041,7 @@ export function EmployeeSetup() {
       {step === 4 && (
         <Card className="p-6">
           <StepHead n={5} total={total} title="Try it in Claude Code" sub="Ask your agent for something. Every action goes through Wrapbox; watch what happens in the terminal. Try all four." />
-          <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
             <div className="space-y-2">
               {TRIES.map((t) => {
                 const r = tried.find((x) => x.key === t.key);
@@ -2091,7 +2091,7 @@ export function EmployeeSetup() {
       )}
 
       {step === 5 && (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <Card className="p-6">
             <StepHead n={6} total={total} title="Approve from Slack" sub="You're in the oncall-sre approver group. When Arjun's Claude Code wants to delete a production deployment, you get this message. Approving signs the exact command with your passkey — the permit can't be reused for anything else." />
             <ul className="space-y-2 text-[13px] text-fg-2">

@@ -533,7 +533,7 @@ function InstallTabs() {
   const [i, setI] = useState(0);
   const a = agentById(INSTALL[i].id);
   return (
-    <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
+    <div className="grid gap-5 lg:grid-cols-[260px_1fr]">
       <div className="flex lg:flex-col gap-1.5 overflow-x-auto">
         {INSTALL.map((t, k) => (
           <button

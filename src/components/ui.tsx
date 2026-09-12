@@ -158,10 +158,10 @@ export function Card({ className, children, ...rest }: { className?: string; chi
 
 export function CardHead({ title, sub, right, className }: { title: ReactNode; sub?: ReactNode; right?: ReactNode; className?: string }) {
   return (
-    <div className={cn("flex items-start justify-between gap-3 px-5 pt-4 pb-3", className)}>
+    <div className={cn("flex items-start justify-between gap-4 px-6 pt-5 pb-4", className)}>
       <div className="min-w-0">
-        <div className="text-[13.5px] font-semibold text-fg">{title}</div>
-        {sub && <div className="text-[12.5px] text-fg-3 mt-0.5">{sub}</div>}
+        <div className="text-[14px] font-semibold text-fg">{title}</div>
+        {sub && <div className="text-[12.5px] text-fg-3 mt-1 leading-relaxed">{sub}</div>}
       </div>
       {right}
     </div>
@@ -308,11 +308,11 @@ export function Modal({ open, onClose, children, width = 520 }: { open: boolean;
 
 export function PageHeader({ eyebrow, title, sub, right }: { eyebrow?: ReactNode; title: ReactNode; sub?: ReactNode; right?: ReactNode }) {
   return (
-    <div className="parallax-head flex flex-wrap items-end justify-between gap-4 mb-6">
+    <div className="parallax-head flex flex-wrap items-end justify-between gap-5 mb-8">
       <div className="min-w-0 max-w-[720px]">
-        {eyebrow && <div className="eyebrow mb-2">{eyebrow}</div>}
-        <h1 className="text-[26px] leading-[1.15] font-semibold tracking-tight">{title}</h1>
-        {sub && <p className="text-fg-2 text-[14px] mt-2 leading-relaxed max-w-[64ch]">{sub}</p>}
+        {eyebrow && <div className="eyebrow mb-2.5">{eyebrow}</div>}
+        <h1 className="text-[27px] leading-[1.15] font-semibold tracking-tight">{title}</h1>
+        {sub && <p className="text-fg-2 text-[14px] mt-2.5 leading-relaxed max-w-[64ch]">{sub}</p>}
       </div>
       {right && <div className="flex items-center gap-2">{right}</div>}
     </div>
@@ -338,7 +338,7 @@ export function Chip({ children, className, tone = "muted" }: { children: ReactN
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] font-medium",
+        "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] font-medium leading-none",
         tone === "muted" && "bg-surface-2 text-fg-2 border border-line",
         tone === "accent" && "bg-accent-soft text-accent",
         tone === "allow" && "bg-allow-soft text-allow",

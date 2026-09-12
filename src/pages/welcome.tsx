@@ -111,7 +111,7 @@ export function Welcome() {
           Wrapbox doesn't govern AWS, GitHub or Stripe. It governs an agent <i>attempting</i> an AWS, GitHub or Stripe action — before that action executes.
         </p>
         <div className="mt-6 grid gap-3 lg:grid-cols-[1fr_1.15fr_1fr] items-stretch">
-          <Card className="p-5">
+          <Card className="p-6">
             <div className="eyebrow">1 · What is the agent?</div>
             <div className="mt-1 text-[13px] text-fg-2">Where the decision is made.</div>
             <div className="mt-4 grid grid-cols-4 gap-2">
@@ -150,7 +150,7 @@ export function Welcome() {
               </div>
             </div>
           </div>
-          <Card className="p-5">
+          <Card className="p-6">
             <div className="eyebrow">3 · What is it touching?</div>
             <div className="mt-1 text-[13px] text-fg-2">Where the effect lands.</div>
             <div className="mt-4 grid grid-cols-4 gap-2">
@@ -181,7 +181,7 @@ export function Welcome() {
             See all {AGENTS.length} agents <ArrowRight className="size-3.5" />
           </Button>
         </div>
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {CATEGORIES.map((c) => (
             <a key={c.id} href={`#/flows/${c.scenario}`} className="group flex flex-col rounded-2xl border border-line bg-surface p-4 hover:border-line-strong hover:shadow-card transition-all">
               <div className="flex items-center justify-between">
@@ -210,7 +210,7 @@ export function Welcome() {
       <section className="mt-16">
         <div className="eyebrow">How it works</div>
         <h2 className="mt-2 text-[28px] font-semibold">One intent contract. Every agent reads it.</h2>
-        <div className="mt-6 grid gap-4 lg:grid-cols-3">
+        <div className="mt-6 grid gap-5 lg:grid-cols-3">
           <div>
             <Step n={1} title="Write the contract" body="Plain rules about effects and resources — not about any one tool. Committed to the repo or set org-wide." />
             <CodeBlock file="wrapbox.yaml" lang="yaml" code={toYaml(INITIAL_RULES, 14).split("\n").slice(6, 30).join("\n")} maxH={300} />
@@ -241,7 +241,7 @@ export function Welcome() {
       </section>
 
       {/* Roles */}
-      <section className="mt-16 grid gap-4 lg:grid-cols-2">
+      <section className="mt-16 grid gap-5 lg:grid-cols-2">
         <RoleCard
           icon={<UserCog className="size-4" />}
           title="Admin / founder view"

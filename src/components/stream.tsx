@@ -16,8 +16,8 @@ export function DecisionRow({ e, onClick, compact }: { e: Evt; onClick?: () => v
       transition={{ duration: 0.5 }}
       onClick={onClick}
       className={cn(
-        "group grid w-full items-center gap-3 border-b border-line last:border-0 px-4 text-left hover:!bg-surface-2 transition-colors",
-        compact ? "grid-cols-[62px_1fr_auto] py-2.5" : "grid-cols-[62px_88px_minmax(0,1fr)_auto] py-2.5",
+        "group grid w-full items-center gap-3.5 border-b border-line last:border-0 px-5 text-left hover:!bg-surface-2 transition-colors",
+        compact ? "grid-cols-[62px_1fr_auto] py-3" : "grid-cols-[62px_88px_minmax(0,1fr)_auto] py-3.5",
       )}
     >
       <span className="font-mono text-[11px] text-fg-3 tnum">{clock(e.ts)}</span>

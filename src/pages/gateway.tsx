@@ -89,21 +89,21 @@ function ToolTable({ tools }: { tools: Upstream["tools"] }) {
       <table className="w-full min-w-[520px] text-left text-[12.5px]">
         <thead>
           <tr className="text-[11.5px] text-fg-3 border-b border-line bg-surface-2">
-            <th className="font-medium px-3 py-2">Tool</th>
-            <th className="font-medium px-3 py-2">Normalized effect</th>
-            <th className="font-medium px-3 py-2">Risk</th>
-            <th className="font-medium px-3 py-2">Default decision</th>
+            <th className="font-medium px-4 py-2.5">Tool</th>
+            <th className="font-medium px-4 py-2.5">Normalized effect</th>
+            <th className="font-medium px-4 py-2.5">Risk</th>
+            <th className="font-medium px-4 py-2.5">Default decision</th>
           </tr>
         </thead>
         <tbody>
           {tools.map((t, i) => (
             <motion.tr key={t.name} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.08 }} className="border-b border-line last:border-0">
-              <td className="px-3 py-2 font-mono">{t.name}</td>
-              <td className="px-3 py-2 font-mono text-fg-2">{t.effect}</td>
-              <td className="px-3 py-2">
+              <td className="px-4 py-2.5 font-mono">{t.name}</td>
+              <td className="px-4 py-2.5 font-mono text-fg-2">{t.effect}</td>
+              <td className="px-4 py-2.5">
                 <Chip tone={t.risk === "high" ? "block" : t.risk === "medium" ? "review" : "muted"}>{t.risk}</Chip>
               </td>
-              <td className="px-3 py-2">{t.decision === "tiers" ? <span className="font-mono text-[11.5px] text-fg">rule payments.refund (tiers)</span> : <DecisionPill d={t.decision} size="sm" />}</td>
+              <td className="px-4 py-2.5">{t.decision === "tiers" ? <span className="font-mono text-[11.5px] text-fg">rule payments.refund (tiers)</span> : <DecisionPill d={t.decision} size="sm" />}</td>
             </motion.tr>
           ))}
         </tbody>
@@ -244,7 +244,7 @@ export function Gateway() {
   const [open, setOpen] = useState(false);
   const [sel, setSel] = useState<Upstream>(UPSTREAMS[0]);
   return (
-    <div className="mx-auto max-w-[1280px] px-4 lg:px-8 py-7">
+    <div className="mx-auto max-w-[1280px] px-4 lg:px-8 py-8">
       <PageHeader
         eyebrow="MCP tools & servers · gateway-enforced"
         title="MCP gateway"
@@ -287,14 +287,14 @@ export function Gateway() {
         </div>
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <Card className="overflow-hidden min-w-0">
           <CardHead title="Wrapped servers" sub="Click one to see how its tools are governed." />
           <div className="border-t border-line">
             {UPSTREAMS.map((u) => {
               const on = !!connected[u.agentId!];
               return (
-                <button key={u.id} onClick={() => setSel(u)} className={cn("flex w-full items-center gap-3 px-5 py-3 border-b border-line last:border-0 text-left transition-colors", sel.id === u.id ? "bg-surface-2" : "hover:bg-surface-2")}>
+                <button key={u.id} onClick={() => setSel(u)} className={cn("flex w-full items-center gap-3 px-6 py-4 border-b border-line last:border-0 text-left transition-colors", sel.id === u.id ? "bg-surface-2" : "hover:bg-surface-2")}>
                   <Logo name={u.logo} size={30} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">

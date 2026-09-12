@@ -76,7 +76,7 @@ function TierEditor({ tiers, unit, onChange, readOnly }: { tiers: Tier[]; unit?:
 
 function RuleRow({ rule, onChange, onEdit, onDelete, readOnly, dirty }: { rule: Rule; onChange: (r: Rule) => void; onEdit: () => void; onDelete: () => void; readOnly?: boolean; dirty?: boolean }) {
   return (
-    <div className={cn("group px-5 py-4 border-b border-line last:border-0", dirty && "bg-surface-2/70")}>
+    <div className={cn("group px-6 py-5 border-b border-line last:border-0", dirty && "bg-surface-2/70")}>
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -897,7 +897,7 @@ function PublishModal({ open, onClose, version }: { open: boolean; onClose: () =
   }, [open, ids.length]);
   return (
     <Modal open={open} onClose={onClose} width={560}>
-      <div className="p-5">
+      <div className="p-6">
         <div className="flex items-center gap-2">
           <Rocket className="size-4 text-accent" />
           <div className="text-[15px] font-semibold">Contract v{version} is live</div>
@@ -950,7 +950,7 @@ function PacksModal({ open, onClose, have, onAdd }: { open: boolean; onClose: ()
   }, [open]);
   return (
     <Modal open={open} onClose={onClose} width={640}>
-      <div className="p-5">
+      <div className="p-6">
         <div className="text-[15px] font-semibold">Add policy packs</div>
         <p className="mt-1 text-[12.5px] text-fg-3">Each pack adds a few plain rules to your draft. Edit or delete any of them afterwards.</p>
         <div className="mt-4 grid gap-2 sm:grid-cols-2 max-h-[420px] overflow-y-auto scroll-thin">
@@ -1065,7 +1065,7 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
   const empty = !readOnly && rules.length === 0;
 
   return (
-    <div className="mx-auto max-w-[1320px] px-4 lg:px-8 py-7">
+    <div className="mx-auto max-w-[1320px] px-4 lg:px-8 py-8">
       <PageHeader
         eyebrow={readOnly ? "Managed by your admin" : "wrapbox.yaml"}
         title={readOnly ? "Rules for me" : "Intent contract"}
@@ -1179,8 +1179,8 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
           )}
         </Card>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-          <div className={cn("space-y-4 min-w-0", view === "yaml" && "hidden xl:block")}>
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+          <div className={cn("space-y-5 min-w-0", view === "yaml" && "hidden xl:block")}>
             <Card className="overflow-hidden">
               <CardHead title={`${shown.length} rules`} sub={readOnly ? "Coding-agent and org-wide rules that apply to you" : "Most restrictive matching rule wins · default ALLOW"} right={<span className="font-mono text-[11px] text-fg-3">default: ALLOW</span>} />
               <div className="border-t border-line">
@@ -1194,7 +1194,7 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
               </div>
             </Card>
           </div>
-          <div className={cn("space-y-4 min-w-0", view === "visual" && "hidden xl:block")}>
+          <div className={cn("space-y-5 min-w-0", view === "visual" && "hidden xl:block")}>
             {editingYaml && !readOnly ? (
               <YamlEditor
                 initial={toYaml(rules, version + 1, orgSlugOf(storeState().domain, storeState().company))}

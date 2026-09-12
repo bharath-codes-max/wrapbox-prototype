@@ -23,21 +23,21 @@ export function Approvals() {
   const done = list.filter((a) => a.status !== "pending");
 
   return (
-    <div className="mx-auto max-w-[1320px] px-4 lg:px-8 py-7">
+    <div className="mx-auto max-w-[1320px] px-4 lg:px-8 py-8">
       <PageHeader
         eyebrow={mine ? "Assigned to you as on-call SRE" : "Human step-up"}
         title={mine ? "My approvals" : "Approvals"}
         sub="Every request shows what the person asked for, exactly what will change, why policy stopped it, and how similar requests went. An approval is a passkey signature over the exact arguments — not a click."
       />
-      <div className="grid gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
+      <div className="grid gap-5 lg:grid-cols-[360px_minmax(0,1fr)]">
         <div className="space-y-4">
           <Card className="overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-line text-[12px] font-medium text-fg-3">Waiting · {pending.length}</div>
+            <div className="px-5 py-3 border-b border-line text-[12px] font-medium text-fg-3">Waiting · {pending.length}</div>
             {pending.map((a) => (
               <Row key={a.id} a={a} active={current?.id === a.id} onClick={() => setSel(a.id)} />
             ))}
             {!pending.length && (
-              <div className="px-4 py-6 text-[12.5px] text-fg-3">
+              <div className="px-5 py-8 text-[12.5px] text-fg-3">
                 All clear. REVIEW decisions land here and in Slack the moment an agent hits one.{" "}
                 <a href="#/playground" className="underline underline-offset-2 text-fg">
                   Try one in the playground
@@ -48,7 +48,7 @@ export function Approvals() {
           </Card>
           {done.length > 0 && (
             <Card className="overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-line text-[12px] font-medium text-fg-3">Resolved · {done.length}</div>
+              <div className="px-5 py-3 border-b border-line text-[12px] font-medium text-fg-3">Resolved · {done.length}</div>
               {done.map((a) => (
                 <Row key={a.id} a={a} active={current?.id === a.id} onClick={() => setSel(a.id)} />
               ))}
@@ -83,7 +83,7 @@ export function Approvals() {
 function Row({ a, active, onClick }: { a: Approval; active: boolean; onClick: () => void }) {
   const ag = agentById(a.agentId);
   return (
-    <button onClick={onClick} className={cn("flex w-full items-start gap-3 px-4 py-3 border-b border-line last:border-0 text-left transition-colors", active ? "bg-surface-2" : "hover:bg-surface-2")}>
+    <button onClick={onClick} className={cn("flex w-full items-start gap-3 px-5 py-4 border-b border-line last:border-0 text-left transition-colors", active ? "bg-surface-2" : "hover:bg-surface-2")}>
       <Logo name={ag.logo} bleed={ag.bleed} size={28} />
       <div className="min-w-0 flex-1">
         <div className="font-mono text-[11.5px] truncate">{a.title}</div>
@@ -164,8 +164,8 @@ function Detail({ a, mine }: { a: Approval; mine: boolean }) {
   const nextApprover = a.approvers.find((p) => !a.approvedBy.includes(p.id) && (!mine || p.id === EMPLOYEE.id));
 
   return (
-    <div className="space-y-4 min-w-0">
-      <Card className="p-5">
+    <div className="space-y-5 min-w-0">
+      <Card className="p-6">
         <div className="flex flex-wrap items-start gap-3">
           <Logo name={ag.logo} bleed={ag.bleed} size={40} rounded="rounded-xl" />
           <div className="min-w-0 flex-1">
@@ -183,8 +183,8 @@ function Detail({ a, mine }: { a: Approval; mine: boolean }) {
         </div>
       </Card>
 
-      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] xl:grid-cols-2">
-        <div className="space-y-4 min-w-0">
+      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] xl:grid-cols-2">
+        <div className="space-y-5 min-w-0">
           <Card className="p-5 space-y-4">
             <div>
               <div className="eyebrow mb-1.5">What {a.human.name.split(" ")[0]} asked for</div>
@@ -215,8 +215,8 @@ function Detail({ a, mine }: { a: Approval; mine: boolean }) {
               <Signals signals={g.signals} dense />
             </div>
           </Card>
-          <Card className="p-5">
-            <div className="grid gap-4 sm:grid-cols-[1fr_200px] items-center">
+          <Card className="p-6">
+            <div className="grid gap-5 sm:grid-cols-[1fr_200px] items-center">
               <div>
                 <div className="eyebrow mb-1.5">Similar requests · 90 days</div>
                 <div className="flex gap-4 text-[13px]">
@@ -246,8 +246,8 @@ function Detail({ a, mine }: { a: Approval; mine: boolean }) {
           </Card>
         </div>
 
-        <div className="space-y-4 min-w-0">
-          <Card className="p-5">
+        <div className="space-y-5 min-w-0">
+          <Card className="p-6">
             <div className="flex items-center justify-between">
               <div className="text-[13.5px] font-semibold">Approvers</div>
               <span className="text-[12px] text-fg-3">
@@ -259,7 +259,7 @@ function Detail({ a, mine }: { a: Approval; mine: boolean }) {
                 const done = a.approvedBy.includes(p.id);
                 const canAct = a.status === "pending" && !done && (!mine || p.id === EMPLOYEE.id);
                 return (
-                  <div key={p.id} className="flex items-center gap-3 rounded-xl border border-line px-3.5 py-2.5">
+                  <div key={p.id} className="flex items-center gap-3 rounded-xl border border-line px-4 py-3">
                     <Avatar p={p} size={30} />
                     <div className="min-w-0 flex-1">
                       <div className="text-[13px] font-medium">
@@ -334,7 +334,7 @@ function Detail({ a, mine }: { a: Approval; mine: boolean }) {
           {a.permit && (
             <>
               <PermitTicket permit={a.permit} status={checks?.every((c) => c.ok) ? "used" : "authorized"} />
-              <Card className="p-5">
+              <Card className="p-6">
                 <div className="text-[13.5px] font-semibold">Executor verification</div>
                 <p className="text-[12px] text-fg-3 mt-0.5 mb-3">What the {g.effect.split(/[ .]/)[0]} service checks immediately before the effect.</p>
                 {checks ? <Checks checks={checks} /> : <div className="text-[12.5px] text-fg-3">Verifying…</div>}

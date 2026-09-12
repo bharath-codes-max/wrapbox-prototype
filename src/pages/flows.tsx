@@ -13,7 +13,7 @@ export function FlowsPage({ id, query }: { id?: string; query: URLSearchParams }
   const agent: Agent = AGENTS.find((a) => a.id === query.get("agent") && pool.includes(a)) ?? pool.find((a) => connected[a.id]) ?? pool[0];
 
   return (
-    <div className="mx-auto max-w-[1280px] px-4 lg:px-8 py-7">
+    <div className="mx-auto max-w-[1280px] px-4 lg:px-8 py-8">
       <PageHeader
         eyebrow="End-to-end, per platform"
         title="Happy flows"

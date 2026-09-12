@@ -114,7 +114,7 @@ export function Evidence() {
   );
   const agentsInLog = useMemo(() => Array.from(new Set(all.map((e) => e.agentId))), [all]);
   return (
-    <div className="mx-auto max-w-[1240px] px-4 lg:px-8 py-7">
+    <div className="mx-auto max-w-[1240px] px-4 lg:px-8 py-8">
       <PageHeader
         eyebrow={mine ? "Your actions only" : "Audit & evidence"}
         title={mine ? "My activity" : "Evidence"}
@@ -140,7 +140,7 @@ export function Evidence() {
         }
       />
       <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-line">
+        <div className="flex flex-wrap items-center gap-2 px-5 py-4 border-b border-line">
           <Segmented
             size="sm"
             value={d}
@@ -172,9 +172,9 @@ export function Evidence() {
               <tr className="text-[11.5px] text-fg-3 border-b border-line">
                 <th className="font-medium px-4 py-2 w-[80px]">Time</th>
                 <th className="font-medium px-2 py-2 w-[90px]">Decision</th>
-                <th className="font-medium px-2 py-2">Agent · action</th>
-                <th className="font-medium px-2 py-2">{mine ? "Why" : "Rule"}</th>
-                {!mine && <th className="font-medium px-2 py-2">Human</th>}
+                <th className="font-medium px-3 py-3">Agent · action</th>
+                <th className="font-medium px-3 py-3">{mine ? "Why" : "Rule"}</th>
+                {!mine && <th className="font-medium px-3 py-3">Human</th>}
                 <th className="font-medium px-4 py-2 text-right">Latency</th>
               </tr>
             </thead>
@@ -184,9 +184,9 @@ export function Evidence() {
                 const p = personById(e.human);
                 return (
                   <tr key={e.id} onClick={() => setOpen(e)} className="border-b border-line last:border-0 hover:bg-surface-2 cursor-pointer">
-                    <td className="px-4 py-2.5 font-mono text-[11.5px] text-fg-3 tnum">{clock(e.ts)}</td>
-                    <td className="px-2 py-2.5"><DecisionPill d={e.decision} size="sm" /></td>
-                    <td className="px-2 py-2.5">
+                    <td className="px-5 py-3.5 font-mono text-[11.5px] text-fg-3 tnum">{clock(e.ts)}</td>
+                    <td className="px-3 py-3.5"><DecisionPill d={e.decision} size="sm" /></td>
+                    <td className="px-3 py-3.5">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <Logo name={a.logo} bleed={a.bleed} size={22} rounded="rounded-md" />
                         <div className="min-w-0">
@@ -195,9 +195,9 @@ export function Evidence() {
                         </div>
                       </div>
                     </td>
-                    <td className={cn("px-2 py-2.5 text-[12px]", mine ? "text-fg-2" : "font-mono text-fg-3")}>{mine ? e.reason : e.rule}</td>
-                    {!mine && <td className="px-2 py-2.5">{p && <span className="flex items-center gap-2 text-[12.5px]"><Avatar p={p} size={20} />{p.name}</span>}</td>}
-                    <td className="px-4 py-2.5 text-right font-mono text-[11.5px] text-fg-3 tnum">{e.latency} ms</td>
+                    <td className={cn("px-3 py-3.5 text-[12px]", mine ? "text-fg-2" : "font-mono text-fg-3")}>{mine ? e.reason : e.rule}</td>
+                    {!mine && <td className="px-3 py-3.5">{p && <span className="flex items-center gap-2 text-[12.5px]"><Avatar p={p} size={20} />{p.name}</span>}</td>}
+                    <td className="px-5 py-3.5 text-right font-mono text-[11.5px] text-fg-3 tnum">{e.latency} ms</td>
                   </tr>
                 );
               })}

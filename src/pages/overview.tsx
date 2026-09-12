@@ -145,7 +145,7 @@ export function Overview() {
   ];
 
   return (
-    <div className="mx-auto max-w-[1320px] px-4 lg:px-8 py-7">
+    <div className="mx-auto max-w-[1320px] px-4 lg:px-8 py-8">
       <PageHeader
         eyebrow={`${greeting()} · ${fresh ? "fresh workspace" : "Wrapbox production control plane"}`}
         title={total ? (blocked === 0 && wouldStop > 0 ? `${total.toLocaleString("en-US")} agent actions checked. ${wouldStop} would be stopped once you enforce.` : `${total.toLocaleString("en-US")} agent actions checked. ${blocked.toLocaleString("en-US")} stopped before they ran.`) : nConnected ? "Agents connected. Waiting for their first action." : "Nothing to govern yet — connect your first agent."}
@@ -164,7 +164,7 @@ export function Overview() {
 
       <Card className="grid grid-cols-2 md:grid-cols-5 divide-x divide-y md:divide-y-0 divide-line overflow-hidden mb-4">
         {kpis.map((k) => (
-          <button key={k.label} onClick={() => k.href && go(k.href)} className={cn("text-left px-5 py-4", k.href && "hover:bg-surface-2 transition-colors")}>
+          <button key={k.label} onClick={() => k.href && go(k.href)} className={cn("text-left px-6 py-5", k.href && "hover:bg-surface-2 transition-colors")}>
             <div className="text-[12px] text-fg-3">{k.label}</div>
             <div className={cn("mt-1 text-[24px] font-semibold tracking-tight tnum", k.tone)}>{k.value}</div>
             <div className="text-[11.5px] text-fg-3 mt-0.5 truncate">{k.sub}</div>
@@ -172,7 +172,7 @@ export function Overview() {
         ))}
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <Card className="overflow-hidden min-w-0">
           <CardHead
             title={
@@ -204,7 +204,7 @@ export function Overview() {
             {shown.length ? (
               <DecisionStream events={shown} limit={11} onPick={setOpen} />
             ) : (
-              <div className="px-5 py-10 text-center">
+              <div className="px-6 py-12 text-center">
                 <div className="text-[13.5px] font-semibold">No decisions yet</div>
                 <p className="mt-1 text-[12.5px] text-fg-3">{nConnected ? "Send an action from the playground or run a happy flow — it appears here instantly." : "Connect an agent, then send it an action."}</p>
                 <div className="mt-4 flex justify-center gap-2">
@@ -222,9 +222,9 @@ export function Overview() {
           </div>
         </Card>
 
-        <div className="space-y-4 min-w-0">
+        <div className="space-y-5 min-w-0">
           {fresh && (
-            <Card className="p-5">
+            <Card className="p-6">
               <div className="flex items-start gap-3">
                 <span className="grid size-9 place-items-center rounded-xl bg-surface-2 text-fg-2">
                   <Zap className="size-4.5" />
@@ -275,7 +275,7 @@ export function Overview() {
               {pending.slice(0, 4).map((a) => {
                 const ag = agentById(a.agentId);
                 return (
-                  <a key={a.id} href="#/approvals" className="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0 hover:bg-surface-2">
+                  <a key={a.id} href="#/approvals" className="flex items-center gap-3 px-6 py-3.5 border-b border-line last:border-0 hover:bg-surface-2">
                     <Logo name={ag.logo} bleed={ag.bleed} size={24} rounded="rounded-md" />
                     <div className="min-w-0 flex-1">
                       <div className="font-mono text-[11.5px] truncate">{a.title}</div>
@@ -295,7 +295,7 @@ export function Overview() {
             </div>
           </Card>
 
-          <Card className="p-5">
+          <Card className="p-6">
             <div className="flex items-baseline justify-between">
               <div className="text-[13.5px] font-semibold">Assurance</div>
               <div className="text-[12px] text-fg-3">
@@ -319,7 +319,7 @@ export function Overview() {
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+      <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <Card className="p-5 min-w-0">
           <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
             <div>
@@ -340,8 +340,8 @@ export function Overview() {
             {!points.length && <div className="absolute inset-0 grid place-items-center text-[12.5px] text-fg-3">Decisions appear here as your agents act.</div>}
           </div>
         </Card>
-        <div className="space-y-4 min-w-0">
-          <Card className="p-5">
+        <div className="space-y-5 min-w-0">
+          <Card className="p-6">
             <div className="mb-2">
               <div className="text-[13.5px] font-semibold">Decisions · last 24 hours</div>
               <div className="text-[12px] text-fg-3">Per hour, stacked by outcome</div>
@@ -371,7 +371,7 @@ export function Overview() {
             const list = agentsIn(c.id);
             const on = list.filter((a) => connected[a.id]).length;
             return (
-              <a key={c.id} href={`#/agents?c=${c.id}`} className="flex items-center gap-3 px-5 py-3.5 border-b border-line sm:odd:border-r xl:border-r xl:[&:nth-child(4n)]:border-r-0 hover:bg-surface-2">
+              <a key={c.id} href={`#/agents?c=${c.id}`} className="flex items-center gap-3 px-6 py-4 border-b border-line sm:odd:border-r xl:border-r xl:[&:nth-child(4n)]:border-r-0 hover:bg-surface-2">
                 <div className="min-w-0 flex-1">
                   <div className="text-[12.5px] font-medium truncate">{c.name}</div>
                   <div className="text-[11.5px] text-fg-3">
