@@ -254,7 +254,7 @@ export const AGENTS: Agent[] = [
     lang: "json",
     install: `npx @wrapbox/cli install copilot --org ${ORG}`,
     hookEvents: ["preToolUse", "postToolUse"],
-    docs: "docs.github.com/copilot/customizing-copilot/hooks",
+    docs: "docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/use-hooks",
     snippet: `{
   "version": 1,
   "hooks": {

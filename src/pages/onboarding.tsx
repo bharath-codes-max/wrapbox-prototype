@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Building2, Check, Wand2, Trash2, ChevronDown, ChevronRight, CircleCheck, FileCode2, KeyRound, Loader2, Lock, Mail, Play, ShieldCheck, Terminal as TerminalIcon, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AGENTS, CATEGORIES, METHODS, agentById, type CategoryId, type Decision } from "../data/agents";
+import { AGENTS, CATEGORIES, METHODS, agentById, type Adapter, type Agent, type CategoryId, type Decision, type Surface } from "../data/agents";
 import { PACKS, orgSlug, rulesForPacks, toYaml, type Rule } from "../data/contract";
 import { PEOPLE } from "../data/people";
 import { SCENARIOS, actOf, nativeFor, type Gate } from "../data/scenarios";
@@ -144,55 +144,108 @@ const BLOCKS: { id: string; cats: CategoryId[]; title: string; agents: string[];
   { id: "a2a", cats: ["a2a"], title: "Multi-agent delegation", agents: ["openai-handoffs"], what: "Handoffs carry an attenuated token; children can't exceed parents." },
 ];
 
-/* Verifying a block replays one representative action for that adapter.
-   Installing the hook on the vendor's platform is SIMULATED; the decision is NOT —
-   it comes from evaluateNow(), the same evaluator the runtime and step 7 use. */
-const PROBES: Record<string, { gate: Gate; agentId: string }> = {
-  coding: { gate: SCENARIOS.ide.gates[0], agentId: "claude-code" },
-  cloud: { gate: SCENARIOS.cloud.gates[1], agentId: "copilot-cloud" },
-  sdk: { gate: SCENARIOS.custom.gates[0], agentId: "langgraph" },
-  mcp: { gate: SCENARIOS["mcp-stripe"].gates[1], agentId: "stripe-mcp" },
-  saas: { gate: SCENARIOS.saas.gates[0], agentId: "agentforce" },
-  browser: { gate: SCENARIOS.browser.gates[0], agentId: "browser-use" },
-  a2a: { gate: SCENARIOS.a2a.gates[0], agentId: "openai-handoffs" },
+/* ---- Step 4 integration metadata ----
+   Each label is grounded in the vendor's real control point (verified against current docs).
+   Installing on the vendor is SIMULATED; the verified decision is REAL — it comes from
+   evaluateNow(), the same evaluator the runtime and Step 7 use. */
+const regById = (id: string): Agent | undefined => AGENTS.find((a) => a.id === id);
+
+const CONTROL: Record<Adapter, string> = {
+  claude: "Managed hooks + settings",
+  cursor: "Cursor hooks (failClosed)",
+  codex: "Codex hooks · ~/.codex (shared harness)",
+  gemini: "Gemini CLI hooks (BeforeTool)",
+  copilot: "Copilot hooks · .github/hooks",
+  runtime: "Endpoint runtime + MCP gateway",
+  mcp: "MCP gateway (endpoint swap)",
+  "sdk-py": "Wrapbox SDK guard + service permit",
+  "sdk-ts": "Wrapbox SDK guard + service permit",
+  adk: "ADK before_tool_callback",
+  cloud: "Task-scoped MCP gateway",
+  connector: "Authorized platform connector",
+  browser: "Controlled executor",
+  a2a: "Delegation gateway (attenuated token)",
 };
+const RUNS_ON: Record<Surface, string> = {
+  terminal: "Developer terminal",
+  ide: "Developer IDE",
+  github: "Hosted runner",
+  graph: "Your service",
+  chat: "MCP clients",
+  crm: "SaaS platform",
+  browser: "Browser runtime",
+  delegation: "Agent runtime",
+};
+const DEPLOY: Record<Adapter, string> = {
+  claude: "MDM push / bootstrap command",
+  cursor: "MDM push / bootstrap command",
+  codex: "MDM push / bootstrap command",
+  gemini: "MDM push / bootstrap command",
+  copilot: "MDM push / bootstrap command",
+  runtime: "MDM push / bootstrap command",
+  mcp: "Point client at the gateway URL",
+  "sdk-py": "SDK dependency + service permit",
+  "sdk-ts": "SDK dependency + service permit",
+  adk: "SDK dependency + service permit",
+  cloud: "Repo MCP config + task token",
+  connector: "Platform connector import",
+  browser: "Wrap the executor",
+  a2a: "Delegation SDK registration",
+};
+const DRANK: Record<Decision, number> = { ALLOW: 1, CONSTRAIN: 2, REVIEW: 3, BLOCK: 4 };
+/** The most illustrative action for an agent: the strongest declared gate of its scenario. */
+function probeGate(a: Agent): Gate {
+  const scen = SCENARIOS[a.scenario ?? a.category] ?? SCENARIOS[a.category];
+  return [...scen.gates].sort((x, y) => DRANK[y.decision] - DRANK[x.decision])[0];
+}
 
 /* What a real read-only GitHub App sees: the small config files each agent leaves behind.
    Scanning reads only these paths — never source code. */
+// Each hit carries the canonical registry `id`, so Step 2 discovery and Step 4 connection
+// reference the SAME integration identity — no separate agent list to drift out of sync.
 interface Hit {
   path: string;
+  id: string;
   agent: string;
   logo: string;
   cat: CategoryId;
 }
 const HIT_REPOS: { repo: string; hits: Hit[] }[] = [
-  { repo: "web", hits: [{ path: ".cursor/hooks.json", agent: "Cursor", logo: "cursor", cat: "ide" }, { path: ".claude/settings.json", agent: "Claude Code", logo: "claudecode", cat: "cli" }] },
-  { repo: "payments-api", hits: [{ path: ".claude/settings.json", agent: "Claude Code", logo: "claudecode", cat: "cli" }, { path: "mcp.json", agent: "Stripe MCP", logo: "stripe", cat: "mcp" }] },
-  { repo: "billing", hits: [{ path: ".cursor/hooks.json", agent: "Cursor", logo: "cursor", cat: "ide" }, { path: "mcp.json", agent: "Postgres MCP", logo: "postgresql", cat: "mcp" }] },
-  { repo: "claims-agent", hits: [{ path: "langgraph.json", agent: "LangGraph", logo: "langgraph", cat: "custom" }, { path: ".claude/settings.json", agent: "Claude Code", logo: "claudecode", cat: "cli" }] },
-  { repo: "infra", hits: [{ path: ".codex/config.toml", agent: "Codex CLI", logo: "codex", cat: "cli" }] },
-  { repo: "data-platform", hits: [{ path: "mcp.json", agent: "Postgres MCP", logo: "postgresql", cat: "mcp" }, { path: ".gemini/settings.json", agent: "Gemini CLI", logo: "geminicli", cat: "cli" }] },
-  { repo: "ops-agents", hits: [{ path: "langgraph.json", agent: "LangGraph", logo: "langgraph", cat: "custom" }] },
-  { repo: "mobile", hits: [{ path: ".github/copilot-instructions.md", agent: "GitHub Copilot", logo: "githubcopilot", cat: "ide" }] },
-  { repo: "checkout", hits: [{ path: ".cursor/hooks.json", agent: "Cursor", logo: "cursor", cat: "ide" }, { path: ".github/workflows/copilot-agent.yml", agent: "Copilot cloud agent", logo: "githubcopilot", cat: "cloud" }] },
-  { repo: "growth-site", hits: [{ path: ".windsurf/rules.md", agent: "Windsurf", logo: "windsurf", cat: "ide" }] },
-  { repo: "support-tools", hits: [{ path: "requirements.txt", agent: "Browser Use", logo: "browseruse", cat: "browser" }] },
-  { repo: "ledger", hits: [{ path: ".claude/settings.json", agent: "Claude Code", logo: "claudecode", cat: "cli" }, { path: ".codex/config.toml", agent: "Codex CLI", logo: "codex", cat: "cli" }] },
-  { repo: "risk-engine", hits: [{ path: "mcp.json", agent: "GitHub MCP", logo: "mcp", cat: "mcp" }] },
-  { repo: "partner-portal", hits: [{ path: ".cursor/hooks.json", agent: "Cursor", logo: "cursor", cat: "ide" }] },
+  { repo: "web", hits: [{ path: ".cursor/hooks.json", id: "cursor", agent: "Cursor", logo: "cursor", cat: "ide" }, { path: ".claude/settings.json", id: "claude-code", agent: "Claude Code", logo: "claudecode", cat: "cli" }] },
+  { repo: "payments-api", hits: [{ path: ".claude/settings.json", id: "claude-code", agent: "Claude Code", logo: "claudecode", cat: "cli" }, { path: "mcp.json", id: "stripe-mcp", agent: "Stripe MCP", logo: "stripe", cat: "mcp" }] },
+  { repo: "billing", hits: [{ path: ".cursor/hooks.json", id: "cursor", agent: "Cursor", logo: "cursor", cat: "ide" }, { path: "mcp.json", id: "postgres-mcp", agent: "Postgres MCP", logo: "postgresql", cat: "mcp" }] },
+  { repo: "claims-agent", hits: [{ path: "langgraph.json", id: "langgraph", agent: "LangGraph", logo: "langgraph", cat: "custom" }, { path: ".claude/settings.json", id: "claude-code", agent: "Claude Code", logo: "claudecode", cat: "cli" }] },
+  { repo: "infra", hits: [{ path: ".codex/config.toml", id: "codex-cli", agent: "Codex CLI", logo: "codex", cat: "cli" }] },
+  { repo: "data-platform", hits: [{ path: "mcp.json", id: "postgres-mcp", agent: "Postgres MCP", logo: "postgresql", cat: "mcp" }, { path: ".gemini/settings.json", id: "gemini-cli", agent: "Gemini CLI", logo: "geminicli", cat: "cli" }] },
+  { repo: "ops-agents", hits: [{ path: "langgraph.json", id: "langgraph", agent: "LangGraph", logo: "langgraph", cat: "custom" }] },
+  { repo: "mobile", hits: [{ path: ".github/copilot-instructions.md", id: "copilot-ide", agent: "GitHub Copilot", logo: "githubcopilot", cat: "ide" }] },
+  { repo: "checkout", hits: [{ path: ".cursor/hooks.json", id: "cursor", agent: "Cursor", logo: "cursor", cat: "ide" }, { path: ".github/workflows/copilot-agent.yml", id: "copilot-cloud", agent: "Copilot cloud agent", logo: "githubcopilot", cat: "cloud" }] },
+  { repo: "growth-site", hits: [{ path: ".windsurf/rules.md", id: "windsurf", agent: "Windsurf", logo: "windsurf", cat: "ide" }] },
+  { repo: "support-tools", hits: [{ path: "requirements.txt", id: "browser-use", agent: "Browser Use", logo: "browseruse", cat: "browser" }] },
+  { repo: "ledger", hits: [{ path: ".claude/settings.json", id: "claude-code", agent: "Claude Code", logo: "claudecode", cat: "cli" }, { path: ".codex/config.toml", id: "codex-cli", agent: "Codex CLI", logo: "codex", cat: "cli" }] },
+  { repo: "risk-engine", hits: [{ path: "mcp.json", id: "github-mcp", agent: "GitHub MCP", logo: "mcp", cat: "mcp" }] },
+  { repo: "partner-portal", hits: [{ path: ".cursor/hooks.json", id: "cursor", agent: "Cursor", logo: "cursor", cat: "ide" }] },
 ];
 const CLEAN_REPOS = ["design-system", "docs-site", "brand", "eslint-config", "terraform-modules", "k8s-manifests", "load-tests", "sdk-js", "sdk-python", "status-page", "email-templates", "analytics-dbt", "feature-flags", "legacy-php", "cron-jobs", "image-proxy", "pdf-service", "search-index", "notification-svc", "webhooks", "admin-scripts", "onboarding-emails", "pricing-page", "helm-charts", "grafana-dashboards", "runbooks", "sandbox", "archive-2023"];
 const TOTAL_REPOS = HIT_REPOS.length + CLEAN_REPOS.length;
 
-/** Roll the per-repo hits up into one row per agent. */
-function rollUp() {
-  const by = new Map<string, { agent: string; logo: string; cat: CategoryId; paths: Set<string>; repos: string[] }>();
+/** Roll the per-repo hits up into one row per discovered integration, keyed by registry id. */
+interface Discovered {
+  id: string;
+  agent: string;
+  logo: string;
+  cat: CategoryId;
+  paths: Set<string>;
+  repos: string[];
+}
+function rollUp(): Discovered[] {
+  const by = new Map<string, Discovered>();
   for (const r of HIT_REPOS)
     for (const h of r.hits) {
-      const e = by.get(h.agent) ?? { agent: h.agent, logo: h.logo, cat: h.cat, paths: new Set<string>(), repos: [] };
+      const e = by.get(h.id) ?? { id: h.id, agent: h.agent, logo: h.logo, cat: h.cat, paths: new Set<string>(), repos: [] };
       e.paths.add(h.path);
       if (!e.repos.includes(r.repo)) e.repos.push(r.repo);
-      by.set(h.agent, e);
+      by.set(h.id, e);
     }
   return [...by.values()].sort((a, b) => b.repos.length - a.repos.length);
 }
@@ -472,13 +525,10 @@ export function AdminSetup() {
   const [ruleDrawer, setRuleDrawer] = useState(false);
   const [autoMax, setAutoMax] = useState(500);
   const [reviewMax, setReviewMax] = useState(5000);
-  // Step 4
-  const [linked, setLinked] = useState<Record<string, "busy" | "done">>({});
-  // What the real evaluator actually returned for each block's synthetic action.
-  const [probe, setProbe] = useState<Record<string, { v: Verdict; ms: number; display: string; effect: string; agentId: string }>>({});
+  // Step 4 — connection state lives in the store (persists on reload); busy/probeMs are per-session.
+  const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [probeMs, setProbeMs] = useState<Record<string, number>>({});
   const [openBlock, setOpenBlock] = useState<string>("coding");
-  const [codingMode, setCodingMode] = useState<"mdm" | "cmd">("mdm");
-  const [sdkKey, setSdkKey] = useState(false);
   // Step 5
   const [channels, setChannels] = useState({ slack: true, teams: false, email: true });
   const [passkeyReq, setPasskeyReq] = useState(true);
@@ -509,8 +559,13 @@ export function AdminSetup() {
           ? `${customCount} ${customCount === 1 ? "rule" : "rules"} yours`
           : "Nothing in the contract yet";
   const ghOrg = (domain || "wrapbox").split(".")[0].replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+  const connectedMap = useStore((s) => s.connected);
   const blocks = BLOCKS.filter((b) => b.cats.some((c) => cats.includes(c)));
-  const linkedCount = blocks.filter((b) => linked[b.id] === "done").length;
+  // Step 4 is driven by discovery: each block lists the agents Step 2 actually found.
+  const blockAgents = (b: (typeof BLOCKS)[number]) => DISCOVERED.filter((d) => b.cats.includes(d.cat) && cats.includes(d.cat));
+  const supportedIn = (b: (typeof BLOCKS)[number]) => blockAgents(b).filter((d) => regById(d.id));
+  const agentTargets = blocks.flatMap(supportedIn);
+  const connectedCount = agentTargets.filter((d) => !!connectedMap[d.id]).length;
 
   async function provision() {
     setProv(1);
@@ -547,29 +602,25 @@ export function AdminSetup() {
     setCats([...new Set(DISCOVERED.map((d) => d.cat))]);
   }
 
-  async function link(id: string) {
-    setLinked((l) => ({ ...l, [id]: "busy" }));
-    const b = BLOCKS.find((x) => x.id === id)!;
-    // SIMULATED: pushing the hook file through MDM / issuing the gateway token.
-    await sleep(700);
-    for (const a of b.agents) {
-      const m = METHODS[agentById(a).category].find((x) => x.recommended) ?? METHODS[agentById(a).category][0];
-      connectAgent(a, m.id, m.assurance);
-    }
-    // REAL: replay one representative action through the canonical evaluator and
-    // report whatever it decides — including a plain ALLOW when no rule matches.
-    const p = PROBES[id];
-    if (p) {
-      const act = actOf(p.gate);
-      const t0 = performance.now();
-      const v = evaluateNow(act, p.agentId);
-      const ms = performance.now() - t0;
-      setProbe((x) => ({ ...x, [id]: { v, ms, display: p.gate.display, effect: act.effect, agentId: p.agentId } }));
-    }
-    setLinked((l) => ({ ...l, [id]: "done" }));
-    toast(`${b.title} connected`, b.agents.map((a) => agentById(a).name).join(" · "), "allow");
-    const nextOpen = blocks.find((x) => x.id !== id && linked[x.id] !== "done");
-    if (nextOpen) setOpenBlock(nextOpen.id);
+  // Verify one discovered agent: SIMULATE attaching the vendor adapter, then run its
+  // representative action through the REAL evaluator and persist the connection.
+  async function verifyAgent(id: string) {
+    const a = regById(id);
+    if (!a) return;
+    setBusy((b) => ({ ...b, [id]: true }));
+    await sleep(600); // SIMULATED: installing / attaching the vendor adapter
+    const act = actOf(probeGate(a));
+    const t0 = performance.now();
+    const v = evaluateNow(act, id); // REAL: same evaluator as runtime + Step 7
+    const ms = performance.now() - t0;
+    const m = METHODS[a.category].find((x) => x.recommended) ?? METHODS[a.category][0];
+    connectAgent(id, m.id, m.assurance); // persists in the store
+    setProbeMs((p) => ({ ...p, [id]: ms }));
+    setBusy((b) => ({ ...b, [id]: false }));
+    toast(`${a.name} verified`, `${v.decision} · ${v.rule}`, v.decision === "ALLOW" ? "allow" : v.decision === "BLOCK" ? "block" : "review");
+  }
+  async function verifyAll(b: (typeof BLOCKS)[number]) {
+    for (const d of supportedIn(b)) await verifyAgent(d.id);
   }
 
   const TESTS: { key: string; label: string; agentId: string; gate: Gate }[] = [
@@ -1040,68 +1091,60 @@ export function AdminSetup() {
           />
           <div className="mb-4 flex items-center gap-3">
             <div className="h-1.5 flex-1 rounded-full bg-surface-3 overflow-hidden">
-              <motion.div className="h-full bg-allow" animate={{ width: `${(linkedCount / Math.max(1, blocks.length)) * 100}%` }} />
+              <motion.div className="h-full bg-allow" animate={{ width: `${(connectedCount / Math.max(1, agentTargets.length)) * 100}%` }} />
             </div>
             <span className="text-[12px] text-fg-2 tnum">
-              {linkedCount} of {blocks.length} connected
+              {connectedCount} of {agentTargets.length} agents connected
             </span>
           </div>
           <div className="space-y-2">
             {blocks.map((b) => {
+              const found = blockAgents(b);
+              const supported = found.filter((d) => regById(d.id));
+              const nConn = supported.filter((d) => !!connectedMap[d.id]).length;
+              const status =
+                nConn === 0
+                  ? { label: "Not connected", tone: "muted" as const }
+                  : nConn === supported.length
+                    ? { label: "Connected", tone: "allow" as const }
+                    : { label: `Partially connected · ${nConn} of ${supported.length}`, tone: "review" as const };
               const open = openBlock === b.id;
-              const st = linked[b.id];
-              const pr = probe[b.id];
+              const blockBusy = found.some((d) => busy[d.id]);
               return (
-                <div key={b.id} className={cn("rounded-xl border", st === "done" ? "border-allow/40" : "border-line")}>
+                <div key={b.id} className={cn("rounded-xl border", nConn > 0 && nConn === supported.length ? "border-allow/40" : "border-line")}>
                   <button onClick={() => setOpenBlock(open ? "" : b.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
                     <div className="flex -space-x-1.5">
-                      {b.agents.slice(0, 4).map((a) => (
-                        <Logo key={a} name={agentById(a).logo} bleed={agentById(a).bleed} size={24} rounded="rounded-full" className="ring-2 ring-surface" />
+                      {found.slice(0, 5).map((d) => (
+                        <Logo key={d.id} name={d.logo} bleed={regById(d.id)?.bleed} size={24} rounded="rounded-full" className="ring-2 ring-surface" />
                       ))}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-[13.5px] font-semibold">{b.title}</div>
-                      <div className="text-[12px] text-fg-3 truncate">{b.what}</div>
+                      <div className="text-[12px] text-fg-3 truncate">
+                        {found.length} discovered · {supported.length} connectable
+                      </div>
                     </div>
-                    {st === "done" ? <Chip tone="allow"><Check className="size-3" /> Connected</Chip> : <Chip>Not connected</Chip>}
+                    <Chip tone={status.tone}>{status.tone === "allow" ? (<><Check className="size-3" /> {status.label}</>) : status.label}</Chip>
                     <ChevronDown className={cn("size-4 text-fg-3 transition-transform", open && "rotate-180")} />
                   </button>
                   {open && (
                     <div className="border-t border-line px-4 py-4 space-y-3">
-                      <BlockBody id={b.id} codingMode={codingMode} setCodingMode={setCodingMode} sdkKey={sdkKey} setSdkKey={setSdkKey} />
-                      <div className="flex flex-wrap items-center gap-3">
-                        <Button variant={st === "done" ? "secondary" : "primary"} onClick={() => link(b.id)} disabled={st === "busy"}>
-                          {st === "busy" ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
-                          {st === "busy" ? "Installing adapter…" : st === "done" ? "Run the check again" : "Verify connection"}
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="min-w-[240px] flex-1 text-[12px] text-fg-3">Discovered from your environment. One bootstrap detects each agent and configures its native integration — installing on the vendor is simulated; each verified decision is real.</p>
+                        <Button size="sm" onClick={() => verifyAll(b)} disabled={blockBusy || !supported.length}>
+                          {blockBusy ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />} Verify all
                         </Button>
-                        <span className="min-w-[240px] flex-1 text-[12px] text-fg-3">Installing on the vendor is simulated. The action below is evaluated by the real engine against your published contract.</span>
                       </div>
-                      {pr && (
-                        <div className="rounded-xl border border-line bg-surface-2 p-3.5">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Chip>adapter simulated</Chip>
-                            <Chip tone="allow">real policy decision</Chip>
-                            <span className="ml-auto font-mono text-[11px] text-fg-3">evaluated in {pr.ms.toFixed(2)} ms</span>
-                          </div>
-                          <div className="mt-2.5 font-mono text-[11.5px] text-fg-3">
-                            {agentById(pr.agentId).name} · {pr.effect}
-                          </div>
-                          <div className="mt-0.5 text-[12.5px]">{pr.display}</div>
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <DecisionPill d={pr.v.decision} size="sm" />
-                            {pr.v.observed && <span className="text-[11.5px] text-fg-3">observe mode — would {pr.v.observed}</span>}
-                            <span className="font-mono text-[11.5px] text-fg-3">rule {pr.v.rule}</span>
-                          </div>
-                          <p className="mt-1.5 text-[12px] text-fg-2">{pr.v.reason}</p>
-                        </div>
-                      )}
+                      {found.map((d) => (
+                        <IntegrationRow key={d.id} d={d} connected={!!connectedMap[d.id]} busy={!!busy[d.id]} ms={probeMs[d.id]} onVerify={() => verifyAgent(d.id)} />
+                      ))}
                     </div>
                   )}
                 </div>
               );
             })}
           </div>
-          <Footer onBack={back} onNext={next} hint={linkedCount < blocks.length ? "You can connect the rest later from Agents" : "Everything selected is connected"} />
+          <Footer onBack={back} onNext={next} hint={connectedCount < agentTargets.length ? "You can connect the rest later from Agents" : "Every discovered agent is connected"} />
         </Card>
       )}
 
@@ -1337,7 +1380,7 @@ export function AdminSetup() {
                   [true, `Workspace “${company}” · ${idp ?? "SSO"} · ${region.toUpperCase()}`],
                   [true, `${cats.length} agent platforms selected`],
                   [true, `Contract · ${rules.length} rules · ${mode === "observe" ? "observe 7 days, then enforce" : "enforcing"}`],
-                  [linkedCount > 0, `${linkedCount} of ${blocks.length} integrations verified`],
+                  [connectedCount > 0, `${connectedCount} of ${agentTargets.length} integrations verified`],
                   [true, `Approvals via ${Object.entries(channels).filter(([, v]) => v).map(([k]) => k).join(", ")} · passkey ${passkeyReq ? "required" : "optional"}`],
                   [invited, invited ? `${getState().members.length} people in the directory · laptops rolling out` : "Team not invited yet"],
                 ] as const
@@ -1356,99 +1399,77 @@ export function AdminSetup() {
   );
 }
 
-function BlockBody({ id, codingMode, setCodingMode, sdkKey, setSdkKey }: { id: string; codingMode: "mdm" | "cmd"; setCodingMode: (v: "mdm" | "cmd") => void; sdkKey: boolean; setSdkKey: (v: boolean) => void }) {
-  if (id === "coding")
-    return (
-      <div className="space-y-3">
-        <Segmented
-          size="sm"
-          value={codingMode}
-          onChange={setCodingMode}
-          options={[
-            { value: "mdm", label: "Push with MDM (recommended)" },
-            { value: "cmd", label: "Share a command" },
-          ]}
-        />
-        {codingMode === "mdm" ? (
-          <CodeBlock
-            file="/Library/Application Support/ClaudeCode/managed-settings.json"
-            note="users can't override managed settings"
-            lang="json"
-            code={AGENTS.find((a) => a.id === "claude-code")!.snippet}
-          />
-        ) : (
-          <InlineCmd cmd="npx @wrapbox/cli install --all --org wrapbox" />
-        )}
-        <p className="text-[12px] text-fg-3">The installer also writes .cursor/hooks.json (failClosed), ~/.codex/hooks.json and .github/hooks/wrapbox.json, and turns on the endpoint runtime as a backstop.</p>
-      </div>
-    );
-  if (id === "cloud") {
-    const a = AGENTS.find((x) => x.id === "copilot-cloud")!;
-    return <CodeBlock file={a.file} note={a.fileNote} lang="json" code={a.snippet} />;
-  }
-  if (id === "sdk")
-    return (
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <Button size="sm" onClick={() => setSdkKey(true)} disabled={sdkKey}>
-            <KeyRound className="size-3.5" /> {sdkKey ? "Key created" : "Create SDK key for claims-agent-prod"}
-          </Button>
-          {sdkKey && <CopyField value="wbx_sdk_live_claimsagentprod_7Hq29fKc••••3f9a" />}
-        </div>
-        <div className="grid gap-3 lg:grid-cols-2">
-          <CodeBlock file="agent · src/claims/graph.ts" lang="ts" code={AGENTS.find((a) => a.id === "langgraph")!.snippet} />
-          <CodeBlock
-            file="payment-service · routes/pay.ts"
-            note="resource-verified"
-            lang="ts"
-            code={`import { verifyPermit } from "@wrapbox/verify";
-
-app.post("/pay", async (req, res) => {
-  // signature · expiry · exact-args hash · one-time nonce
-  const permit = await verifyPermit(req.header("X-Wrapbox-Permit"), req.body);
-  if (!permit.ok) return res.status(403).json({ error: permit.reason });
-  await ledger.pay(req.body);           // runs exactly once
-  res.json({ ok: true, decision: permit.decisionId });
-});`}
-          />
-        </div>
-      </div>
-    );
-  if (id === "mcp")
-    return (
-      <div className="grid gap-2 sm:grid-cols-2">
-        {(
-          [
-            ["stripe", "Stripe", "https://mcp.stripe.com", "stripe"],
-            ["razorpay", "Razorpay", "https://mcp.razorpay.com/mcp", "razorpay"],
-            ["github_light", "GitHub", "https://api.githubcopilot.com/mcp/", "github"],
-            ["postgresql", "Postgres · prod", "postgres-mcp (stdio)", "postgres-prod"],
-          ] as const
-        ).map(([logo, name, up, slug]) => (
-          <div key={slug} className="rounded-xl border border-line p-3">
-            <div className="flex items-center gap-2">
-              <Logo name={logo} size={22} rounded="rounded-md" />
-              <span className="text-[13px] font-semibold">{name}</span>
-            </div>
-            <div className="mt-2 font-mono text-[11px] text-fg-3 line-through truncate">{up}</div>
-            <div className="mt-0.5 flex items-center gap-1 font-mono text-[11.5px]">
-              <ShieldCheck className="size-3 text-allow" /> https://mcp.wrapbox.ai/{slug}
-              <CopyButton text={`https://mcp.wrapbox.ai/${slug}`} label="" className="ml-auto" />
-            </div>
+/* One discovered integration: its real control point, a per-agent Verify that runs the
+   canonical evaluator, and the vendor-native setup as secondary detail. */
+function IntegrationRow({ d, connected, busy, ms, onVerify }: { d: Discovered; connected: boolean; busy: boolean; ms?: number; onVerify: () => void }) {
+  const [setup, setSetup] = useState(false);
+  const a = regById(d.id);
+  // Recompute the verdict live so it always reflects the current published contract.
+  const v = a && connected ? evaluateNow(actOf(probeGate(a)), d.id) : null;
+  const gate = a ? probeGate(a) : null;
+  return (
+    <div className="rounded-xl border border-line p-3.5">
+      <div className="flex flex-wrap items-center gap-3">
+        <Logo name={d.logo} bleed={a?.bleed} size={26} rounded="rounded-lg" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="text-[13px] font-semibold">{a?.name ?? d.agent}</span>
+            {a && <span className="text-[11.5px] text-fg-3">{a.vendor}</span>}
           </div>
-        ))}
+          <div className="mt-0.5 text-[12px] text-fg-2">{a ? `${CONTROL[a.adapter]} · ${RUNS_ON[a.surface]}` : "No Wrapbox adapter yet"}</div>
+          <div className="mt-0.5 font-mono text-[11px] text-fg-3 truncate">
+            Found in {d.repos.length} {d.repos.length === 1 ? "repo" : "repos"} · {[...d.paths].join(" · ")}
+          </div>
+        </div>
+        {!a ? <Chip>Discovered · setup unavailable</Chip> : connected ? <Chip tone="allow"><Check className="size-3" /> Connected</Chip> : <Chip>Not connected</Chip>}
       </div>
-    );
-  if (id === "saas") {
-    const a = AGENTS.find((x) => x.id === "agentforce")!;
-    return <CodeBlock file={a.file} note={a.fileNote} lang="yaml" code={a.snippet} />;
-  }
-  if (id === "browser") {
-    const a = AGENTS.find((x) => x.id === "browser-use")!;
-    return <CodeBlock file={a.file} note={a.fileNote} lang="py" code={a.snippet} />;
-  }
-  const a = AGENTS.find((x) => x.id === "openai-handoffs")!;
-  return <CodeBlock file={a.file} note={a.fileNote} lang="py" code={a.snippet} />;
+
+      {a && (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button size="sm" variant={connected ? "secondary" : "primary"} onClick={onVerify} disabled={busy}>
+            {busy ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
+            {busy ? "Verifying…" : connected ? "Verify again" : "Verify connection"}
+          </Button>
+          <button onClick={() => setSetup((s) => !s)} className="text-[12px] font-medium text-fg-2 underline underline-offset-4 hover:text-fg">
+            {setup ? "Hide setup details" : "View setup details"}
+          </button>
+        </div>
+      )}
+
+      {v && gate && (
+        <div className="mt-3 rounded-xl border border-line bg-surface-2 p-3.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Chip>adapter simulated</Chip>
+            <Chip tone="allow">real policy decision</Chip>
+            {ms != null && <span className="ml-auto font-mono text-[11px] text-fg-3">evaluated in {ms.toFixed(2)} ms</span>}
+          </div>
+          <div className="mt-2 text-[12.5px]">{gate.display}</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <DecisionPill d={v.decision} size="sm" />
+            {v.observed && <span className="text-[11.5px] text-fg-3">observe mode — would {v.observed}</span>}
+            <span className="font-mono text-[11.5px] text-fg-3">rule {v.rule}</span>
+          </div>
+          <p className="mt-1.5 text-[12px] text-fg-2">{v.reason}</p>
+        </div>
+      )}
+
+      {a && setup && (
+        <div className="mt-3 space-y-2 border-t border-line pt-3">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-fg-3">
+            <span>Deployment · {DEPLOY[a.adapter]}</span>
+            <span>Events · {a.hookEvents.join(", ")}</span>
+            {a.docs && !a.docs.includes(" ") && (
+              <a href={`https://${a.docs}`} target="_blank" rel="noreferrer" className="underline underline-offset-4 hover:text-fg-2">
+                Vendor documentation ↗
+              </a>
+            )}
+          </div>
+          <InlineCmd cmd={a.install} />
+          <CodeBlock file={a.file} note={a.fileNote} lang={a.lang} code={a.snippet} maxH={240} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
