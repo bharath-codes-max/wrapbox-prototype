@@ -267,6 +267,22 @@ const PLANNED_MECHANISM: Partial<Record<Adapter, string>> = {
   a2a: "A2A gateway + attenuated delegation tokens",
 };
 
+/** The visible rollout steps for a deployment method (0..3), shown while connecting. */
+function phaseLabels(method: string): [string, string, string, string] {
+  switch (method) {
+    case "mdm":
+      return ["Queued in Jamf / Intune", "Pushing config to managed laptops", "Devices checking in with Wrapbox", "Connected — reporting to Wrapbox"];
+    case "repo":
+      return ["Committed to the repo / org template", "Waiting for the next agent run", "First run checked in", "Connected"];
+    case "gateway":
+      return ["Gateway route saved", "Client pointed at the Wrapbox URL", "First tools/list received", "Connected"];
+    case "sdk":
+      return ["SDK dependency added", "Workspace credentials verified", "First guard() call received", "Connected"];
+    default:
+      return ["Config installed on the device", "Adapter starting up", "First check-in received", "Connected"];
+  }
+}
+
 /** The Wrapbox adapter version reported at check-in (same across vendors). */
 const ADAPTER_VER = "1.4.2";
 /** A registration identifier Wrapbox assigns when the integration first checks in. */
@@ -608,7 +624,8 @@ export function AdminSetup() {
   // Step 4 — the connected fact lives in the store (persists on reload); busy/conn are per-session.
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   // Per-agent connection lifecycle: configured (deployed, awaiting check-in) → connected.
-  const [conn, setConn] = useState<Record<string, { stage: "configured" | "connected"; method: string; device: string; at: number }>>({});
+  // `phase` drives the visible rollout progress (0..3) while configuring.
+  const [conn, setConn] = useState<Record<string, { stage: "configured" | "connected"; method: string; device: string; at: number; phase: number }>>({});
   const [openBlock, setOpenBlock] = useState<string>("coding");
   // Step 5
   const [channels, setChannels] = useState({ slack: true, teams: false, email: true });
@@ -697,10 +714,15 @@ export function AdminSetup() {
     const a = regById(id);
     if (!a) return;
     setBusy((b) => ({ ...b, [id]: true }));
-    setConn((c) => ({ ...c, [id]: { stage: "configured", method, device: "", at: Date.now() } }));
-    await sleep(1100); // awaiting the integration's first check-in
+    // Walk the visible rollout: queued → pushing → checking in → connected.
+    setConn((c) => ({ ...c, [id]: { stage: "configured", method, device: "", at: Date.now(), phase: 0 } }));
+    for (let p = 1; p <= 2; p++) {
+      await sleep(750);
+      setConn((c) => ({ ...c, [id]: { ...c[id], phase: p } }));
+    }
+    await sleep(750);
     const device = registrationId(a);
-    setConn((c) => ({ ...c, [id]: { stage: "connected", method, device, at: Date.now() } }));
+    setConn((c) => ({ ...c, [id]: { stage: "connected", method, device, at: Date.now(), phase: 3 } }));
     const m = METHODS[a.category].find((x) => x.recommended) ?? METHODS[a.category][0];
     connectAgent(id, method, m.assurance); // persists the connected fact
     setBusy((b) => ({ ...b, [id]: false }));
@@ -1537,7 +1559,7 @@ export function AdminSetup() {
    point, the enterprise deployment options (MDM / manual / native), and the connection
    lifecycle — Not connected → Setup configured → Connected (on a real check-in). No policy
    decisions are made here; that proof lives in Step 7. Native config is secondary detail. */
-type ConnState = { stage: "configured" | "connected"; method: string; device: string; at: number } | undefined;
+type ConnState = { stage: "configured" | "connected"; method: string; device: string; at: number; phase: number } | undefined;
 function IntegrationRow({ d, conn, connected, busy, onDeploy }: { d: Discovered; conn: ConnState; connected: boolean; busy: boolean; onDeploy: (method: string) => void }) {
   const [setup, setSetup] = useState(false);
   const a = regById(d.id);
@@ -1614,9 +1636,34 @@ function IntegrationRow({ d, conn, connected, busy, onDeploy }: { d: Discovered;
       )}
 
       {a && configuring && (
-        <div className="mt-3 flex items-center gap-2.5 rounded-lg border border-line bg-surface-2 px-3.5 py-3 text-[12.5px]">
-          <Loader2 className="size-3.5 animate-spin text-fg-2" />
-          <span>Setup configured via {methodLabel} — awaiting the integration's first check-in…</span>
+        <div className="mt-3 rounded-lg border border-line bg-surface-2 p-3.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[12px] font-semibold">Rolling out via {methodLabel}</span>
+            <span className="font-mono text-[11px] text-fg-3">step {Math.min((conn?.phase ?? 0) + 1, 4)} of 4</span>
+          </div>
+          <div className="mt-2 h-1.5 rounded-full bg-surface-3 overflow-hidden">
+            <motion.div className="h-full bg-allow" animate={{ width: `${((conn?.phase ?? 0) / 3) * 100}%` }} />
+          </div>
+          <div className="mt-2.5 space-y-1.5">
+            {phaseLabels(conn?.method ?? "manual").map((lbl, i) => {
+              const ph = conn?.phase ?? 0;
+              const st = i < ph ? "done" : i === ph ? "active" : "pending";
+              return (
+                <div key={lbl} className="flex items-center gap-2 text-[12px]">
+                  {st === "done" ? (
+                    <CircleCheck className="size-3.5 text-allow" />
+                  ) : st === "active" ? (
+                    <Loader2 className="size-3.5 animate-spin text-fg-2" />
+                  ) : (
+                    <span className="grid size-3.5 place-items-center">
+                      <span className="size-1.5 rounded-full bg-line-strong" />
+                    </span>
+                  )}
+                  <span className={st === "pending" ? "text-fg-3" : ""}>{lbl}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
