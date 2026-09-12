@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { AlertTriangle, Check, FilePlus2, FlaskConical, History, Loader2, Lock, Pencil, Plus, Rocket, Trash2, Undo2, Wand2, X } from "lucide-react";
+import { AlertTriangle, Check, Copy as CopyIcon, FilePlus2, FileCode2, FlaskConical, History, Loader2, Lock, Pencil, Plus, Rocket, Trash2, Undo2, Wand2, Wrench, X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AGENTS, CATEGORIES, agentById, type Decision } from "../data/agents";
 import { EFFECTS, PACKS, effectInfo, fmtValue, fromYaml, replay, ruleChips, ruleSig, rulesForPacks, toYaml, type ParseIssue, type ReplayResult, type Rule, type Tier } from "../data/contract";
@@ -246,6 +246,10 @@ export function RuleBuilder({ open, initial, onClose, onSave, existingIds, start
   const [r, setR] = useState<Rule>(initial ?? blank());
   const [mode, setMode] = useState<BuildMode>(startMode);
   const [text, setText] = useState("");
+  // Code tab: null means "derive from the rule"; a string means the engineer is editing it.
+  const [yamlEdit, setYamlEdit] = useState<string | null>(null);
+  // Code tab parse state: while its YAML is broken the rule behind it is stale, so saving is refused.
+  const [yamlBroken, setYamlBroken] = useState(false);
   const [draft, setDraft] = useState<DraftResult>(() => ({ ...describeToRule("", []), source: "builtin" }));
   const [drafting, setDrafting] = useState(false);
   const idsKey = existingIds.join(",");
@@ -276,6 +280,8 @@ export function RuleBuilder({ open, initial, onClose, onSave, existingIds, start
       setR(initial ?? blank());
       setMode(initial?.id ? "build" : startMode);
       setText("");
+      setYamlEdit(null);
+      setYamlBroken(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial]);
@@ -309,7 +315,11 @@ export function RuleBuilder({ open, initial, onClose, onSave, existingIds, start
           <Segmented
             size="sm"
             value={mode}
-            onChange={(m) => setMode(m as BuildMode)}
+            onChange={(m) => {
+              setYamlEdit(null);
+              setYamlBroken(false);
+              setMode(m as BuildMode);
+            }}
             options={[
               { value: "describe", label: <span className="flex items-center gap-1.5"><Wand2 className="size-3.5" /> Describe</span> },
               { value: "build", label: "Build" },
@@ -461,7 +471,17 @@ export function RuleBuilder({ open, initial, onClose, onSave, existingIds, start
           </>
         )}
 
-        {mode !== "describe" && (
+        {mode === "code" && (
+          <CodeTab
+            rule={{ ...r, id: r.id || slug(r.title) || "new.rule" }}
+            text={yamlEdit}
+            onText={setYamlEdit}
+            onRule={(next) => setR(next)}
+            onValidity={setYamlBroken}
+          />
+        )}
+
+        {mode === "build" && (
         <div className="grid gap-3 lg:grid-cols-2">
           <CodeBlock file="this rule in wrapbox.yaml" lang="yaml" code={toYaml([{ ...r, id: r.id || slug(r.title) || "new.rule" }], 0).split("\n").slice(7).join("\n")} maxH={280} />
           <div className="rounded-xl border border-line p-3.5 space-y-3">
@@ -480,13 +500,136 @@ export function RuleBuilder({ open, initial, onClose, onSave, existingIds, start
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={save} disabled={!r.title.trim()}>
+          {mode === "code" && yamlBroken && <span className="mr-auto text-[12px] text-block">Fix the YAML errors before adding this rule.</span>}
+          <Button variant="primary" onClick={save} disabled={!r.title.trim() || (mode === "code" && yamlBroken)}>
             <Check className="size-3.5" /> {editing ? "Save rule" : "Add to draft"}
           </Button>
         </div>
         )}
       </div>
     </Drawer>
+  );
+}
+
+/** Engineering view of the same rule: the wrapbox.yaml an engineer would commit. */
+function CodeTab({ rule, text, onText, onRule, onValidity }: { rule: Rule; text: string | null; onText: (v: string | null) => void; onRule: (r: Rule) => void; onValidity: (broken: boolean) => void }) {
+  const org = orgSlugOf(storeState().domain, storeState().company);
+  const derived = toYaml([rule], 0, org);
+  const shown = text ?? derived;
+  const [copied, setCopied] = useState<"yaml" | "path" | null>(null);
+
+  // Validate on every keystroke: YAML syntax first, then the Wrapbox rule schema.
+  const parsed = useMemo(() => fromYaml(shown), [shown]);
+  const issues: ParseIssue[] = parsed.issues.length ? parsed.issues : parsed.rules.length !== 1 ? [{ msg: `this file must hold exactly one rule — found ${parsed.rules.length}` }] : [];
+  const valid = issues.length === 0;
+  const parsedRule = valid ? parsed.rules[0] : null;
+
+  // A valid edit flows straight back into the shared rule, so Build shows the same policy.
+  useEffect(() => {
+    onValidity(!valid);
+    if (text !== null && parsedRule && ruleSig(parsedRule) !== ruleSig(rule)) onRule(parsedRule);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown, valid]);
+
+  const copy = async (what: "yaml" | "path") => {
+    try {
+      await navigator.clipboard.writeText(what === "yaml" ? shown : "wrapbox.yaml");
+    } catch {
+      /* clipboard blocked in the sandbox — still confirm */
+    }
+    setCopied(what);
+    setTimeout(() => setCopied(null), 1400);
+  };
+
+  const summary = parsedRule
+    ? ([
+        ["Effect", parsedRule.when.effect.join(", ")],
+        ["Decision", parsedRule.tiers ? `${parsedRule.tiers.length} tiers` : (parsedRule.decision ?? "—")],
+        ["Scope", parsedRule.when.env?.join(", ") ?? "all environments"],
+        ["Agents", parsedRule.when.subject?.length ? `${parsedRule.when.subject.length} categories` : "all"],
+        ["Approver", parsedRule.approvers ?? parsedRule.tiers?.find((t) => t.approvers)?.approvers ?? "—"],
+        ...(parsedRule.when.requires?.length ? ([["Context", `${parsedRule.when.requires.length} conditions`]] as [string, string][]) : []),
+        ...(parsedRule.permit ? ([["Permit", `${parsedRule.permit.ttlSeconds}s${parsedRule.permit.singleUse ? " · single use" : ""}`]] as [string, string][]) : []),
+      ] as [string, string][])
+    : [];
+
+  const lines = shown.split("\n").length;
+  return (
+    <div className="space-y-3">
+      <div className="overflow-hidden rounded-xl bg-code border border-code-line">
+        <div className="flex flex-wrap items-center gap-2 border-b border-code-line px-3.5 h-11">
+          <FileCode2 className="size-3.5 shrink-0 text-[#8a95b3]" />
+          <span className="font-mono text-[12px] text-[#dde3f3]">wrapbox.yaml</span>
+          <span
+            className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold", valid ? "bg-[#0d271e] text-[#3fd49b]" : "bg-[#321219] text-[#ff8fa3]")}
+          >
+            {valid ? <Check className="size-3" strokeWidth={3} /> : <AlertTriangle className="size-3" />}
+            {valid ? "Valid Wrapbox rule" : `${issues.length} error${issues.length > 1 ? "s" : ""}`}
+          </span>
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              onClick={() => parsedRule && onText(toYaml([parsedRule], 0, org))}
+              disabled={!valid}
+              title="Normalise indentation and key order without changing the rule"
+              className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11.5px] text-[#a2acc5] hover:bg-white/10 hover:text-white disabled:opacity-40"
+            >
+              <Wrench className="size-3" /> Format
+            </button>
+            <button onClick={() => copy("yaml")} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11.5px] text-[#a2acc5] hover:bg-white/10 hover:text-white">
+              {copied === "yaml" ? <Check className="size-3 text-[#3fd49b]" strokeWidth={3} /> : <CopyIcon className="size-3" />}
+              {copied === "yaml" ? "Copied" : "Copy"}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex max-h-[420px] overflow-auto scroll-thin">
+          <pre aria-hidden className="select-none py-3 pl-3 pr-3 text-right font-mono text-[12.5px] leading-[1.65] text-[#3c4764]">
+            {Array.from({ length: lines }, (_, i) => (
+              <span key={i} className={cn("block", issues.some((x) => x.line === i + 1) && "text-[#ff6e8a]")}>
+                {i + 1}
+              </span>
+            ))}
+          </pre>
+          <textarea
+            value={shown}
+            onChange={(e) => onText(e.target.value)}
+            spellCheck={false}
+            rows={lines + 1}
+            aria-label="wrapbox.yaml"
+            className="flex-1 min-w-0 resize-none bg-transparent py-3 pr-3 font-mono text-[12.5px] leading-[1.65] text-[#dde3f3] outline-none"
+          />
+        </div>
+
+        {!valid && (
+          <div className="space-y-1 border-t border-code-line bg-[#2a1018] px-3.5 py-2.5">
+            {issues.slice(0, 6).map((x, i) => (
+              <div key={i} className="font-mono text-[11.5px] text-[#ff8fa3]">
+                {x.line ? `line ${x.line}: ` : ""}
+                {x.msg}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-start gap-x-6 gap-y-2 rounded-xl border border-line bg-surface-2 px-3.5 py-3">
+        {summary.length ? (
+          summary.map(([k, v]) => (
+            <div key={k} className="min-w-[120px]">
+              <div className="text-[10.5px] uppercase tracking-wide text-fg-3">{k}</div>
+              <div className="font-mono text-[12px] text-fg">{v}</div>
+            </div>
+          ))
+        ) : (
+          <div className="text-[12px] text-fg-3">Fix the errors above to see the rule summary.</div>
+        )}
+        <button onClick={() => copy("path")} className="ml-auto self-center inline-flex h-7 items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 text-[11.5px] text-fg-2 hover:border-line-strong hover:text-fg">
+          {copied === "path" ? <Check className="size-3 text-allow" strokeWidth={3} /> : <CopyIcon className="size-3" />}
+          {copied === "path" ? "Copied" : "Copy file path"}
+        </button>
+      </div>
+      <p className="text-[11.5px] text-fg-3">Commit this to your repository as wrapbox.yaml, or keep editing here — Build stays in step with whatever parses.</p>
+    </div>
   );
 }
 
