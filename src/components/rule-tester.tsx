@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
 import { AGENTS, CATEGORIES, agentById, type CategoryId } from "../data/agents";
 import { effectInfo, type Rule } from "../data/contract";
-import { checkRule, evaluate, type Act, type Env } from "../lib/engine";
+import { checkRule, evaluate, globMatch, type Act, type Env } from "../lib/engine";
 import { DecisionPill, cn } from "./ui";
 
 const ENVS: Env[] = ["production", "staging", "development"];
@@ -46,23 +46,38 @@ export function inputsFor(effect: string): ("path" | "command" | "branch" | "col
   }
 }
 
-/* Turn a glob from the rule into a concrete example that matches it. */
+/* Turn a glob from the rule into a concrete example. A trailing * can simply be dropped (it also
+   matches nothing), but an inner * must become a real token or the required literal spacing breaks. */
 const fromGlob = (g: string, kind: "path" | "text") => {
   if (kind === "path") {
     let p = g.replace(/\*\*\//g, "src/").replace(/\/\*\*/g, "/001_users.sql");
     p = p.replace(/\.env\*/, ".env.production").replace(/\*/g, "file");
     return p.startsWith("/") || p.startsWith("src/") ? p : `src/${p}`;
   }
-  return g.replace(/\s*\*\s*$/, " -auto-approve").replace(/\*/g, "").replace(/\s+/g, " ").trim();
+  const token = /--force/.test(g) ? "origin feat/ledger" : "deployment payments-api";
+  return g
+    .replace(/\*\s*$/, "")
+    .replace(/\*/g, token)
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+/** Build a sample that the rule's own matcher accepts — verified with the engine, not assumed. */
+const sampleFor = (globs: string[] | undefined, kind: "path" | "text", fallback: string) => {
+  for (const g of globs ?? []) {
+    const s = fromGlob(g, kind);
+    if (globMatch(g, s, kind)) return s;
+  }
+  return globs?.length ? fromGlob(globs[0], kind) : fallback;
 };
 
 /** A starting action that satisfies the rule, so the tester opens on a matching case. */
-function seedAct(r: Rule): Act {
+export function seedAct(r: Rule): Act {
   const effect = r.when.effect[0];
   const a: Act = { effect };
   const inputs = inputsFor(effect);
-  if (inputs.includes("path")) a.path = r.when.path?.[0] ? fromGlob(r.when.path[0], "path") : "src/app/config.ts";
-  if (inputs.includes("command")) a.command = r.when.command?.[0] ? fromGlob(r.when.command[0], "text") : "npm test";
+  if (inputs.includes("path")) a.path = sampleFor(r.when.path, "path", "src/app/config.ts");
+  if (inputs.includes("command")) a.command = sampleFor(r.when.command, "text", "npm test");
   if (inputs.includes("branch")) a.branch = r.when.branch?.[0]?.replace(/\*/g, "x") ?? "feat/ledger";
   if (inputs.includes("columns")) a.columns = r.when.columns ?? ["email"];
   if (inputs.includes("destination")) a.destination = "paste.example.com";
@@ -82,7 +97,7 @@ function seedAct(r: Rule): Act {
 }
 
 /** An agent whose category the rule applies to, so the default case matches. */
-function seedAgent(r: Rule): string {
+export function seedAgent(r: Rule): string {
   const subject = r.when.subject;
   if (subject?.length) {
     const a = AGENTS.find((x) => subject.includes(x.category));

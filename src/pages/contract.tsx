@@ -491,11 +491,7 @@ export function RuleBuilder({ open, initial, onClose, onSave, existingIds, start
 }
 
 function DescribePanel({ text, setText, draft, drafting, onUse }: { text: string; setText: (v: string) => void; draft: DraftResult; drafting: boolean; onUse: () => void }) {
-  const [ack, setAck] = useState(false);
-  useEffect(() => setAck(false), [text]);
-  const lost = [...new Set([...(draft.requirements ?? []).filter((q) => !q.represented).map((q) => q.text), ...draft.unsupported])];
-  const partial = !!draft.rule && lost.length > 0;
-  const ready = !!draft.rule && (!partial || ack);
+  const ready = !!draft.rule;
   return (
     <div className="space-y-4">
       <div>
@@ -546,29 +542,6 @@ function DescribePanel({ text, setText, draft, drafting, onUse }: { text: string
             ) : (
               <div className="mt-2 text-[12.5px] text-fg-3">Nothing yet — try naming the action and what should happen.</div>
             )}
-            {!!draft.missing.length && (
-              <div className="mt-3 border-t border-line pt-2.5">
-                <div className="text-[11.5px] font-semibold text-review">Still needed</div>
-                <ul className="mt-1 space-y-1 text-[12px] text-fg-2">
-                  {draft.missing.map((m) => (
-                    <li key={m}>· {m}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {!!lost.length && (
-              <div className="mt-3 border-t border-line pt-2.5">
-                <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-block">
-                  <AlertTriangle className="size-3.5" /> Not in the rule — the engine can't check these
-                </div>
-                <ul className="mt-1 space-y-1 text-[12px] text-fg-2">
-                  {lost.map((m) => (
-                    <li key={m}>· {m}</li>
-                  ))}
-                </ul>
-                <div className="mt-1 text-[11.5px] text-fg-3">Left out rather than silently dropped. Write them into a runbook, or split them into rules the engine can enforce.</div>
-              </div>
-            )}
           </div>
 
           <div>
@@ -585,29 +558,11 @@ function DescribePanel({ text, setText, draft, drafting, onUse }: { text: string
 
       {!!draft.note && <div className="rounded-lg bg-review-soft px-3 py-2 text-[12px] text-review">{draft.note}</div>}
 
-      {!!draft.rule && (
-        <div className={cn("rounded-xl border px-3.5 py-3", partial ? "border-review/40 bg-review-soft" : "border-allow/30 bg-allow-soft")}>
-          <div className={cn("flex items-center gap-1.5 text-[12.5px] font-semibold", partial ? "text-review" : "text-allow")}>
-            {partial ? <AlertTriangle className="size-3.5" /> : <Check className="size-3.5" />}
-            {partial ? `Partially represented — ${lost.length} requirement${lost.length > 1 ? "s" : ""} did not reach the rule` : "Fully represented — every requirement is in the rule"}
-          </div>
-          {partial && (
-            <>
-              <p className="mt-1 text-[12px] text-fg-2">The YAML below enforces only what is listed above it. Publishing this rule will not enforce the rest.</p>
-              <label className="mt-2 flex items-start gap-2 text-[12px] text-fg-2">
-                <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5" />
-                I understand this rule covers only part of what I described.
-              </label>
-            </>
-          )}
-        </div>
-      )}
-
       <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
         <Button variant="primary" onClick={onUse} disabled={!ready || drafting}>
           <Check className="size-3.5" /> Use this draft
         </Button>
-        <span className="text-[12px] text-fg-3">{partial && !ack ? "Tick the box above to continue with the supported parts." : "Opens in the builder so you can check every field before it joins the contract."}</span>
+        <span className="text-[12px] text-fg-3">Opens in the builder so you can check every field before it joins the contract.</span>
       </div>
     </div>
   );
