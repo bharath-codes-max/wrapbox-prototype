@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Building2, Check, Wand2, Trash2, ChevronDown, ChevronRight, CircleCheck, FileCode2, KeyRound, Loader2, Lock, Mail, Play, ShieldCheck, Terminal as TerminalIcon, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AGENTS, CATEGORIES, METHODS, agentById, type CategoryId, type Decision } from "../data/agents";
-import { INITIAL_RULES, orgSlug, toYaml, type Rule } from "../data/contract";
+import { PACKS, orgSlug, rulesForPacks, toYaml, type Rule } from "../data/contract";
 import { PEOPLE } from "../data/people";
 import { SCENARIOS, actOf, nativeFor, type Gate } from "../data/scenarios";
 import { CodeBlock, InlineCmd, json } from "../components/code";
@@ -128,17 +128,11 @@ function Tick({ on, children }: { on: boolean; children: ReactNode }) {
 
 /* ================= Admin setup ================= */
 
-const PACKS: { id: string; name: string; rules: string[]; ex: string; rec?: boolean }[] = [
-  { id: "secrets", name: "Secrets & credentials", rules: ["secrets.read", "network.egress"], ex: "Agents never read .env files or send credentials to unknown domains.", rec: true },
-  { id: "git", name: "Source control", rules: ["git.main", "git.feature"], ex: "Main stays human-only; feature branches stay automatic.", rec: true },
-  { id: "prod", name: "Production infrastructure", rules: ["prod.k8s.delete", "prod.db.migrate", "db.prod.write"], ex: "Prod deletes need on-call; no schema changes or destructive SQL from agents.", rec: true },
-  { id: "pii", name: "Customer data (PII)", rules: ["pii.read"], ex: "Email and phone are masked for agents and results are capped.", rec: true },
-  { id: "payments", name: "Payments & refunds", rules: ["payments.refund"], ex: "Automatic up to a limit, then a manager, then blocked.", rec: true },
-  { id: "claims", name: "Claims payouts", rules: ["claims.payout"], ex: "Two claims managers above ₹2,00,000." },
-  { id: "commercial", name: "Commercial actions", rules: ["crm.discount"], ex: "Discounts above 25% need VP Sales." },
-  { id: "browser", name: "Browser payments", rules: ["browser.payment"], ex: "The final “Submit payment” click needs the finance controller." },
-  { id: "delegation", name: "Agent delegation", rules: ["agent.delegate"], ex: "A subagent never gets more authority than its parent.", rec: true },
-];
+/* PACKS is imported from data/contract — there is exactly one pack → rule mapping in the
+   product. This file used to keep its own copy, which silently drifted (it was missing
+   git.force) and made the published contract disagree with the pack card. */
+const REC_PACK_IDS = PACKS.filter((p) => p.rec).map((p) => p.id).concat(["claims", "commercial", "browser"]);
+const REC_RULE_COUNT = rulesForPacks(REC_PACK_IDS).length;
 
 const BLOCKS: { id: string; cats: CategoryId[]; title: string; agents: string[]; what: string }[] = [
   { id: "coding", cats: ["ide", "cli"], title: "Coding agents on laptops", agents: ["claude-code", "cursor", "codex-cli", "copilot-ide"], what: "One installer writes each agent's native hook file — Claude Code, Cursor, Codex, Copilot, Gemini." },
@@ -420,7 +414,7 @@ function CompanyField({ company, onPick, onType }: { company: string; onPick: (c
 const ADMIN_STEPS = [
   { t: "Create workspace", s: "SSO, company, data region" },
   { t: "Discover agents", s: "Find what already runs" },
-  { t: "Intent contract", s: "Policy packs + rollout mode" },
+  { t: "Intent contract", s: "Your rules + rollout mode" },
   { t: "Connect agents", s: "Hooks, SDK, MCP, connectors" },
   { t: "Approvers & alerts", s: "Who signs what, where" },
   { t: "Invite your team", s: "Directory, installer, links" },
@@ -455,7 +449,11 @@ export function AdminSetup() {
   const [openAgent, setOpenAgent] = useState<string | null>(null);
   const [cats, setCats] = useState<CategoryId[]>([]);
   // Step 3
-  const [packs, setPacks] = useState<string[]>(PACKS.filter((p) => p.rec).map((p) => p.id).concat(["claims", "commercial", "browser"]));
+  // Starter packs are an optional accelerator, so the admin chooses how to start first.
+  const [start, setStart] = useState<"recommended" | "scratch" | null>(null);
+  const [pendingScratch, setPendingScratch] = useState(false);
+  // Remembered selection: switching to scratch and back restores exactly what was on.
+  const [packs, setPacks] = useState<string[]>(REC_PACK_IDS);
   const [mode, setMode] = useState<"observe" | "enforce">("enforce");
   const [customRules, setCustomRules] = useState<Rule[]>([]);
   const [ruleDrawer, setRuleDrawer] = useState(false);
@@ -476,12 +474,25 @@ export function AdminSetup() {
   // Step 7
   const [tests, setTests] = useState<{ key: string; stage: number; v?: Verdict }[]>([]);
 
-  const packRules: Rule[] = INITIAL_RULES.filter((r) => PACKS.some((p) => packs.includes(p.id) && p.rules.includes(r.id))).map((r) => {
+  // Starter packs contribute only once "recommended" is chosen — nothing is injected silently.
+  const activePacks = start === "recommended" ? packs : [];
+  const packRules: Rule[] = rulesForPacks(activePacks).map((r) => {
     const x: Rule = { ...r, mode: mode === "observe" ? "observe" : undefined };
     if (r.id === "payments.refund" && r.tiers) x.tiers = [{ ...r.tiers[0], max: autoMax }, { ...r.tiers[1], max: reviewMax }, r.tiers[2]];
     return x;
   });
   const rules: Rule[] = [...packRules, ...customRules.map((r) => ({ ...r, mode: mode === "observe" ? ("observe" as const) : undefined }))];
+  // Every count on screen is derived from the same array that gets published — never hard-coded.
+  const starterCount = packRules.length;
+  const customCount = customRules.length;
+  const countHint =
+    starterCount && customCount
+      ? `${starterCount} starter + ${customCount} yours`
+      : starterCount
+        ? `${starterCount} starter ${starterCount === 1 ? "protection" : "protections"}`
+        : customCount
+          ? `${customCount} ${customCount === 1 ? "rule" : "rules"} yours`
+          : "Nothing in the contract yet";
   const ghOrg = (domain || "wrapbox").split(".")[0].replace(/[^a-z0-9-]/gi, "-").toLowerCase();
   const blocks = BLOCKS.filter((b) => b.cats.some((c) => cats.includes(c)));
   const linkedCount = blocks.filter((b) => linked[b.id] === "done").length;
@@ -767,95 +778,212 @@ export function AdminSetup() {
       {step === 2 && (
         <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_480px] xl:grid-cols-[minmax(0,1fr)_380px]">
           <Card className="p-6 min-w-0">
-            <StepHead n={3} total={total} title="Write your intent contract" sub="Start from policy packs, not a blank page. Each pack is a few plain rules about effects — reading secrets, moving money, deleting in production — that apply to every agent, whatever vendor." />
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-              {PACKS.map((p) => {
-                const on = packs.includes(p.id);
-                return (
-                  <div key={p.id} className={cn("rounded-xl border p-3.5 transition-colors", on ? "border-fg bg-surface" : "border-line")}>
-                    <div className="flex items-start gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <span className="text-[13px] font-semibold">{p.name}</span>
-                          {p.rec && <Chip>recommended</Chip>}
+            <StepHead n={3} total={total} title="Write your intent contract" sub="The contract is the set of rules Wrapbox enforces on every agent, whatever vendor it comes from. Use our recommended baseline, or publish only the rules you write." />
+            {start === null && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button onClick={() => setStart("recommended")} className="rounded-2xl border border-line p-5 text-left transition-colors hover:border-fg">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="size-4" />
+                    <Chip>recommended</Chip>
+                  </div>
+                  <div className="mt-3 text-[15px] font-semibold">Start with recommended protections</div>
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-fg-2">Begin with a practical baseline for secrets, source control, production, payments and other common agent risks.</p>
+                  <p className="mt-2 text-[12px] text-fg-3">You can turn any protection off or customize it before publishing.</p>
+                  <span className="mt-4 inline-flex items-center gap-1.5 text-[12.5px] font-medium">
+                    {REC_RULE_COUNT} rules ready <ArrowRight className="size-3.5" />
+                  </span>
+                </button>
+                <button onClick={() => setStart("scratch")} className="rounded-2xl border border-line p-5 text-left transition-colors hover:border-fg">
+                  <Wand2 className="size-4" />
+                  <div className="mt-3 text-[15px] font-semibold">Start from scratch</div>
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-fg-2">Create only the policies your organization needs.</p>
+                  <p className="mt-2 text-[12px] text-fg-3">No starter rules are added. Your contract contains only the rules you create.</p>
+                  <span className="mt-4 inline-flex items-center gap-1.5 text-[12.5px] font-medium">
+                    Write my first rule <ArrowRight className="size-3.5" />
+                  </span>
+                </button>
+              </div>
+            )}
+
+            {start !== null && (
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3">
+                <div className="min-w-[220px] flex-1">
+                  <div className="text-[13px] font-semibold">{start === "recommended" ? "Recommended protections" : "Starting from scratch"}</div>
+                  <p className="mt-0.5 text-[12px] text-fg-2">{start === "recommended" ? "An optional Wrapbox baseline. Turn off anything you don't want." : "No starter rules — the contract holds only what you create."}</p>
+                </div>
+                <div className="flex items-center gap-1 rounded-lg border border-line p-1">
+                  {(
+                    [
+                      ["recommended", "Recommended"],
+                      ["scratch", "From scratch"],
+                    ] as const
+                  ).map(([v, t]) => (
+                    <button
+                      key={v}
+                      onClick={() => {
+                        if (v === start) return;
+                        if (v === "scratch" && starterCount) return setPendingScratch(true);
+                        setStart(v);
+                      }}
+                      className={cn("h-7 rounded-md px-2.5 text-[12px] transition-colors", start === v ? "border border-fg bg-surface-2 font-semibold" : "border border-transparent text-fg-2 hover:bg-surface-2")}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {pendingScratch && (
+              <div className="mt-3 rounded-xl border border-line bg-surface-2 p-4">
+                <div className="text-[13px] font-semibold">
+                  Remove the {starterCount} starter {starterCount === 1 ? "rule" : "rules"}?
+                </div>
+                <p className="mt-1 text-[12px] text-fg-2">
+                  {customCount ? `The ${customCount} ${customCount === 1 ? "rule" : "rules"} you wrote stay in the contract.` : "Your contract will be empty until you write a rule."} Switching back restores this pack selection.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setStart("scratch");
+                      setPendingScratch(false);
+                    }}
+                  >
+                    Remove starter protections
+                  </Button>
+                  <Button variant="ghost" onClick={() => setPendingScratch(false)}>
+                    Keep them
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {start === "recommended" && (
+              <div className="mt-5">
+                <div className="text-[13px] font-semibold">Starter protections</div>
+                <p className="mt-0.5 mb-3 text-[12px] text-fg-2">
+                  Optional policy packs Wrapbox maintains · {starterCount} {starterCount === 1 ? "rule" : "rules"} selected
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                  {PACKS.map((p) => {
+                    const on = packs.includes(p.id);
+                    // The real normalized count, straight from the shared mapping.
+                    const n = rulesForPacks([p.id]).length;
+                    return (
+                      <div key={p.id} className={cn("rounded-xl border p-3.5 transition-colors", on ? "border-fg bg-surface" : "border-line")}>
+                        <div className="flex items-start gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span className="text-[13px] font-semibold">{p.name}</span>
+                              <span className="text-[11.5px] text-fg-3">
+                                · {n} {n === 1 ? "rule" : "rules"}
+                              </span>
+                              {p.rec && <Chip>recommended</Chip>}
+                            </div>
+                            <p className="mt-0.5 text-[12px] text-fg-2 leading-relaxed">{p.ex}</p>
+                            <div className="mt-1.5 font-mono text-[10.5px] text-fg-3">{p.rules.join(" · ")}</div>
+                          </div>
+                          <Toggle on={on} onChange={() => setPacks((x) => (on ? x.filter((y) => y !== p.id) : [...x, p.id]))} label={p.name} />
                         </div>
-                        <p className="mt-0.5 text-[12px] text-fg-2 leading-relaxed">{p.ex}</p>
-                        <div className="mt-1.5 font-mono text-[10.5px] text-fg-3">{p.rules.join(" · ")}</div>
+                        {p.id === "payments" && on && (
+                          <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
+                            <DecisionPill d="ALLOW" size="sm" /> up to $
+                            <input type="number" value={autoMax} onChange={(e) => setAutoMax(Number(e.target.value) || 0)} className="w-16 rounded border border-line bg-surface-2 px-1.5 h-6 font-mono" />
+                            <DecisionPill d="REVIEW" size="sm" /> up to $
+                            <input type="number" value={reviewMax} onChange={(e) => setReviewMax(Number(e.target.value) || 0)} className="w-20 rounded border border-line bg-surface-2 px-1.5 h-6 font-mono" />
+                            <DecisionPill d="BLOCK" size="sm" /> above
+                          </div>
+                        )}
                       </div>
-                      <Toggle on={on} onChange={() => setPacks((x) => (on ? x.filter((y) => y !== p.id) : [...x, p.id]))} label={p.name} />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {start !== null && (
+              <div className="mt-5">
+                <div className="text-[13px] font-semibold">Your rules</div>
+                <p className="mt-0.5 mb-3 text-[12px] text-fg-2">Policies your team writes with Describe, Build or Code.</p>
+                {start === "scratch" && !customRules.length ? (
+                  <div className="rounded-xl border border-dashed border-line px-6 py-10 text-center">
+                    <div className="text-[15px] font-semibold">Your contract is empty</div>
+                    <p className="mx-auto mt-1.5 max-w-[360px] text-[12.5px] leading-relaxed text-fg-2">Describe the first action you want Wrapbox to govern.</p>
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-4">
+                      <Button variant="primary" onClick={() => setRuleDrawer(true)}>
+                        <Wand2 className="size-3.5" /> Describe a rule
+                      </Button>
+                      <button onClick={() => setStart("recommended")} className="text-[12.5px] font-medium text-fg-2 underline underline-offset-4 hover:text-fg-2">
+                        Browse starter protections
+                      </button>
                     </div>
-                    {p.id === "payments" && on && (
-                      <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
-                        <DecisionPill d="ALLOW" size="sm" /> up to $
-                        <input type="number" value={autoMax} onChange={(e) => setAutoMax(Number(e.target.value) || 0)} className="w-16 rounded border border-line bg-surface-2 px-1.5 h-6 font-mono" />
-                        <DecisionPill d="REVIEW" size="sm" /> up to $
-                        <input type="number" value={reviewMax} onChange={(e) => setReviewMax(Number(e.target.value) || 0)} className="w-20 rounded border border-line bg-surface-2 px-1.5 h-6 font-mono" />
-                        <DecisionPill d="BLOCK" size="sm" /> above
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-line p-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="min-w-[240px] flex-1">
+                        <div className="text-[13px] font-semibold">A rule of your own</div>
+                        <p className="mt-0.5 text-[12px] text-fg-2">Say anything else in plain English — “refunds over $500 need the payments manager” — and check the rule it drafts before it joins the contract.</p>
+                      </div>
+                      <Button variant="primary" onClick={() => setRuleDrawer(true)}>
+                        <Wand2 className="size-3.5" /> Describe a rule
+                      </Button>
+                    </div>
+                    {!!customRules.length && (
+                      <div className="mt-3 space-y-1.5 border-t border-line pt-3">
+                        {customRules.map((r) => (
+                          <div key={r.id} className="flex items-center gap-2.5 rounded-lg bg-surface-2 px-3 py-2">
+                            <Chip>your rule</Chip>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[12.5px] font-medium">{r.title}</span>
+                              <span className="block truncate font-mono text-[11px] text-fg-3">{r.id}</span>
+                            </span>
+                            <button onClick={() => setCustomRules((x) => x.filter((y) => y.id !== r.id))} className="grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-surface-3 hover:text-block" aria-label={`Remove ${r.title}`}>
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
-                );
-              })}
-            </div>
-            <div className="mt-5 rounded-xl border border-line p-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="min-w-[240px] flex-1">
-                  <div className="text-[13px] font-semibold">A rule of your own</div>
-                  <p className="mt-0.5 text-[12px] text-fg-2">Packs cover the usual ones. Say anything else in plain English — “refunds over $500 need the payments manager” — and check the rule it drafts before it joins the contract.</p>
-                </div>
-                <Button variant="primary" onClick={() => setRuleDrawer(true)}>
-                  <Wand2 className="size-3.5" /> Describe a rule
-                </Button>
+                )}
               </div>
-              {!!customRules.length && (
-                <div className="mt-3 space-y-1.5 border-t border-line pt-3">
-                  {customRules.map((r) => (
-                    <div key={r.id} className="flex items-center gap-2.5 rounded-lg bg-surface-2 px-3 py-2">
-                      <Chip>your rule</Chip>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[12.5px] font-medium">{r.title}</span>
-                        <span className="block truncate font-mono text-[11px] text-fg-3">{r.id}</span>
-                      </span>
-                      <button onClick={() => setCustomRules((x) => x.filter((y) => y.id !== r.id))} className="grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-surface-3 hover:text-block" aria-label={`Remove ${r.title}`}>
-                        <Trash2 className="size-3.5" />
-                      </button>
-                    </div>
+            )}
+
+            {start !== null && (
+              <div className="mt-5 rounded-xl border border-line p-4">
+                <div className="text-[13px] font-semibold">How to roll it out</div>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {(
+                    [
+                      ["enforce", "Enforce now", "Decisions apply immediately. Best for secrets and production rules.", true],
+                      ["observe", "Observe for 7 days", "Log what would have been blocked, without interrupting anyone. Good for a big rollout.", false],
+                    ] as const
+                  ).map(([v, t, d, rec]) => (
+                    <button key={v} onClick={() => setMode(v)} className={cn("rounded-xl border p-3 text-left", mode === v ? "border-fg" : "border-line hover:border-line-strong")}>
+                      <div className="flex items-center gap-2 text-[13px] font-semibold">
+                        <span className={cn("size-3.5 rounded-full border-2", mode === v ? "border-fg bg-fg" : "border-line-strong")} />
+                        {t} {rec && <Chip>recommended</Chip>}
+                      </div>
+                      <p className="mt-1 text-[12px] text-fg-2">{d}</p>
+                    </button>
                   ))}
                 </div>
-              )}
-            </div>
-
-            <div className="mt-5 rounded-xl border border-line p-4">
-              <div className="text-[13px] font-semibold">How to roll it out</div>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                {(
-                  [
-                    ["enforce", "Enforce now", "Decisions apply immediately. Best for secrets and production rules.", true],
-                    ["observe", "Observe for 7 days", "Log what would have been blocked, without interrupting anyone. Good for a big rollout.", false],
-                  ] as const
-                ).map(([v, t, d, rec]) => (
-                  <button key={v} onClick={() => setMode(v)} className={cn("rounded-xl border p-3 text-left", mode === v ? "border-fg" : "border-line hover:border-line-strong")}>
-                    <div className="flex items-center gap-2 text-[13px] font-semibold">
-                      <span className={cn("size-3.5 rounded-full border-2", mode === v ? "border-fg bg-fg" : "border-line-strong")} />
-                      {t} {rec && <Chip>recommended</Chip>}
-                    </div>
-                    <p className="mt-1 text-[12px] text-fg-2">{d}</p>
-                  </button>
-                ))}
               </div>
-            </div>
+            )}
             <Footer
               onBack={back}
               onNext={() => {
                 if (fresh) {
                   setState((st) => ({ rules, published: rules, version: st.version + 1, publishedAt: Date.now() }));
-                  toast(`Contract v${getState().version} published`, `${rules.length} rules · ${mode === "observe" ? "observe mode" : "enforcing"}`, "allow");
+                  toast(`Contract v${getState().version} published`, `${countHint} · ${mode === "observe" ? "observe mode" : "enforcing"}`, "allow");
                 }
                 next();
               }}
-              next={fresh ? `Publish contract · ${rules.length} rules` : `Save contract v1 · ${rules.length} rules`}
-              disabled={!rules.length}
-              hint={fresh ? undefined : "Demo workspace: the existing v14 contract stays in place"}
+              next={start === null ? "Choose how to start" : `${fresh ? "Publish contract" : "Save contract v1"} · ${rules.length} ${rules.length === 1 ? "rule" : "rules"}`}
+              disabled={start === null || !rules.length}
+              hint={start === null ? "Pick recommended protections, or start from scratch" : fresh ? countHint : `${countHint} · demo workspace keeps its current contract`}
             />
           </Card>
           <div className="min-w-0 xl:sticky xl:top-6 self-start">
