@@ -170,11 +170,15 @@ export function RuleTester({ rule }: { rule: Rule }) {
   const agent = agentById(agentId);
   const set = (p: Partial<Act>) => setAct((a) => ({ ...a, ...p }));
 
-  const { checks, verdict } = useMemo(() => {
+  const { checks, verdict, applies } = useMemo(() => {
     const one: Rule = { ...rule, id: rule.id || "this-rule", mode: undefined };
-    return { checks: checkRule(one, act, agent.category).checks, verdict: evaluate(act, [one], agent.category) };
+    const { checks } = checkRule(one, act, agent.category);
+    const v = evaluate(act, [one], agent.category);
+    // The rule applies whenever the evaluator reached a decision through it — including a refusal
+    // caused by unproven context or forbidden content.
+    return { checks, verdict: v, applies: v.rule !== "default" };
   }, [rule, act, agent.category]);
-  const matched = checks.every((c) => c.ok);
+  const matched = applies;
 
   return (
     <div className="space-y-3">
