@@ -9,7 +9,13 @@
     "noEmit": true,
     "skipLibCheck": true,
     "types": ["vite/client"],
-    "isolatedModules": true
+    "isolatedModules": true,
+    "paths": {
+      "@wrapbox/sdk": ["./src/sdk/wrapbox.ts"],
+      "@wrapbox/verify": ["./src/sdk/verify.ts"],
+      "@wrapbox/openai": ["./src/sdk/openai.ts"],
+      "@wrapbox/langgraph": ["./src/sdk/langgraph.ts"]
+    }
   },
   "include": ["src"]
 }

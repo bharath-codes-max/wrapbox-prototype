@@ -6,6 +6,9 @@ import { PACKS, orgSlug, rulesForPacks, toYaml, type Rule } from "../data/contra
 import { PEOPLE } from "../data/people";
 import { SCENARIOS, actOf, nativeFor, type Gate } from "../data/scenarios";
 import { CodeBlock, InlineCmd, json } from "../components/code";
+// Real SDK example source, shown verbatim so the UI can never drift from the implementation.
+import claimsSrc from "../sdk/examples/claims.ts?raw";
+import frameworksSrc from "../sdk/examples/frameworks.ts?raw";
 import { SlackCard } from "../components/insight";
 import { WrapboxLogo } from "../components/logo";
 import { Avatar, Button, Card, Chip, CopyButton, DecisionPill, Logo, Modal, Segmented, Toggle, cn } from "../components/ui";
@@ -1135,6 +1138,7 @@ export function AdminSetup() {
                           {blockBusy ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />} Verify all
                         </Button>
                       </div>
+                      {b.id === "sdk" && <SdkPanel />}
                       {found.map((d) => (
                         <IntegrationRow key={d.id} d={d} connected={!!connectedMap[d.id]} busy={!!busy[d.id]} ms={probeMs[d.id]} onVerify={() => verifyAgent(d.id)} />
                       ))}
@@ -1396,6 +1400,58 @@ export function AdminSetup() {
         </div>
       )}
     </SetupLayout>
+  );
+}
+
+/* How Wrapbox wraps a customer's own agent. One governance interface (@wrapbox/sdk) sits
+   around whatever framework the agent uses; the target service verifies the permit
+   (@wrapbox/verify). The code below is the real SDK example, rendered verbatim. */
+function SdkPanel() {
+  const [tab, setTab] = useState<"flow" | "frameworks">("flow");
+  const steps: [string, string, string][] = [
+    ["1", "Before the action", "The agent calls wrapbox.guard(effect, args) — one line around your existing tool."],
+    ["2", "Wrapbox decides", "The same evaluator returns ALLOW / REVIEW / BLOCK from your published contract."],
+    ["3", "Permit on approval", "ALLOW (or human sign-off) mints a signed, single-use permit bound to the exact args."],
+    ["4", "Target service verifies", "@wrapbox/verify checks signature, expiry, args and single-use before it executes."],
+  ];
+  return (
+    <div className="rounded-xl border border-line bg-surface-2 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Chip tone="accent">@wrapbox/sdk</Chip>
+        <Chip tone="accent">@wrapbox/verify</Chip>
+        <span className="text-[12px] text-fg-3">One governance layer around any agent — your framework stays as-is.</span>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {steps.map(([n, t, d]) => (
+          <div key={n} className="rounded-lg border border-line bg-surface p-2.5">
+            <div className="flex items-center gap-1.5">
+              <span className="grid size-4 place-items-center rounded-full bg-ink text-ink-fg text-[10px] font-semibold">{n}</span>
+              <span className="text-[12px] font-semibold">{t}</span>
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-fg-2">{d}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center gap-1 rounded-lg border border-line p-1 w-fit">
+        {(
+          [
+            ["flow", "Agent + service"],
+            ["frameworks", "Any framework"],
+          ] as const
+        ).map(([v, t]) => (
+          <button key={v} onClick={() => setTab(v)} className={cn("h-7 rounded-md px-2.5 text-[12px] transition-colors", tab === v ? "border border-fg bg-surface-2 font-semibold" : "border border-transparent text-fg-2 hover:bg-surface-2")}>
+            {t}
+          </button>
+        ))}
+      </div>
+      <div className="mt-2">
+        {tab === "flow" ? (
+          <CodeBlock file="claims-agent.ts · @wrapbox/sdk + @wrapbox/verify" note="real · covered by SDK tests" lang="ts" code={claimsSrc.replace(/^\/\*[\s\S]*?\*\/\n/, "")} maxH={340} />
+        ) : (
+          <CodeBlock file="frameworks.ts · same client, OpenAI · Anthropic · LangGraph" note="one policy contract" lang="ts" code={frameworksSrc.replace(/^\/\*[\s\S]*?\*\/\n/, "")} maxH={340} />
+        )}
+      </div>
+    </div>
   );
 }
 
