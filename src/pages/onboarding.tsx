@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, ArrowRight, Building2, Check, ChevronDown, ChevronRight, CircleCheck, FileCode2, KeyRound, Loader2, Lock, Mail, Play, ShieldCheck, Terminal as TerminalIcon, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Building2, Check, Wand2, Trash2, ChevronDown, ChevronRight, CircleCheck, FileCode2, KeyRound, Loader2, Lock, Mail, Play, ShieldCheck, Terminal as TerminalIcon, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AGENTS, CATEGORIES, METHODS, agentById, type CategoryId, type Decision } from "../data/agents";
 import { INITIAL_RULES, orgSlug, toYaml, type Rule } from "../data/contract";
@@ -9,6 +9,7 @@ import { CodeBlock, InlineCmd, json } from "../components/code";
 import { SlackCard } from "../components/insight";
 import { WrapboxLogo } from "../components/logo";
 import { Avatar, Button, Card, Chip, CopyButton, DecisionPill, Logo, Modal, Segmented, Toggle, cn } from "../components/ui";
+import { RuleBuilder } from "./contract";
 import { approveWithPasskey } from "../lib/actions";
 import { sha256 } from "../lib/permit";
 import { go } from "../lib/router";
@@ -456,6 +457,8 @@ export function AdminSetup() {
   // Step 3
   const [packs, setPacks] = useState<string[]>(PACKS.filter((p) => p.rec).map((p) => p.id).concat(["claims", "commercial", "browser"]));
   const [mode, setMode] = useState<"observe" | "enforce">("enforce");
+  const [customRules, setCustomRules] = useState<Rule[]>([]);
+  const [ruleDrawer, setRuleDrawer] = useState(false);
   const [autoMax, setAutoMax] = useState(500);
   const [reviewMax, setReviewMax] = useState(5000);
   // Step 4
@@ -473,11 +476,12 @@ export function AdminSetup() {
   // Step 7
   const [tests, setTests] = useState<{ key: string; stage: number; v?: Verdict }[]>([]);
 
-  const rules: Rule[] = INITIAL_RULES.filter((r) => PACKS.some((p) => packs.includes(p.id) && p.rules.includes(r.id))).map((r) => {
+  const packRules: Rule[] = INITIAL_RULES.filter((r) => PACKS.some((p) => packs.includes(p.id) && p.rules.includes(r.id))).map((r) => {
     const x: Rule = { ...r, mode: mode === "observe" ? "observe" : undefined };
     if (r.id === "payments.refund" && r.tiers) x.tiers = [{ ...r.tiers[0], max: autoMax }, { ...r.tiers[1], max: reviewMax }, r.tiers[2]];
     return x;
   });
+  const rules: Rule[] = [...packRules, ...customRules.map((r) => ({ ...r, mode: mode === "observe" ? ("observe" as const) : undefined }))];
   const ghOrg = (domain || "wrapbox").split(".")[0].replace(/[^a-z0-9-]/gi, "-").toLowerCase();
   const blocks = BLOCKS.filter((b) => b.cats.some((c) => cats.includes(c)));
   const linkedCount = blocks.filter((b) => linked[b.id] === "done").length;
@@ -794,6 +798,34 @@ export function AdminSetup() {
               })}
             </div>
             <div className="mt-5 rounded-xl border border-line p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="min-w-[240px] flex-1">
+                  <div className="text-[13px] font-semibold">A rule of your own</div>
+                  <p className="mt-0.5 text-[12px] text-fg-2">Packs cover the usual ones. Say anything else in plain English — “refunds over $500 need the payments manager” — and check the rule it drafts before it joins the contract.</p>
+                </div>
+                <Button variant="primary" onClick={() => setRuleDrawer(true)}>
+                  <Wand2 className="size-3.5" /> Describe a rule
+                </Button>
+              </div>
+              {!!customRules.length && (
+                <div className="mt-3 space-y-1.5 border-t border-line pt-3">
+                  {customRules.map((r) => (
+                    <div key={r.id} className="flex items-center gap-2.5 rounded-lg bg-surface-2 px-3 py-2">
+                      <Chip>your rule</Chip>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[12.5px] font-medium">{r.title}</span>
+                        <span className="block truncate font-mono text-[11px] text-fg-3">{r.id}</span>
+                      </span>
+                      <button onClick={() => setCustomRules((x) => x.filter((y) => y.id !== r.id))} className="grid size-7 place-items-center rounded-lg text-fg-3 hover:bg-surface-3 hover:text-block" aria-label={`Remove ${r.title}`}>
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 rounded-xl border border-line p-4">
               <div className="text-[13px] font-semibold">How to roll it out</div>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {(
@@ -829,6 +861,18 @@ export function AdminSetup() {
           <div className="min-w-0 xl:sticky xl:top-6 self-start">
             <CodeBlock file="wrapbox.yaml" note={mode === "observe" ? "observe mode" : "enforce"} lang="yaml" code={toYaml(rules, 1, orgSlug(domain, company))} numbers maxH={640} />
           </div>
+          <RuleBuilder
+            open={ruleDrawer}
+            initial={null}
+            startMode="describe"
+            existingIds={rules.map((r) => r.id)}
+            onClose={() => setRuleDrawer(false)}
+            onSave={(r) => {
+              setCustomRules((x) => [...x, r]);
+              setRuleDrawer(false);
+              toast("Rule added to your contract", r.title, "allow");
+            }}
+          />
         </div>
       )}
 
