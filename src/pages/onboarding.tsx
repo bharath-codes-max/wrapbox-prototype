@@ -170,8 +170,8 @@ const CONTROL: Record<Adapter, string> = {
   a2a: "Delegation gateway (attenuated token)",
 };
 const RUNS_ON: Record<Surface, string> = {
-  terminal: "Developer terminal",
-  ide: "Developer IDE",
+  terminal: "Developer laptop / terminal",
+  ide: "Developer laptop / IDE",
   github: "Hosted runner",
   graph: "Your service",
   chat: "MCP clients",
@@ -179,27 +179,67 @@ const RUNS_ON: Record<Surface, string> = {
   browser: "Browser runtime",
   delegation: "Agent runtime",
 };
-const DEPLOY: Record<Adapter, string> = {
-  claude: "MDM push / bootstrap command",
-  cursor: "MDM push / bootstrap command",
-  codex: "MDM push / bootstrap command",
-  gemini: "MDM push / bootstrap command",
-  copilot: "MDM push / bootstrap command",
-  runtime: "MDM push / bootstrap command",
-  mcp: "Point client at the gateway URL",
-  "sdk-py": "SDK dependency + service permit",
-  "sdk-ts": "SDK dependency + service permit",
-  adk: "SDK dependency + service permit",
-  cloud: "Repo MCP config + task token",
-  connector: "Platform connector import",
-  browser: "Wrap the executor",
-  a2a: "Delegation SDK registration",
+// MDM applies only to laptop-class hook adapters. Copilot hooks are repo-scoped; cloud,
+// MCP, SDK and browser deploy through their own mechanisms — so MDM is never offered there.
+const MDM_ADAPTERS = new Set<Adapter>(["claude", "cursor", "codex", "gemini", "runtime"]);
+
+/** How Wrapbox confirms a genuine connection for each adapter (the check-in / heartbeat). */
+const HEARTBEAT: Record<Adapter, string> = {
+  claude: "The managed hook registers this device with Wrapbox the first time the agent runs, then heartbeats.",
+  cursor: "The Cursor hook checks in with Wrapbox on the agent's first run, then heartbeats.",
+  codex: "The ~/.codex hook registers the device on first run, then heartbeats.",
+  gemini: "The BeforeTool hook checks in on first run, then heartbeats.",
+  copilot: "The .github/hooks adapter registers the repo on the first agent run.",
+  runtime: "The endpoint runtime registers the device when it starts, then heartbeats.",
+  cloud: "The hosted runner's first gateway call registers the task with Wrapbox.",
+  mcp: "Wrapbox sees the client's first tools/list through the gateway.",
+  "sdk-ts": "The target service's first permit verification registers the integration.",
+  "sdk-py": "The target service's first permit verification registers the integration.",
+  adk: "The first before_tool_callback registers the integration.",
+  connector: "The platform's first authorized action call registers the connector.",
+  browser: "The controlled executor registers on its first authorized action.",
+  a2a: "The first delegated handoff registers the peer.",
 };
-const DRANK: Record<Decision, number> = { ALLOW: 1, CONSTRAIN: 2, REVIEW: 3, BLOCK: 4 };
-/** The most illustrative action for an agent: the strongest declared gate of its scenario. */
-function probeGate(a: Agent): Gate {
-  const scen = SCENARIOS[a.scenario ?? a.category] ?? SCENARIOS[a.category];
-  return [...scen.gates].sort((x, y) => DRANK[y.decision] - DRANK[x.decision])[0];
+
+export interface DeployOption {
+  key: string;
+  label: string;
+  desc: string;
+  cmd?: string;
+}
+/** The real deployment choices for an agent — MDM only where the vendor supports it. */
+function deployOptions(a: Agent): DeployOption[] {
+  if (MDM_ADAPTERS.has(a.adapter))
+    return [
+      { key: "mdm", label: "Push with MDM", desc: "Company IT deploys the Wrapbox config to managed laptops via Jamf, Intune or Kandji." },
+      { key: "manual", label: "Manual install", desc: "Run once on the device.", cmd: a.install },
+    ];
+  switch (a.adapter) {
+    case "copilot":
+      return [{ key: "repo", label: "Add to repositories", desc: "Commit the hook to .github/hooks, or ship it from your org template repo.", cmd: a.install }];
+    case "cloud":
+      return [{ key: "repo", label: "Configure in repository", desc: "Repo → Settings → Copilot → MCP, with a task-scoped token for the runner.", cmd: a.install }];
+    case "mcp":
+      return [{ key: "gateway", label: "Point client at the gateway", desc: "Swap the upstream URL for the Wrapbox gateway URL — every MCP client uses it.", cmd: a.install }];
+    case "sdk-ts":
+    case "sdk-py":
+    case "adk":
+      return [{ key: "sdk", label: "Add the Wrapbox SDK", desc: "Add the dependency and wrap each tool executor; the service verifies the permit.", cmd: a.install }];
+    case "browser":
+      return [{ key: "wrap", label: "Wrap the executor", desc: "Route consequential actions through the Wrapbox controlled executor.", cmd: a.install }];
+    case "connector":
+      return [{ key: "connector", label: "Import the connector", desc: "Import the Wrapbox connector and call it from the platform's agent actions.", cmd: a.install }];
+    default:
+      return [{ key: "manual", label: "Install", desc: "", cmd: a.install }];
+  }
+}
+/** The Wrapbox adapter version reported at check-in (same across vendors). */
+const ADAPTER_VER = "1.4.2";
+/** A registration identifier Wrapbox assigns when the integration first checks in. */
+function registrationId(a: Agent): string {
+  const prefix = MDM_ADAPTERS.has(a.adapter) || a.adapter === "copilot" ? "device" : a.adapter === "cloud" ? "runner" : a.adapter === "mcp" ? "client" : a.surface === "graph" ? "svc" : "node";
+  const hex = Array.from(crypto.getRandomValues(new Uint8Array(3)), (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${prefix}-${hex}`;
 }
 
 /* What a real read-only GitHub App sees: the small config files each agent leaves behind.
@@ -528,9 +568,10 @@ export function AdminSetup() {
   const [ruleDrawer, setRuleDrawer] = useState(false);
   const [autoMax, setAutoMax] = useState(500);
   const [reviewMax, setReviewMax] = useState(5000);
-  // Step 4 — connection state lives in the store (persists on reload); busy/probeMs are per-session.
+  // Step 4 — the connected fact lives in the store (persists on reload); busy/conn are per-session.
   const [busy, setBusy] = useState<Record<string, boolean>>({});
-  const [probeMs, setProbeMs] = useState<Record<string, number>>({});
+  // Per-agent connection lifecycle: configured (deployed, awaiting check-in) → connected.
+  const [conn, setConn] = useState<Record<string, { stage: "configured" | "connected"; method: string; device: string; at: number }>>({});
   const [openBlock, setOpenBlock] = useState<string>("coding");
   // Step 5
   const [channels, setChannels] = useState({ slack: true, teams: false, email: true });
@@ -605,25 +646,28 @@ export function AdminSetup() {
     setCats([...new Set(DISCOVERED.map((d) => d.cat))]);
   }
 
-  // Verify one discovered agent: SIMULATE attaching the vendor adapter, then run its
-  // representative action through the REAL evaluator and persist the connection.
-  async function verifyAgent(id: string) {
+  // Deploy one discovered agent's integration, then wait for it to check in.
+  // Real production model: config is deployed (MDM / repo / manual), the adapter registers
+  // with Wrapbox on first run, and the connection is confirmed on that heartbeat. The
+  // external transport is simulated internally; no policy decisions happen on this page.
+  async function deploy(id: string, method: string) {
     const a = regById(id);
     if (!a) return;
     setBusy((b) => ({ ...b, [id]: true }));
-    await sleep(600); // SIMULATED: installing / attaching the vendor adapter
-    const act = actOf(probeGate(a));
-    const t0 = performance.now();
-    const v = evaluateNow(act, id); // REAL: same evaluator as runtime + Step 7
-    const ms = performance.now() - t0;
+    setConn((c) => ({ ...c, [id]: { stage: "configured", method, device: "", at: Date.now() } }));
+    await sleep(1100); // awaiting the integration's first check-in
+    const device = registrationId(a);
+    setConn((c) => ({ ...c, [id]: { stage: "connected", method, device, at: Date.now() } }));
     const m = METHODS[a.category].find((x) => x.recommended) ?? METHODS[a.category][0];
-    connectAgent(id, m.id, m.assurance); // persists in the store
-    setProbeMs((p) => ({ ...p, [id]: ms }));
+    connectAgent(id, method, m.assurance); // persists the connected fact
     setBusy((b) => ({ ...b, [id]: false }));
-    toast(`${a.name} verified`, `${v.decision} · ${v.rule}`, v.decision === "ALLOW" ? "allow" : v.decision === "BLOCK" ? "block" : "review");
+    toast(`${a.name} connected`, `checked in · ${device}`, "allow");
   }
-  async function verifyAll(b: (typeof BLOCKS)[number]) {
-    for (const d of supportedIn(b)) await verifyAgent(d.id);
+  async function deployAll(b: (typeof BLOCKS)[number]) {
+    for (const d of supportedIn(b)) {
+      const a = regById(d.id);
+      if (a && !connectedMap[d.id]) await deploy(d.id, deployOptions(a)[0].key);
+    }
   }
 
   const TESTS: { key: string; label: string; agentId: string; gate: Gate }[] = [
@@ -1090,7 +1134,7 @@ export function AdminSetup() {
             n={4}
             total={total}
             title="Connect your agents"
-            sub="Each platform already exposes a place to intercept actions — a hook, a tool wrapper, an MCP endpoint, a connector. Wrapbox plugs into the one it has. Expand a block, follow it, press Verify."
+            sub="Choose how each discovered agent connects to Wrapbox — pushed by IT with MDM, or installed on the device. Wrapbox marks an integration connected when it checks in. Policy decisions are proven later, in Go live."
           />
           <div className="mb-4 flex items-center gap-3">
             <div className="h-1.5 flex-1 rounded-full bg-surface-3 overflow-hidden">
@@ -1133,14 +1177,13 @@ export function AdminSetup() {
                   {open && (
                     <div className="border-t border-line px-4 py-4 space-y-3">
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <p className="min-w-[240px] flex-1 text-[12px] text-fg-3">Discovered from your environment. One bootstrap detects each agent and configures its native integration — installing on the vendor is simulated; each verified decision is real.</p>
-                        <Button size="sm" onClick={() => verifyAll(b)} disabled={blockBusy || !supported.length}>
-                          {blockBusy ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />} Verify all
+                        <p className="min-w-[240px] flex-1 text-[12px] text-fg-3">Discovered from your environment. Deploy each integration through its native mechanism; Wrapbox marks it connected when it checks in.</p>
+                        <Button size="sm" onClick={() => deployAll(b)} disabled={blockBusy || !supported.length}>
+                          {blockBusy ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />} Set up all
                         </Button>
                       </div>
-                      {b.id === "sdk" && <SdkPanel />}
                       {found.map((d) => (
-                        <IntegrationRow key={d.id} d={d} connected={!!connectedMap[d.id]} busy={!!busy[d.id]} ms={probeMs[d.id]} onVerify={() => verifyAgent(d.id)} />
+                        <IntegrationRow key={d.id} d={d} conn={conn[d.id]} connected={!!connectedMap[d.id]} busy={!!busy[d.id]} onDeploy={(method) => deploy(d.id, method)} />
                       ))}
                     </div>
                   )}
@@ -1384,7 +1427,7 @@ export function AdminSetup() {
                   [true, `Workspace “${company}” · ${idp ?? "SSO"} · ${region.toUpperCase()}`],
                   [true, `${cats.length} agent platforms selected`],
                   [true, `Contract · ${rules.length} rules · ${mode === "observe" ? "observe 7 days, then enforce" : "enforcing"}`],
-                  [connectedCount > 0, `${connectedCount} of ${agentTargets.length} integrations verified`],
+                  [connectedCount > 0, `${connectedCount} of ${agentTargets.length} integrations connected`],
                   [true, `Approvals via ${Object.entries(channels).filter(([, v]) => v).map(([k]) => k).join(", ")} · passkey ${passkeyReq ? "required" : "optional"}`],
                   [invited, invited ? `${getState().members.length} people in the directory · laptops rolling out` : "Team not invited yet"],
                 ] as const
@@ -1403,66 +1446,20 @@ export function AdminSetup() {
   );
 }
 
-/* How Wrapbox wraps a customer's own agent. One governance interface (@wrapbox/sdk) sits
-   around whatever framework the agent uses; the target service verifies the permit
-   (@wrapbox/verify). The code below is the real SDK example, rendered verbatim. */
-function SdkPanel() {
-  const [tab, setTab] = useState<"flow" | "frameworks">("flow");
-  const steps: [string, string, string][] = [
-    ["1", "Before the action", "The agent calls wrapbox.guard(effect, args) — one line around your existing tool."],
-    ["2", "Wrapbox decides", "The same evaluator returns ALLOW / REVIEW / BLOCK from your published contract."],
-    ["3", "Permit on approval", "ALLOW (or human sign-off) mints a signed, single-use permit bound to the exact args."],
-    ["4", "Target service verifies", "@wrapbox/verify checks signature, expiry, args and single-use before it executes."],
-  ];
-  return (
-    <div className="rounded-xl border border-line bg-surface-2 p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Chip tone="accent">@wrapbox/sdk</Chip>
-        <Chip tone="accent">@wrapbox/verify</Chip>
-        <span className="text-[12px] text-fg-3">One governance layer around any agent — your framework stays as-is.</span>
-      </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        {steps.map(([n, t, d]) => (
-          <div key={n} className="rounded-lg border border-line bg-surface p-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="grid size-4 place-items-center rounded-full bg-ink text-ink-fg text-[10px] font-semibold">{n}</span>
-              <span className="text-[12px] font-semibold">{t}</span>
-            </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-fg-2">{d}</p>
-          </div>
-        ))}
-      </div>
-      <div className="mt-3 flex items-center gap-1 rounded-lg border border-line p-1 w-fit">
-        {(
-          [
-            ["flow", "Agent + service"],
-            ["frameworks", "Any framework"],
-          ] as const
-        ).map(([v, t]) => (
-          <button key={v} onClick={() => setTab(v)} className={cn("h-7 rounded-md px-2.5 text-[12px] transition-colors", tab === v ? "border border-fg bg-surface-2 font-semibold" : "border border-transparent text-fg-2 hover:bg-surface-2")}>
-            {t}
-          </button>
-        ))}
-      </div>
-      <div className="mt-2">
-        {tab === "flow" ? (
-          <CodeBlock file="claims-agent.ts · @wrapbox/sdk + @wrapbox/verify" note="real · covered by SDK tests" lang="ts" code={claimsSrc.replace(/^\/\*[\s\S]*?\*\/\n/, "")} maxH={340} />
-        ) : (
-          <CodeBlock file="frameworks.ts · same client, OpenAI · Anthropic · LangGraph" note="one policy contract" lang="ts" code={frameworksSrc.replace(/^\/\*[\s\S]*?\*\/\n/, "")} maxH={340} />
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* One discovered integration: its real control point, a per-agent Verify that runs the
-   canonical evaluator, and the vendor-native setup as secondary detail. */
-function IntegrationRow({ d, connected, busy, ms, onVerify }: { d: Discovered; connected: boolean; busy: boolean; ms?: number; onVerify: () => void }) {
+/* One discovered integration on the setup page: identity, where it runs, the real control
+   point, the enterprise deployment options (MDM / manual / native), and the connection
+   lifecycle — Not connected → Setup configured → Connected (on a real check-in). No policy
+   decisions are made here; that proof lives in Step 7. Native config is secondary detail. */
+type ConnState = { stage: "configured" | "connected"; method: string; device: string; at: number } | undefined;
+function IntegrationRow({ d, conn, connected, busy, onDeploy }: { d: Discovered; conn: ConnState; connected: boolean; busy: boolean; onDeploy: (method: string) => void }) {
   const [setup, setSetup] = useState(false);
   const a = regById(d.id);
-  // Recompute the verdict live so it always reflects the current published contract.
-  const v = a && connected ? evaluateNow(actOf(probeGate(a)), d.id) : null;
-  const gate = a ? probeGate(a) : null;
+  const isConnected = connected || conn?.stage === "connected";
+  const configuring = busy || conn?.stage === "configured";
+  const isSdk = !!a && (a.adapter === "sdk-ts" || a.adapter === "sdk-py" || a.adapter === "adk");
+  const options = a ? deployOptions(a) : [];
+  const methodLabel = options.find((o) => o.key === conn?.method)?.label ?? "manual";
+
   return (
     <div className="rounded-xl border border-line p-3.5">
       <div className="flex flex-wrap items-center gap-3">
@@ -1472,56 +1469,89 @@ function IntegrationRow({ d, connected, busy, ms, onVerify }: { d: Discovered; c
             <span className="text-[13px] font-semibold">{a?.name ?? d.agent}</span>
             {a && <span className="text-[11.5px] text-fg-3">{a.vendor}</span>}
           </div>
-          <div className="mt-0.5 text-[12px] text-fg-2">{a ? `${CONTROL[a.adapter]} · ${RUNS_ON[a.surface]}` : "No Wrapbox adapter yet"}</div>
+          <div className="mt-0.5 text-[12px] text-fg-2">{a ? `${RUNS_ON[a.surface]} · ${CONTROL[a.adapter]}` : "No Wrapbox adapter yet"}</div>
           <div className="mt-0.5 font-mono text-[11px] text-fg-3 truncate">
             Found in {d.repos.length} {d.repos.length === 1 ? "repo" : "repos"} · {[...d.paths].join(" · ")}
           </div>
         </div>
-        {!a ? <Chip>Discovered · setup unavailable</Chip> : connected ? <Chip tone="allow"><Check className="size-3" /> Connected</Chip> : <Chip>Not connected</Chip>}
+        {!a ? (
+          <Chip>Discovered · setup unavailable</Chip>
+        ) : isConnected ? (
+          <Chip tone="allow">
+            <Check className="size-3" /> Connected
+          </Chip>
+        ) : configuring ? (
+          <Chip tone="review">Setup configured</Chip>
+        ) : (
+          <Chip>Not connected</Chip>
+        )}
       </div>
 
+      {a && !isConnected && !configuring && (
+        <div className="mt-3 space-y-2">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {options.map((o) => (
+              <div key={o.key} className="rounded-lg border border-line p-3">
+                <div className="text-[12.5px] font-semibold">{o.label}</div>
+                <p className="mt-0.5 text-[11.5px] leading-relaxed text-fg-2">{o.desc}</p>
+                {o.cmd && <div className="mt-2"><InlineCmd cmd={o.cmd} /></div>}
+                <Button size="sm" className="mt-2" variant={o.key === "mdm" ? "primary" : "secondary"} onClick={() => onDeploy(o.key)}>
+                  {o.key === "mdm" ? <Building2 className="size-3.5" /> : <Play className="size-3.5" />}
+                  {o.key === "mdm" ? "Push with MDM" : "Mark as set up"}
+                </Button>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-fg-3">Confirmed by: {HEARTBEAT[a.adapter]}</p>
+        </div>
+      )}
+
+      {a && configuring && (
+        <div className="mt-3 flex items-center gap-2.5 rounded-lg border border-line bg-surface-2 px-3.5 py-3 text-[12.5px]">
+          <Loader2 className="size-3.5 animate-spin text-fg-2" />
+          <span>Setup configured via {methodLabel} — awaiting the integration's first check-in…</span>
+        </div>
+      )}
+
+      {a && isConnected && (
+        <div className="mt-3 rounded-lg border border-allow/40 bg-surface-2 px-3.5 py-3">
+          <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+            <CircleCheck className="size-4 text-allow" />
+            <span className="font-medium">Checked in</span>
+            <span className="font-mono text-[11.5px] text-fg-2">{d.id}@{conn?.device ?? "device"} · Wrapbox adapter {ADAPTER_VER}</span>
+            <span className="ml-auto text-[11px] text-fg-3">{conn ? "just now" : "connected"}</span>
+          </div>
+          <p className="mt-1 text-[11.5px] text-fg-3">{HEARTBEAT[a.adapter]}</p>
+        </div>
+      )}
+
       {a && (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button size="sm" variant={connected ? "secondary" : "primary"} onClick={onVerify} disabled={busy}>
-            {busy ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
-            {busy ? "Verifying…" : connected ? "Verify again" : "Verify connection"}
-          </Button>
+        <div className="mt-3">
           <button onClick={() => setSetup((s) => !s)} className="text-[12px] font-medium text-fg-2 underline underline-offset-4 hover:text-fg">
             {setup ? "Hide setup details" : "View setup details"}
           </button>
         </div>
       )}
 
-      {v && gate && (
-        <div className="mt-3 rounded-xl border border-line bg-surface-2 p-3.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Chip>adapter simulated</Chip>
-            <Chip tone="allow">real policy decision</Chip>
-            {ms != null && <span className="ml-auto font-mono text-[11px] text-fg-3">evaluated in {ms.toFixed(2)} ms</span>}
-          </div>
-          <div className="mt-2 text-[12.5px]">{gate.display}</div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <DecisionPill d={v.decision} size="sm" />
-            {v.observed && <span className="text-[11.5px] text-fg-3">observe mode — would {v.observed}</span>}
-            <span className="font-mono text-[11.5px] text-fg-3">rule {v.rule}</span>
-          </div>
-          <p className="mt-1.5 text-[12px] text-fg-2">{v.reason}</p>
-        </div>
-      )}
-
       {a && setup && (
-        <div className="mt-3 space-y-2 border-t border-line pt-3">
+        <div className="mt-2 space-y-2 border-t border-line pt-3">
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-fg-3">
-            <span>Deployment · {DEPLOY[a.adapter]}</span>
-            <span>Events · {a.hookEvents.join(", ")}</span>
+            <span>Deploy · {options.map((o) => o.label).join(" or ")}</span>
+            {!!a.hookEvents.length && <span>Events · {a.hookEvents.join(", ")}</span>}
             {a.docs && !a.docs.includes(" ") && (
               <a href={`https://${a.docs}`} target="_blank" rel="noreferrer" className="underline underline-offset-4 hover:text-fg-2">
                 Vendor documentation ↗
               </a>
             )}
           </div>
-          <InlineCmd cmd={a.install} />
-          <CodeBlock file={a.file} note={a.fileNote} lang={a.lang} code={a.snippet} maxH={240} />
+          {isSdk ? (
+            <>
+              <CodeBlock file="your agent · @wrapbox/sdk" note="real · covered by SDK tests" lang="ts" code={claimsSrc.replace(/^\/\*[\s\S]*?\*\/\n/, "")} maxH={260} />
+              <CodeBlock file="same client · OpenAI · Anthropic · LangGraph" lang="ts" code={frameworksSrc.replace(/^\/\*[\s\S]*?\*\/\n/, "")} maxH={220} />
+            </>
+          ) : (
+            <CodeBlock file={a.file} note={a.fileNote} lang={a.lang} code={a.snippet} maxH={240} />
+          )}
         </div>
       )}
     </div>
