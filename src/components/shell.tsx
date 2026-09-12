@@ -584,7 +584,7 @@ export function Shell({ current, children, focus }: { current: string; children:
     <div className="flex h-dvh flex-col overflow-hidden bg-bg text-fg">
       <Topbar onMenu={() => setMenu(true)} />
       {workspace === "fresh" && (
-        <div className="flex items-center justify-center gap-2 h-8 bg-[#fff7e6] dark:bg-[#2c2010] text-[12px] text-[#8a5a00] dark:text-[#f4b453] border-b border-[#f2dfb3] dark:border-[#3b2c14]">
+        <div className="flex items-center justify-center gap-2 h-8 bg-[#eef4ff] dark:bg-[#101a2e] text-[12px] text-[#1f4fa8] dark:text-[#8fb6ff] border-b border-[#cddffc] dark:border-[#1c2b47]">
           <span className="size-1.5 rounded-full bg-current" />
           Fresh workspace — every number, decision and person here comes from what you do.
           <button onClick={() => switchWorkspace("demo")} className="ml-1 underline underline-offset-2 font-medium">
