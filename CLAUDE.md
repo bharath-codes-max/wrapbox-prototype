@@ -41,3 +41,39 @@ AI-platform and governance leaders at large technology and financial companies.
 - Say plainly in any hand-off what is real and what is simulated.
 - Secrets (for example `OPENAI_API_KEY`) live only in server environment variables, never in the
   browser, the bundle, logs, rules or YAML.
+
+## Mandatory architecture — one normalized Rule
+
+```
+Describe  →  Normalized Rule  →  Build
+Build    ↔   Normalized Rule  ↔   Code / YAML
+             Normalized Rule  →   Tester
+             Normalized Rule  →   Runtime evaluator
+```
+
+There is exactly ONE canonical normalized Rule. It is the source of truth for every surface.
+
+**1. Describe → Build (one-way).** Describe drafts in natural language. On **Use this draft**, every
+supported semantic the drafter extracted must reach the normalized Rule and be represented in Build:
+effect, environment, agents, path/command/destination, `requires`, `forbid`, decision, `escalations`,
+approvers, quorum, `permit` (ttl, single-use, bindings), `failClosed`, and any other supported field.
+Never replace an extracted value with a default, never silently drop a field, never hard-code a value
+to make the UI look right. Editing Build afterwards must not rewrite the author's sentence.
+
+**2. Build ↔ Code (two-way).** Both edit the same normalized Rule. A Build change re-derives the YAML;
+a valid YAML change parses back into the Rule and Build follows it. Neither surface may keep its own
+simplified copy of the policy.
+
+**3. Tester.** Runs on the same normalized Rule, through the same `checkRule()` / `evaluate()` the
+runtime uses. Its inputs are derived from what the rule actually requires — a destination condition
+shows a destination field, `pr.approvals` shows a PR-approvals field, a permit TTL shows a permit-age
+field. Never show unrelated or invented test inputs.
+
+**4. Semantic consistency, not identical wording.** Presentation may differ across Describe, Build and
+Code; the policy meaning may not. "Production deployments require SRE approval" ≡ `env: production,
+decision: REVIEW, approvers: oncall-sre`.
+
+**5. No silent data loss.** For any change touching Describe, Build, Code, YAML or the Tester, verify:
+Describe → Use this draft → Build preserves every supported semantic; Build → Code and Code → Build
+preserve them; Rule → YAML → Rule is semantically identical; the Tester evaluates that same Rule.
+A screen that looks correct is not evidence — check the Rule object and the YAML.
