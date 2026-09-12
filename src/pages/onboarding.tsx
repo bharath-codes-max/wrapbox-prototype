@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, ChevronRight, CircleCheck, FileCode2, KeyRound, Loader2, Lock, Mail, Play, ShieldCheck, Terminal as TerminalIcon, X } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { ArrowLeft, ArrowRight, Building2, Check, ChevronDown, ChevronRight, CircleCheck, FileCode2, KeyRound, Loader2, Lock, Mail, Play, ShieldCheck, Terminal as TerminalIcon, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AGENTS, CATEGORIES, METHODS, agentById, type CategoryId, type Decision } from "../data/agents";
 import { INITIAL_RULES, toYaml, type Rule } from "../data/contract";
 import { PEOPLE } from "../data/people";
@@ -314,6 +314,108 @@ function GitHubInstall({ open, onClose, org, onDone }: { open: boolean; onClose:
   );
 }
 
+/* Sample companies for the demo. These are invented — using a real company here would imply
+   they are a Wrapbox customer. Real brands appear only where they are true: the agents and
+   tools you connect to. */
+interface Sample {
+  name: string;
+  domain: string;
+  industry: string;
+  people: string;
+  region: "us" | "eu" | "in";
+  hue: number;
+  shape: "square" | "circle" | "tag";
+  mark: string;
+}
+const SAMPLES: Sample[] = [
+  { name: "Northwind Logistics", domain: "northwind.co", industry: "Freight & supply chain", people: "2,400 people", region: "us", hue: 214, shape: "tag", mark: "N" },
+  { name: "Meridian Health", domain: "meridianhealth.org", industry: "Hospital network", people: "8,100 people", region: "us", hue: 172, shape: "circle", mark: "M" },
+  { name: "Kestrel Bank", domain: "kestrelbank.com", industry: "Retail banking", people: "12,000 people", region: "eu", hue: 248, shape: "square", mark: "K" },
+  { name: "Lumen Retail", domain: "lumenretail.com", industry: "E-commerce", people: "3,300 people", region: "eu", hue: 28, shape: "circle", mark: "L" },
+  { name: "Vantage Insurance", domain: "vantage-ins.com", industry: "Claims & underwriting", people: "5,600 people", region: "us", hue: 198, shape: "square", mark: "V" },
+  { name: "Zephyr Mobility", domain: "zephyrmobility.io", industry: "Ride hailing", people: "1,900 people", region: "in", hue: 156, shape: "tag", mark: "Z" },
+  { name: "Orchid Pharma", domain: "orchidpharma.in", industry: "Pharmaceuticals", people: "4,200 people", region: "in", hue: 322, shape: "circle", mark: "O" },
+  { name: "Beacon Energy", domain: "beaconenergy.com", industry: "Utilities & grid", people: "7,400 people", region: "eu", hue: 42, shape: "tag", mark: "B" },
+  { name: "Cobalt Software", domain: "cobalt.dev", industry: "B2B SaaS", people: "640 people", region: "us", hue: 232, shape: "square", mark: "C" },
+  { name: "Saffron Foods", domain: "saffronfoods.in", industry: "Food & FMCG", people: "2,800 people", region: "in", hue: 14, shape: "circle", mark: "S" },
+];
+
+function CompanyMark({ c, size = 32 }: { c: Sample; size?: number }) {
+  const id = c.domain.replace(/[^a-z]/g, "");
+  return (
+    <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden="true" className="shrink-0">
+      <defs>
+        <linearGradient id={`cm-${id}`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor={`hsl(${c.hue} 78% 58%)`} />
+          <stop offset="1" stopColor={`hsl(${c.hue + 24} 70% 38%)`} />
+        </linearGradient>
+      </defs>
+      {c.shape === "circle" ? (
+        <circle cx="20" cy="20" r="20" fill={`url(#cm-${id})`} />
+      ) : c.shape === "tag" ? (
+        <path d="M0 10a10 10 0 0 1 10-10h20a10 10 0 0 1 10 10v20a10 10 0 0 1-10 10H10A10 10 0 0 1 0 30Z" fill={`url(#cm-${id})`} />
+      ) : (
+        <rect width="40" height="40" rx="7" fill={`url(#cm-${id})`} />
+      )}
+      <text x="20" y="21" textAnchor="middle" dominantBaseline="central" fill="#fff" style={{ font: `700 ${c.shape === "circle" ? 17 : 18}px var(--font-brand)` }}>
+        {c.mark}
+      </text>
+    </svg>
+  );
+}
+
+/** Company name field with a dropdown of sample companies to try. */
+function CompanyField({ company, onPick, onType }: { company: string; onPick: (c: Sample) => void; onType: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const k = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    window.addEventListener("mousedown", k);
+    return () => window.removeEventListener("mousedown", k);
+  }, [open]);
+  const picked = SAMPLES.find((x) => x.name === company);
+  return (
+    <div ref={ref} className="relative">
+      <span className="text-[12px] font-medium">Company name</span>
+      <div className={cn("mt-1 flex h-10 items-center gap-2 rounded-xl border bg-surface pl-2.5 pr-1", open ? "border-fg-3" : "border-line")}>
+        {picked ? <CompanyMark c={picked} size={22} /> : <Building2 className="size-4 shrink-0 text-fg-3" />}
+        <input value={company} onChange={(e) => onType(e.target.value)} className="min-w-0 flex-1 bg-transparent text-[13.5px] outline-none" />
+        <button onClick={() => setOpen(!open)} aria-label="Choose a sample company" aria-expanded={open} className="grid size-8 shrink-0 place-items-center rounded-lg text-fg-3 hover:bg-surface-2 hover:text-fg">
+          <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} />
+        </button>
+      </div>
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute left-0 right-0 top-[72px] z-30 max-h-[320px] overflow-y-auto scroll-thin rounded-xl border border-line bg-surface shadow-float">
+            <div className="px-3 pt-2.5 pb-1 eyebrow !text-[10.5px]">Try a sample company</div>
+            {SAMPLES.map((c) => (
+              <button
+                key={c.domain}
+                onClick={() => {
+                  onPick(c);
+                  setOpen(false);
+                }}
+                className={cn("flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors", company === c.name ? "bg-surface-2" : "hover:bg-surface-2")}
+              >
+                <CompanyMark c={c} size={30} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-semibold">{c.name}</span>
+                  <span className="block truncate text-[11px] text-fg-3">
+                    {c.industry} · {c.people} · {c.domain}
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-full bg-surface-3 px-2 py-0.5 text-[10px] font-semibold uppercase text-fg-2">{c.region}</span>
+              </button>
+            ))}
+            <div className="border-t border-line px-3 py-2 text-[11.5px] text-fg-3">Sample companies for the demo — or type your own name above.</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 const ADMIN_STEPS = [
   { t: "Create workspace", s: "SSO, company, data region" },
   { t: "Discover agents", s: "Find what already runs" },
@@ -477,7 +579,15 @@ export function AdminSetup() {
             </motion.div>
           )}
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <Field label="Company name" value={company} onChange={setCompany} />
+            <CompanyField
+              company={company}
+              onType={setCompany}
+              onPick={(c) => {
+                setCompany(c.name);
+                setDomain(c.domain);
+                setRegion(c.region);
+              }}
+            />
             <Field label="Email domain (auto-join for SSO users)" value={domain} onChange={setDomain} />
             <div className="sm:col-span-2">
               <div className="text-[12px] font-medium mb-1.5">Data region — where decisions and evidence are stored</div>
