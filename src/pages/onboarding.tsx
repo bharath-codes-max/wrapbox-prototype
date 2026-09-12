@@ -1237,10 +1237,10 @@ export function AdminSetup() {
             n={4}
             total={total}
             title="Connect & roll out agents"
-            sub="An admin / IT task: connect each discovered agent to Wrapbox and roll it out — push it to laptops with MDM, or install it on the device. Wrapbox marks an integration connected when it checks in. Policy decisions are proven later, in Go live."
+            sub="An admin / IT task — employees do nothing here. Each agent connects through its own mechanism: a hook pushed to laptops with MDM (or one command on a machine IT can't reach), an MCP client pointed at the Wrapbox gateway, or the SDK added to your own agents. Once deployed, the integration registers itself with Wrapbox on its first run — that check-in is what turns it Connected. Policy decisions are proven later, in Go live."
           />
           <div className="mb-4 rounded-xl border border-line bg-surface-2 px-4 py-2.5 text-[12px] text-fg-2">
-            <span className="font-semibold text-fg">Step 4 = the tools (admin / IT). Step 6 = the people.</span> Here you put Wrapbox on the tools where agents run and roll it out — MDM push or manual — then confirm each one is connected. You invite the people who use them in Step 6.
+            <span className="font-semibold text-fg">Step 4 = the tools (admin / IT). Step 6 = the people.</span> Here you deploy Wrapbox into each agent's own control point — MDM push, one command, a gateway URL or the SDK — and wait for each to register. You invite the people who use them in Step 6; they install nothing.
           </div>
           <div className="mb-4 flex items-center gap-3">
             <div className="h-1.5 flex-1 rounded-full bg-surface-3 overflow-hidden">
