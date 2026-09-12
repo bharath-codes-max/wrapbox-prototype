@@ -199,7 +199,6 @@ function toRule(d: Record<string, unknown>, existingIds: string[]) {
   let constrain = str(d.constrain);
   if (constrain && constrain !== (info as { constrain?: string }).constrain) constrain = undefined;
   if (decision === "CONSTRAIN" && !constrain) decision = "REVIEW";
-  if (!decision && !tiers.length) return { rule: null, reason: "no decision" };
 
   let approvers = str(d.approvers);
   if (approvers && !GROUPS.includes(approvers)) approvers = approvers.toLowerCase().replace(/[^a-z0-9-]+/g, "-").slice(0, 40) || "admin";
@@ -248,6 +247,17 @@ function toRule(d: Record<string, unknown>, existingIds: string[]) {
   const pm = (d.permit ?? null) as Record<string, unknown> | null;
   const permit = pm && pm.ttl_seconds ? { ttlSeconds: Number(pm.ttl_seconds), singleUse: pm.single_use === true ? true : undefined, bind: clean(arr(pm.bind)) } : undefined;
 
+  // A rule is complete when it carries a decision, tiers, or the conditional machinery of a
+  // default-deny policy (fail-closed context, prohibitions, or escalation branches).
+  const failClosed = d.fail_closed === true;
+  const conditional = failClosed || !!forbid || escalations.length > 0 || !!requires;
+  if (!decision && !tiers.length) {
+    if (!conditional) return { rule: null, reason: "no decision" };
+    // "default: BLOCK" with conditional branches → ALLOW the shape, let the branches and the
+    // fail-closed context do the refusing; a bare fail-closed rule defaults to BLOCK.
+    decision = escalations.length || forbid ? "ALLOW" : "BLOCK";
+  }
+
   const base = tiers.length ? `${effect}.tiers` : `${effect}.${(decision ?? "rule").toLowerCase()}`;
   let id = base;
   for (let i = 2; existingIds.includes(id); i++) id = `${base}.${i}`;
@@ -265,7 +275,7 @@ function toRule(d: Record<string, unknown>, existingIds: string[]) {
     ...(forbid ? { forbid } : {}),
     ...(escalations.length ? { escalations } : {}),
     ...(permit ? { permit } : {}),
-    ...(d.fail_closed === true ? { failClosed: true } : {}),
+    ...(failClosed ? { failClosed: true } : {}),
     scope: /payment|claim|discount|purchase/.test(effect) ? "business" : /git|filesystem|shell/.test(effect) ? "coding" : "all",
     custom: true,
   };
@@ -279,7 +289,7 @@ export default async function handler(req: { method?: string; body?: unknown }, 
   if (req.method !== "POST") return res.status(405).json({ error: "method not allowed" });
   if (!key) return res.status(501).json({ error: "not configured", configured: false });
 
-  let body: { sentence?: string; existingIds?: string[] } = {};
+  let body: { sentence?: string; existingIds?: string[]; debug?: boolean } = {};
   try {
     body = typeof req.body === "string" ? JSON.parse(req.body) : ((req.body ?? {}) as typeof body);
   } catch {
@@ -352,7 +362,17 @@ export default async function handler(req: { method?: string; body?: unknown }, 
     const missing = rule ? (arr(parsed.missing) ?? []) : [...(arr(parsed.missing) ?? []), reason].filter(Boolean);
 
     const notRepresented = requirements.filter((q) => !q.represented).map((q) => q.text);
-    return res.status(200).json({ rule, understood, unsupported: [...unsupported, ...notRepresented.filter((t) => !unsupported.includes(t))], missing, requirements, source: "openai", model: MODEL });
+    return res.status(200).json({
+      rule,
+      understood,
+      unsupported: [...unsupported, ...notRepresented.filter((t) => !unsupported.includes(t))],
+      missing,
+      requirements,
+      source: "openai",
+      model: MODEL,
+      // Opt-in: the model's own structured output, to see what it extracted before mapping.
+      ...(body.debug ? { raw: { decision: parsed.decision, requires: parsed.requires, forbid: parsed.forbid, escalations: parsed.escalations, permit: parsed.permit, fail_closed: parsed.fail_closed } } : {}),
+    });
   } catch (e) {
     return res.status(502).json({ error: "could not reach openai", detail: e instanceof Error ? e.message.slice(0, 120) : undefined });
   }
