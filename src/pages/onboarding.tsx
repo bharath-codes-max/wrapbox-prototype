@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, CircleCheck, KeyRound, Loader2, Mail, Play, ShieldCheck, Terminal as TerminalIcon, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, ChevronRight, CircleCheck, FileCode2, KeyRound, Loader2, Lock, Mail, Play, ShieldCheck, Terminal as TerminalIcon, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { AGENTS, CATEGORIES, METHODS, agentById, type CategoryId, type Decision } from "../data/agents";
 import { INITIAL_RULES, toYaml, type Rule } from "../data/contract";
@@ -8,7 +8,7 @@ import { SCENARIOS, actOf, nativeFor, type Gate } from "../data/scenarios";
 import { CodeBlock, InlineCmd, json } from "../components/code";
 import { SlackCard } from "../components/insight";
 import { WrapboxLogo } from "../components/logo";
-import { Avatar, Button, Card, Chip, CopyButton, DecisionPill, Logo, Segmented, Toggle, cn } from "../components/ui";
+import { Avatar, Button, Card, Chip, CopyButton, DecisionPill, Logo, Modal, Segmented, Toggle, cn } from "../components/ui";
 import { approveWithPasskey } from "../lib/actions";
 import { sha256 } from "../lib/permit";
 import { go } from "../lib/router";
@@ -149,17 +149,170 @@ const BLOCKS: { id: string; cats: CategoryId[]; title: string; agents: string[];
   { id: "a2a", cats: ["a2a"], title: "Multi-agent delegation", agents: ["openai-handoffs"], what: "Handoffs carry an attenuated token; children can't exceed parents." },
 ];
 
-const REPOS = ["wrapbox/web", "wrapbox/billing", "wrapbox/payments", "wrapbox/claims-agent", "wrapbox/infra", "wrapbox/mobile", "wrapbox/data-platform", "wrapbox/ops-agents"];
-const FOUND: [string, string, string, number][] = [
-  ["claudecode", "Claude Code", ".claude/settings.json", 11],
-  ["cursor", "Cursor", ".cursor/rules · hooks.json", 18],
-  ["codex", "Codex", "AGENTS.md · .codex/", 9],
-  ["githubcopilot", "GitHub Copilot", ".github/copilot-instructions.md", 14],
-  ["mcp", "MCP servers", "mcp.json → stripe, github, postgres", 6],
-  ["langgraph", "LangGraph", "langgraph.json", 2],
-  ["salesforce", "Agentforce", "Okta app catalog", 1],
-  ["browseruse", "Browser Use", "requirements.txt", 1],
+/* What a real read-only GitHub App sees: the small config files each agent leaves behind.
+   Scanning reads only these paths — never source code. */
+interface Hit {
+  path: string;
+  agent: string;
+  logo: string;
+  cat: CategoryId;
+}
+const HIT_REPOS: { repo: string; hits: Hit[] }[] = [
+  { repo: "web", hits: [{ path: ".cursor/hooks.json", agent: "Cursor", logo: "cursor", cat: "ide" }, { path: ".claude/settings.json", agent: "Claude Code", logo: "claudecode", cat: "cli" }] },
+  { repo: "payments-api", hits: [{ path: ".claude/settings.json", agent: "Claude Code", logo: "claudecode", cat: "cli" }, { path: "mcp.json", agent: "Stripe MCP", logo: "stripe", cat: "mcp" }] },
+  { repo: "billing", hits: [{ path: ".cursor/hooks.json", agent: "Cursor", logo: "cursor", cat: "ide" }, { path: "mcp.json", agent: "Postgres MCP", logo: "postgresql", cat: "mcp" }] },
+  { repo: "claims-agent", hits: [{ path: "langgraph.json", agent: "LangGraph", logo: "langgraph", cat: "custom" }, { path: ".claude/settings.json", agent: "Claude Code", logo: "claudecode", cat: "cli" }] },
+  { repo: "infra", hits: [{ path: ".codex/config.toml", agent: "Codex CLI", logo: "codex", cat: "cli" }] },
+  { repo: "data-platform", hits: [{ path: "mcp.json", agent: "Postgres MCP", logo: "postgresql", cat: "mcp" }, { path: ".gemini/settings.json", agent: "Gemini CLI", logo: "geminicli", cat: "cli" }] },
+  { repo: "ops-agents", hits: [{ path: "langgraph.json", agent: "LangGraph", logo: "langgraph", cat: "custom" }] },
+  { repo: "mobile", hits: [{ path: ".github/copilot-instructions.md", agent: "GitHub Copilot", logo: "githubcopilot", cat: "ide" }] },
+  { repo: "checkout", hits: [{ path: ".cursor/hooks.json", agent: "Cursor", logo: "cursor", cat: "ide" }, { path: ".github/workflows/copilot-agent.yml", agent: "Copilot cloud agent", logo: "githubcopilot", cat: "cloud" }] },
+  { repo: "growth-site", hits: [{ path: ".windsurf/rules.md", agent: "Windsurf", logo: "windsurf", cat: "ide" }] },
+  { repo: "support-tools", hits: [{ path: "requirements.txt", agent: "Browser Use", logo: "browseruse", cat: "browser" }] },
+  { repo: "ledger", hits: [{ path: ".claude/settings.json", agent: "Claude Code", logo: "claudecode", cat: "cli" }, { path: ".codex/config.toml", agent: "Codex CLI", logo: "codex", cat: "cli" }] },
+  { repo: "risk-engine", hits: [{ path: "mcp.json", agent: "GitHub MCP", logo: "mcp", cat: "mcp" }] },
+  { repo: "partner-portal", hits: [{ path: ".cursor/hooks.json", agent: "Cursor", logo: "cursor", cat: "ide" }] },
 ];
+const CLEAN_REPOS = ["design-system", "docs-site", "brand", "eslint-config", "terraform-modules", "k8s-manifests", "load-tests", "sdk-js", "sdk-python", "status-page", "email-templates", "analytics-dbt", "feature-flags", "legacy-php", "cron-jobs", "image-proxy", "pdf-service", "search-index", "notification-svc", "webhooks", "admin-scripts", "onboarding-emails", "pricing-page", "helm-charts", "grafana-dashboards", "runbooks", "sandbox", "archive-2023"];
+const TOTAL_REPOS = HIT_REPOS.length + CLEAN_REPOS.length;
+
+/** Roll the per-repo hits up into one row per agent. */
+function rollUp() {
+  const by = new Map<string, { agent: string; logo: string; cat: CategoryId; paths: Set<string>; repos: string[] }>();
+  for (const r of HIT_REPOS)
+    for (const h of r.hits) {
+      const e = by.get(h.agent) ?? { agent: h.agent, logo: h.logo, cat: h.cat, paths: new Set<string>(), repos: [] };
+      e.paths.add(h.path);
+      if (!e.repos.includes(r.repo)) e.repos.push(r.repo);
+      by.set(h.agent, e);
+    }
+  return [...by.values()].sort((a, b) => b.repos.length - a.repos.length);
+}
+const DISCOVERED = rollUp();
+
+/** The GitHub App install flow, screen for screen: pick the account, grant read-only access, get redirected back. */
+function GitHubInstall({ open, onClose, org, onDone }: { open: boolean; onClose: () => void; org: string; onDone: () => void }) {
+  const [screen, setScreen] = useState<"account" | "permissions" | "working">("account");
+  const [account, setAccount] = useState<string | null>(null);
+  const [access, setAccess] = useState<"all" | "select">("all");
+  const [phase, setPhase] = useState(0);
+  useEffect(() => {
+    if (open) {
+      setScreen("account");
+      setAccount(null);
+      setPhase(0);
+    }
+  }, [open]);
+  const install = async () => {
+    setScreen("working");
+    for (let i = 1; i <= 4; i++) {
+      await sleep(650);
+      setPhase(i);
+    }
+    await sleep(400);
+    onDone();
+    onClose();
+  };
+  const PERMS: [string, string][] = [
+    ["Metadata", "Read — repository names, sizes and visibility"],
+    ["Contents", "Read — only agent config files (.claude, .cursor, mcp.json …)"],
+    ["Members", "Read — who belongs to the organization"],
+  ];
+  return (
+    <Modal open={open} onClose={onClose} width={520}>
+      <div className="flex items-center gap-2.5 bg-[#1f2328] px-5 py-3.5 text-white">
+        <Logo name="github_light" size={22} rounded="rounded-full" />
+        <div className="text-[13.5px] font-semibold">Install Wrapbox</div>
+        <button onClick={onClose} className="ml-auto grid size-7 place-items-center rounded-md text-white/60 hover:bg-white/10 hover:text-white" aria-label="Cancel">
+          <X className="size-4" />
+        </button>
+      </div>
+      {screen === "account" && (
+        <div className="p-5">
+          <div className="text-[15px] font-semibold">Install Wrapbox on your account</div>
+          <p className="mt-1 text-[13px] text-fg-2">Wrapbox by wrapbox.ai wants to see which AI agents your repositories use.</p>
+          <div className="mt-4 space-y-1.5">
+            {[
+              { id: org, label: org, sub: `Organization · ${TOTAL_REPOS} repositories`, orgish: true },
+              { id: "priya-m", label: "priya-m", sub: "Personal account · 3 repositories", orgish: false },
+            ].map((a) => (
+              <button key={a.id} onClick={() => setAccount(a.id)} className={cn("flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors", account === a.id ? "border-fg bg-surface-2" : "border-line hover:bg-surface-2")}>
+                <span className={cn("grid size-8 place-items-center text-[13px] font-bold text-white", a.orgish ? "rounded-md bg-[#1f2328]" : "rounded-full bg-[#6e7781]")}>{a.label[0].toUpperCase()}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13.5px] font-medium">{a.label}</span>
+                  <span className="block text-[11.5px] text-fg-3">{a.sub}</span>
+                </span>
+                <ChevronRight className="size-4 text-fg-3" />
+              </button>
+            ))}
+          </div>
+          <div className="mt-5 flex justify-end gap-2">
+            <Button onClick={onClose}>Cancel</Button>
+            <Button variant="allow" disabled={!account} onClick={() => setScreen("permissions")}>
+              Continue
+            </Button>
+          </div>
+        </div>
+      )}
+      {screen === "permissions" && (
+        <div className="p-5">
+          <div className="text-[15px] font-semibold">
+            Install on <span className="font-mono text-[14px]">{account}</span>
+          </div>
+          <div className="mt-4 text-[12.5px] font-semibold">Repository access</div>
+          <div className="mt-2 space-y-1.5">
+            {[
+              ["all", `All repositories`, `All ${TOTAL_REPOS} current and future repositories`],
+              ["select", "Only select repositories", "Choose which repositories Wrapbox can see"],
+            ].map(([v, t, sub]) => (
+              <button key={v} onClick={() => setAccess(v as "all" | "select")} className={cn("flex w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left", access === v ? "border-fg bg-surface-2" : "border-line hover:bg-surface-2")}>
+                <span className={cn("mt-0.5 grid size-4 place-items-center rounded-full border-2", access === v ? "border-fg" : "border-line-strong")}>{access === v && <span className="size-2 rounded-full bg-fg" />}</span>
+                <span>
+                  <span className="block text-[13px] font-medium">{t}</span>
+                  <span className="block text-[11.5px] text-fg-3">{sub}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-4 text-[12.5px] font-semibold">Wrapbox will have permission to:</div>
+          <ul className="mt-2 space-y-1.5 rounded-xl border border-line p-3">
+            {PERMS.map(([t, sub]) => (
+              <li key={t} className="flex gap-2.5 text-[12.5px]">
+                <Check className="mt-0.5 size-3.5 shrink-0 text-allow" strokeWidth={3} />
+                <span>
+                  <span className="font-medium">{t}</span> <span className="text-fg-3">· {sub}</span>
+                </span>
+              </li>
+            ))}
+            <li className="flex gap-2.5 text-[12.5px] text-fg-3">
+              <Lock className="mt-0.5 size-3.5 shrink-0" />
+              No write access. Source code is never uploaded.
+            </li>
+          </ul>
+          <div className="mt-5 flex justify-between gap-2">
+            <Button onClick={() => setScreen("account")}>Back</Button>
+            <Button variant="allow" onClick={install}>
+              Install &amp; Authorize
+            </Button>
+          </div>
+        </div>
+      )}
+      {screen === "working" && (
+        <div className="p-6">
+          <div className="text-[14px] font-semibold">Authorizing on github.com…</div>
+          <div className="mt-4 space-y-2">
+            {["Redirecting to github.com/login/oauth", `Installing the App on ${account}`, "Exchanging the installation token", `Listing repositories · ${TOTAL_REPOS} found`].map((t, i) => (
+              <div key={t} className={cn("flex items-center gap-2 text-[12.5px]", phase > i ? "text-fg" : "text-fg-3")}>
+                {phase > i ? <CircleCheck className="size-4 text-allow" /> : phase === i ? <Loader2 className="size-4 animate-spin" /> : <span className="size-4" />}
+                {t}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
 
 const ADMIN_STEPS = [
   { t: "Create workspace", s: "SSO, company, data region" },
@@ -191,9 +344,13 @@ export function AdminSetup() {
   const [prov, setProv] = useState(0);
   const [thumb, setThumb] = useState("");
   // Step 2
+  const [gh, setGh] = useState<"none" | "connected">("none");
+  const [ghModal, setGhModal] = useState(false);
   const [scan, setScan] = useState<"idle" | "scanning" | "done">("idle");
   const [scanned, setScanned] = useState(0);
-  const [cats, setCats] = useState<CategoryId[]>(["ide", "cli", "cloud", "custom", "mcp", "saas", "browser", "a2a"]);
+  const [log, setLog] = useState<{ repo: string; hits: Hit[] }[]>([]);
+  const [openAgent, setOpenAgent] = useState<string | null>(null);
+  const [cats, setCats] = useState<CategoryId[]>([]);
   // Step 3
   const [packs, setPacks] = useState<string[]>(PACKS.filter((p) => p.rec).map((p) => p.id).concat(["claims", "commercial", "browser"]));
   const [mode, setMode] = useState<"observe" | "enforce">("enforce");
@@ -219,6 +376,7 @@ export function AdminSetup() {
     if (r.id === "payments.refund" && r.tiers) x.tiers = [{ ...r.tiers[0], max: autoMax }, { ...r.tiers[1], max: reviewMax }, r.tiers[2]];
     return x;
   });
+  const ghOrg = (domain || "wrapbox").split(".")[0].replace(/[^a-z0-9-]/gi, "-").toLowerCase();
   const blocks = BLOCKS.filter((b) => b.cats.some((c) => cats.includes(c)));
   const linkedCount = blocks.filter((b) => linked[b.id] === "done").length;
 
@@ -237,12 +395,24 @@ export function AdminSetup() {
 
   async function runScan() {
     setScan("scanning");
-    for (let i = 1; i <= REPOS.length; i++) {
-      await sleep(220);
-      setScanned(i);
+    setScanned(0);
+    setLog([]);
+    // Walk every repository the App can see, newest first, like the real crawler does.
+    const order: { repo: string; hits: Hit[] }[] = [];
+    const clean = [...CLEAN_REPOS];
+    HIT_REPOS.forEach((h, i) => {
+      order.push(h);
+      for (let k = 0; k < 2 && clean.length; k++) order.push({ repo: clean.shift()!, hits: [] });
+      if (i === HIT_REPOS.length - 1) while (clean.length) order.push({ repo: clean.shift()!, hits: [] });
+    });
+    for (let i = 0; i < order.length; i++) {
+      await sleep(order[i].hits.length ? 150 : 55);
+      setScanned(i + 1);
+      setLog((l) => [...l.slice(-9), order[i]]);
     }
-    await sleep(300);
+    await sleep(400);
     setScan("done");
+    setCats([...new Set(DISCOVERED.map((d) => d.cat))]);
   }
 
   async function link(id: string) {
@@ -341,44 +511,120 @@ export function AdminSetup() {
 
       {step === 1 && (
         <Card className="p-6">
-          <StepHead n={2} total={total} title="Discover the agents you already run" sub="Most companies have more agents than they think. Wrapbox reads repository configs and your app catalog — no code is uploaded — then you choose which platforms to govern." />
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant={scan === "done" ? "secondary" : "primary"} onClick={runScan} disabled={scan === "scanning"}>
-              <Logo name="github_light" size={18} rounded="rounded" /> {scan === "idle" ? "Scan the GitHub org" : scan === "scanning" ? `Scanning ${scanned}/${REPOS.length} repos…` : "Scan again"}
-            </Button>
-            <span className="text-[12px] text-fg-3">Read-only GitHub App · metadata only · 42 repos in github.com/wrapbox</span>
-          </div>
-          {scan !== "idle" && (
-            <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1.2fr]">
-              <div className="rounded-xl border border-line p-3 font-mono text-[12px] space-y-1">
-                {REPOS.slice(0, scanned).map((r) => (
-                  <motion.div key={r} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2">
-                    <Check className="size-3.5 text-allow" /> {r}
-                  </motion.div>
-                ))}
-                {scan === "scanning" && <div className="text-fg-3">…</div>}
+          <StepHead n={2} total={total} title="Discover the agents you already run" sub="Connect GitHub and Wrapbox reads only the small config files agents leave behind — never your source code — so you can see every agent in use before you govern anything." />
+
+          {gh === "none" ? (
+            <div className="rounded-xl border border-line bg-surface-2 p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <Button variant="primary" onClick={() => setGhModal(true)}>
+                  <Logo name="github_light" size={18} rounded="rounded" /> Connect GitHub
+                </Button>
+                <span className="text-[12.5px] text-fg-3">Read-only GitHub App · nothing is connected yet</span>
               </div>
-              {scan === "done" && (
-                <div className="rounded-xl border border-line overflow-hidden">
-                  {FOUND.map(([logo, name, where, n]) => (
-                    <div key={name} className="flex items-center gap-3 px-3.5 py-2 border-b border-line last:border-0">
-                      <Logo name={logo} size={22} rounded="rounded-md" bleed={logo === "browseruse"} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[12.5px] font-medium">{name}</div>
-                        <div className="font-mono text-[11px] text-fg-3 truncate">{where}</div>
-                      </div>
-                      <span className="font-mono text-[12px] tnum text-fg-2">{n} {n === 1 ? "source" : "repos"}</span>
+              <p className="mt-3 text-[12.5px] text-fg-2 max-w-[70ch]">
+                No GitHub? Skip it and tick the platforms yourself below — the scan only saves you guessing.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-line overflow-hidden">
+              <div className="flex flex-wrap items-center gap-3 bg-surface-2 px-4 py-3">
+                <Logo name="github_light" size={20} rounded="rounded" />
+                <div className="min-w-0">
+                  <div className="text-[13px] font-semibold">
+                    github.com/{ghOrg} <span className="font-normal text-fg-3">· connected</span>
+                  </div>
+                  <div className="text-[11.5px] text-fg-3">
+                    {TOTAL_REPOS} repositories · read-only · installed by Priya Menon
+                  </div>
+                </div>
+                <Button className="ml-auto" onClick={runScan} disabled={scan === "scanning"} variant={scan === "done" ? "secondary" : "primary"}>
+                  {scan === "idle" ? `Scan ${TOTAL_REPOS} repositories` : scan === "scanning" ? `Scanning ${scanned}/${TOTAL_REPOS}…` : "Scan again"}
+                </Button>
+              </div>
+
+              {scan !== "idle" && (
+                <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+                  <div>
+                    <div className="eyebrow mb-2">Reading config files</div>
+                    <div className="h-[232px] overflow-hidden rounded-xl bg-code p-3 font-mono text-[11.5px] text-white/80">
+                      {log.map((r, i) => (
+                        <motion.div key={r.repo + i} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="leading-[1.7]">
+                          <span className="text-white/35">{ghOrg}/</span>
+                          {r.repo}
+                          {r.hits.length ? (
+                            r.hits.map((h) => (
+                              <span key={h.path} className="ml-2 text-[#5ef0b5]">
+                                + {h.path}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="ml-2 text-white/25">no agent config</span>
+                          )}
+                        </motion.div>
+                      ))}
+                      {scan === "scanning" && <div className="text-white/40">…</div>}
                     </div>
-                  ))}
+                    <div className="mt-2 flex items-center gap-3 text-[11.5px] text-fg-3">
+                      <span className="tnum">
+                        {scanned}/{TOTAL_REPOS} repositories
+                      </span>
+                      <span className="h-1 flex-1 overflow-hidden rounded-full bg-surface-3">
+                        <motion.span className="block h-full bg-ink" animate={{ width: `${(scanned / TOTAL_REPOS) * 100}%` }} />
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="eyebrow mb-2">{scan === "done" ? `${DISCOVERED.length} agents found in ${HIT_REPOS.length} of ${TOTAL_REPOS} repositories · 0 governed today` : "Agents found so far"}</div>
+                    <div className="max-h-[300px] overflow-y-auto scroll-thin rounded-xl border border-line">
+                      {(scan === "done" ? DISCOVERED : DISCOVERED.filter((d) => log.some((r) => r.hits.some((h) => h.agent === d.agent)))).map((d) => (
+                        <div key={d.agent} className="border-b border-line last:border-0">
+                          <button onClick={() => setOpenAgent(openAgent === d.agent ? null : d.agent)} className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left hover:bg-surface-2">
+                            <Logo name={d.logo} size={22} rounded="rounded-md" bleed={d.logo === "browseruse"} />
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-[12.5px] font-medium">{d.agent}</span>
+                              <span className="block truncate font-mono text-[11px] text-fg-3">{[...d.paths].join(" · ")}</span>
+                            </span>
+                            <span className="shrink-0 rounded-full bg-review-soft px-2 py-0.5 text-[10.5px] font-semibold text-review">ungoverned</span>
+                            <span className="w-14 shrink-0 text-right font-mono text-[11.5px] tnum text-fg-2">{d.repos.length} {d.repos.length === 1 ? "repo" : "repos"}</span>
+                            <ChevronDown className={cn("size-3.5 shrink-0 text-fg-3 transition-transform", openAgent === d.agent && "rotate-180")} />
+                          </button>
+                          <AnimatePresence initial={false}>
+                            {openAgent === d.agent && (
+                              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                                <div className="space-y-1 bg-surface-2 px-3.5 py-2.5">
+                                  {d.repos.map((r) => (
+                                    <div key={r} className="flex items-center gap-2 font-mono text-[11px] text-fg-2">
+                                      <FileCode2 className="size-3 shrink-0 text-fg-3" />
+                                      {ghOrg}/{r}
+                                      <span className="text-fg-3">
+                                        → {HIT_REPOS.find((x) => x.repo === r)!.hits.filter((h) => h.agent === d.agent).map((h) => h.path).join(", ")}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      ))}
+                    </div>
+                    {scan === "done" && <p className="mt-2 text-[12px] text-fg-2">Every one of these runs today with no policy in front of it. Tick the platforms below and Wrapbox puts a guard on each.</p>}
+                  </div>
                 </div>
               )}
             </div>
           )}
+
           <div className="mt-6">
-            <div className="text-[13px] font-semibold mb-2">Platforms to govern</div>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="text-[13px] font-semibold">Platforms to govern</div>
+              {scan === "done" && <span className="rounded-full bg-allow-soft px-2 py-0.5 text-[10.5px] font-semibold text-allow">pre-selected from your scan</span>}
+            </div>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {CATEGORIES.map((c) => {
                 const on = cats.includes(c.id);
+                const found = scan === "done" && DISCOVERED.some((d) => d.cat === c.id);
                 return (
                   <button key={c.id} onClick={() => setCats((x) => (on ? x.filter((y) => y !== c.id) : [...x, c.id]))} className={cn("rounded-xl border p-3 text-left transition-colors", on ? "border-fg bg-surface" : "border-line opacity-70 hover:opacity-100")}>
                     <div className="flex items-center justify-between">
@@ -393,12 +639,14 @@ export function AdminSetup() {
                     </div>
                     <div className="mt-2 text-[12.5px] font-semibold">{c.name}</div>
                     <div className="text-[11px] text-fg-3">{c.method}</div>
+                    {found && <div className="mt-1.5 text-[10.5px] font-semibold text-allow">found in your org</div>}
                   </button>
                 );
               })}
             </div>
           </div>
-          <Footer onBack={back} onNext={next} disabled={!cats.length} hint={`${cats.length} of 8 platforms selected`} />
+          <Footer onBack={back} onNext={next} disabled={!cats.length} hint={cats.length ? `${cats.length} of 8 platforms selected` : "Scan GitHub or tick a platform to continue"} />
+          <GitHubInstall open={ghModal} onClose={() => setGhModal(false)} org={ghOrg} onDone={() => setGh("connected")} />
         </Card>
       )}
 
