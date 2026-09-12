@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
 import { AGENTS, CATEGORIES, agentById, type CategoryId } from "../data/agents";
 import { effectInfo, type Rule } from "../data/contract";
-import { checkRule, evaluate, globMatch, type Act, type Env } from "../lib/engine";
+import { checkRule, evaluate, globMatch, type Act, type Ctx, type Env } from "../lib/engine";
 import { DecisionPill, cn } from "./ui";
 
 const ENVS: Env[] = ["production", "staging", "development"];
@@ -93,7 +93,50 @@ export function seedAct(r: Rule): Act {
     if (effect === "purchase.order") a.budget = typeof first === "number" ? first : 10000;
   }
   a.env = (r.when.env?.[0] as Env) ?? "development";
+  const ctx = seedCtx(r);
+  if (Object.keys(ctx).length) a.ctx = ctx;
   return a;
+}
+
+/** Every context key this rule looks at — requirements, escalation conditions, permit bindings. */
+export function ctxKeys(r: Rule): { key: string; kind: "bool" | "number" | "text" }[] {
+  const out = new Map<string, "bool" | "number" | "text">();
+  const add = (key: string, kind: "bool" | "number" | "text") => out.has(key) || out.set(key, kind);
+  for (const c of r.when.requires ?? []) add(c.key, typeof c.value === "boolean" ? "bool" : typeof c.value === "number" ? "number" : "text");
+  for (const e of r.escalations ?? []) for (const c of e.when) add(c.key, typeof c.value === "boolean" ? "bool" : typeof c.value === "number" ? "number" : "text");
+  if (r.permit) {
+    add("permit.age_seconds", "number");
+    if (r.permit.singleUse) add("permit.consumed", "bool");
+    add("permit.bindings_changed", "text");
+    for (const b of r.permit.bind ?? []) add(b, "text");
+  }
+  return [...out].map(([key, kind]) => ({ key, kind }));
+}
+
+/** Context that satisfies the rule: requirements met, escalations not triggered, permit fresh. */
+export function seedCtx(r: Rule): Ctx {
+  const ctx: Ctx = {};
+  for (const c of r.when.requires ?? []) {
+    if (typeof c.value === "boolean") ctx[c.key] = c.value;
+    else if (typeof c.value === "number") ctx[c.key] = c.op === "gte" || c.op === "gt" ? Number(c.value) + (c.op === "gt" ? 1 : 0) : Number(c.value);
+    else if (Array.isArray(c.value)) ctx[c.key] = c.op === "not_in" ? "none" : String(c.value[0]);
+    else ctx[c.key] = String(c.value);
+  }
+  for (const e of r.escalations ?? [])
+    for (const c of e.when) {
+      if (c.key in ctx) continue;
+      if (typeof c.value === "number") ctx[c.key] = c.op === "gt" ? Number(c.value) : c.op === "gte" ? Number(c.value) - 1 : Number(c.value);
+      else if (Array.isArray(c.value) || c.op === "in") ctx[c.key] = "none";
+      else if (typeof c.value === "boolean") ctx[c.key] = !c.value;
+      else ctx[c.key] = "none";
+    }
+  if (r.permit) {
+    ctx["permit.age_seconds"] = 5;
+    if (r.permit.singleUse) ctx["permit.consumed"] = false;
+    ctx["permit.bindings_changed"] = "none";
+    for (const b of r.permit.bind ?? []) ctx[b] = "proven";
+  }
+  return ctx;
 }
 
 /** An agent whose category the rule applies to, so the default case matches. */
@@ -223,6 +266,33 @@ export function RuleTester({ rule }: { rule: Rule }) {
           </Labeled>
         )}
       </div>
+
+      {!!ctxKeys(rule).length && (
+        <div>
+          <div className="text-[11.5px] font-medium text-fg-2 mb-1.5">Context the action presents</div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {ctxKeys(rule).map(({ key, kind }) => {
+              const val = act.ctx?.[key];
+              const setCtx = (v: string | number | boolean) => setAct((a) => ({ ...a, ctx: { ...(a.ctx ?? {}), [key]: v } }));
+              return (
+                <label key={key} className="block">
+                  <span className="font-mono text-[10.5px] text-fg-3">{key}</span>
+                  {kind === "bool" ? (
+                    <select value={String(val ?? "")} onChange={(e) => setCtx(e.target.value === "true")} className="mt-1 h-9 w-full rounded-lg border border-line bg-surface px-2 font-mono text-[12px]">
+                      <option value="true">true</option>
+                      <option value="false">false</option>
+                    </select>
+                  ) : kind === "number" ? (
+                    <input type="number" className={cn(inputCls, "mt-1")} value={Number(val ?? 0)} onChange={(e) => setCtx(Number(e.target.value) || 0)} />
+                  ) : (
+                    <input className={cn(inputCls, "mt-1")} value={String(val ?? "")} onChange={(e) => setCtx(e.target.value)} />
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="rounded-lg bg-surface-2 p-3">
         <div className="space-y-1">

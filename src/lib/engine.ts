@@ -2,12 +2,17 @@
 // the same contract always produce the same decision, with a trace of why.
 
 import type { CategoryId, Decision } from "../data/agents";
-import { evalTier, fmtValue, type Rule } from "../data/contract";
+import { evalTier, fmtValue, type Cond, type Rule } from "../data/contract";
 
 export type Env = "production" | "staging" | "development";
 
+/** Facts about the attempt: provenance, delegation, CI, counts, hashes, permit state.
+ *  A key that is absent is unverifiable — rules that require it fail closed. */
+export type Ctx = Record<string, string | number | boolean | string[] | undefined>;
+
 export interface Act {
   effect: string;
+  ctx?: Ctx;
   path?: string;
   command?: string;
   branch?: string;
@@ -114,9 +119,69 @@ export function checkRule(r: Rule, a: Act, category: CategoryId): { ok: boolean;
     const ok = !!a.credentials;
     checks.push({ field: "credentials", ok, detail: ok ? "carries credentials" : "no credentials in the payload" });
   }
+  for (const c of w.requires ?? []) {
+    const r2 = evalCond(c, a.ctx);
+    checks.push({ field: `requires ${c.key}`, ok: r2.ok, detail: r2.detail });
+  }
+  const bad = forbidden(r, a);
+  if (bad) checks.push({ field: "forbid", ok: false, detail: `forbidden content: ${bad}` });
 
   const failed = checks.find((c) => !c.ok);
   return { ok: !failed, checks, why: failed ? failed.detail : "matched" };
+}
+
+const label = (v: unknown) => (Array.isArray(v) ? v.join(", ") : String(v));
+
+/** Evaluate one context condition. Missing context is never treated as satisfied. */
+export function evalCond(c: Cond, ctx: Ctx = {}): { ok: boolean; detail: string; missing: boolean } {
+  const got = ctx[c.key];
+  if (got === undefined || got === "" || (Array.isArray(got) && !got.length))
+    return { ok: false, missing: true, detail: `${c.key}: not proven by the action` };
+  const num = typeof got === "number" ? got : Number(got);
+  const want = c.value;
+  let ok = false;
+  switch (c.op) {
+    case "is":
+      ok = String(got) === String(want);
+      break;
+    case "not":
+      ok = String(got) !== String(want);
+      break;
+    case "gte":
+      ok = num >= Number(want);
+      break;
+    case "lte":
+      ok = num <= Number(want);
+      break;
+    case "gt":
+      ok = num > Number(want);
+      break;
+    case "lt":
+      ok = num < Number(want);
+      break;
+    case "in": {
+      const set = (Array.isArray(want) ? want : [String(want)]).map(String);
+      const mine = Array.isArray(got) ? got.map(String) : [String(got)];
+      ok = mine.some((x) => set.includes(x));
+      break;
+    }
+    case "not_in": {
+      const set = (Array.isArray(want) ? want : [String(want)]).map(String);
+      const mine = Array.isArray(got) ? got.map(String) : [String(got)];
+      ok = !mine.some((x) => set.includes(x));
+      break;
+    }
+  }
+  const verb = { is: "=", not: "≠", gte: "≥", lte: "≤", gt: ">", lt: "<", in: "in", not_in: "not in" }[c.op];
+  return { ok, missing: false, detail: `${c.key} ${verb} ${label(want)} (action: ${label(got)})` };
+}
+
+/** Content the rule forbids outright — DROP, TRUNCATE, disabling row-level security. */
+export function forbidden(r: Rule, a: Act): string | null {
+  if (!r.forbid?.length) return null;
+  const hay = `${a.sql ?? ""} ${a.command ?? ""}`.toLowerCase();
+  for (const f of r.forbid) if (hay.includes(f.toLowerCase())) return f;
+  return null;
 }
 
 function matchRule(r: Rule, a: Act, category: CategoryId): { ok: boolean; why: string } {
@@ -124,7 +189,54 @@ function matchRule(r: Rule, a: Act, category: CategoryId): { ok: boolean; why: s
   return { ok, why };
 }
 
+/** A permit must still be valid at the moment of execution: not expired, not spent, still bound. */
+export function permitCheck(r: Rule, a: Act): { ok: boolean; detail: string } | null {
+  const p = r.permit;
+  if (!p) return null;
+  const ctx = a.ctx ?? {};
+  const age = ctx["permit.age_seconds"];
+  if (age !== undefined && Number(age) > p.ttlSeconds) return { ok: false, detail: `permit expired — ${Number(age)}s old, valid for ${p.ttlSeconds}s` };
+  if (p.singleUse && ctx["permit.consumed"] === true) return { ok: false, detail: "permit already consumed — single use" };
+  const changed = ctx["permit.bindings_changed"];
+  if (changed !== undefined && changed !== false && String(changed) !== "none") return { ok: false, detail: `binding changed since approval: ${label(changed)}` };
+  if (ctx["approval.revoked"] === true) return { ok: false, detail: "an approval was revoked" };
+  if (ctx["policy.version_changed"] === true) return { ok: false, detail: "policy version changed since approval" };
+  const bound = p.bind ?? [];
+  const unproven = bound.filter((b) => ctx[b] === undefined);
+  if (unproven.length) return { ok: false, detail: `permit cannot be bound to: ${unproven.join(", ")}` };
+  return { ok: true, detail: `permit valid · ${p.ttlSeconds}s${p.singleUse ? " · single use" : ""}${bound.length ? ` · bound to ${bound.length} attributes` : ""}` };
+}
+
+/** The strongest escalation whose context holds. */
+function escalate(r: Rule, a: Act): { d: Decision; approvers?: string; quorum?: number; why: string } | null {
+  let best: { d: Decision; approvers?: string; quorum?: number; why: string } | null = null;
+  for (const e of r.escalations ?? []) {
+    if (!e.when.every((c) => evalCond(c, a.ctx).ok)) continue;
+    const cand = { d: e.decision, approvers: e.approvers, quorum: e.quorum, why: e.why ?? e.when.map((c) => c.key).join(" + ") };
+    const stricter =
+      !best ||
+      RANK[cand.d] > RANK[best.d] ||
+      (RANK[cand.d] === RANK[best.d] && ((cand.quorum ?? 1) > (best.quorum ?? 1) || (cand.approvers?.split(",").length ?? 0) > (best.approvers?.split(",").length ?? 0)));
+    if (stricter) best = cand;
+  }
+  return best;
+}
+
 function decide(r: Rule, a: Act): { d: Decision; why: string; approvers?: string; quorum?: number } {
+  // Forbidden content and unverifiable context are refusals, never fall-throughs.
+  const bad = forbidden(r, a);
+  if (bad) return { d: "BLOCK", why: `forbidden content: ${bad}` };
+  const unmet = (r.when.requires ?? []).map((c) => ({ c, r: evalCond(c, a.ctx) })).filter((x) => !x.r.ok);
+  if (unmet.length) {
+    const missing = unmet.filter((x) => x.r.missing);
+    return {
+      d: "BLOCK",
+      why: missing.length ? `context not proven: ${missing.map((x) => x.c.key).join(", ")}` : `condition not met: ${unmet[0].r.detail}`,
+    };
+  }
+  const pc = permitCheck(r, a);
+  if (pc && !pc.ok) return { d: "BLOCK", why: pc.detail };
+  const esc = escalate(r, a);
   if (r.attenuate) {
     const amt = a.amount ?? 0;
     const budget = a.budget ?? 0;
@@ -138,16 +250,28 @@ function decide(r: Rule, a: Act): { d: Decision; why: string; approvers?: string
     const tier = r.tiers[t.tier];
     const prev = r.tiers[t.tier - 1];
     const band = tier?.max === null ? `above ${fmtValue(prev?.max ?? 0, r.unit)}` : `≤ ${fmtValue(tier?.max ?? 0, r.unit)}`;
-    return { d: t.decision, why: `${fmtValue(v, r.unit)} · tier ${band}`, approvers: t.approvers, quorum: t.quorum };
+    const base = { d: t.decision, why: `${fmtValue(v, r.unit)} · tier ${band}`, approvers: t.approvers, quorum: t.quorum };
+    return esc && RANK[esc.d] > RANK[base.d] ? { d: esc.d, why: esc.why, approvers: esc.approvers ?? base.approvers, quorum: esc.quorum ?? base.quorum } : base;
   }
-  return { d: r.decision ?? "ALLOW", why: r.title, approvers: r.approvers, quorum: r.quorum };
+  const base = { d: r.decision ?? "ALLOW", why: r.title, approvers: r.approvers, quorum: r.quorum };
+  return esc && RANK[esc.d] > RANK[base.d] ? { d: esc.d, why: esc.why, approvers: esc.approvers ?? base.approvers, quorum: esc.quorum ?? base.quorum } : base;
 }
 
 export function evaluate(a: Act, rules: Rule[], category: CategoryId, opts: { kill?: boolean } = {}): Verdict {
   if (opts.kill) return { decision: "BLOCK", rule: "kill-switch", title: "Org kill switch", reason: "org-wide kill switch engaged", trace: [] };
   const trace: TraceRow[] = rules.map((r) => {
-    const m = matchRule(r, a, category);
-    if (!m.ok) return { rule: r, matched: false, why: m.why };
+    const { checks, ok, why } = checkRule(r, a, category);
+    if (!ok) {
+      // Which condition failed decides what that means: the rule not applying (fall through) versus
+      // the rule applying and refusing (context it demanded is unproven, or content it forbids).
+      const shape = checks.filter((c) => !c.field.startsWith("requires") && c.field !== "forbid");
+      const appliesHere = shape.every((c) => c.ok);
+      if (appliesHere) {
+        const d = decide(r, a);
+        return { rule: r, matched: true, why: d.why, decision: d.d };
+      }
+      return { rule: r, matched: false, why };
+    }
     const d = decide(r, a);
     return { rule: r, matched: true, why: d.why, decision: d.d };
   });
@@ -158,7 +282,10 @@ export function evaluate(a: Act, rules: Rule[], category: CategoryId, opts: { ki
   const base: Verdict = win
     ? (() => {
         const d = decide(win.rule, a);
-        return { decision: win.decision!, rule: win.rule.id, title: win.rule.title, reason: win.rule.tiers || win.rule.attenuate ? d.why : win.rule.title, trace, approvers: d.approvers, quorum: d.quorum, constrain: win.rule.constrain };
+        // A refusal explains itself: say which condition failed, not just the rule's name.
+        const refused = d.d === "BLOCK" && d.why !== win.rule.title;
+        const explains = win.rule.tiers || win.rule.attenuate || win.rule.escalations || win.rule.permit || refused;
+        return { decision: win.decision!, rule: win.rule.id, title: win.rule.title, reason: explains ? d.why : win.rule.title, trace, approvers: d.approvers, quorum: d.quorum, constrain: win.rule.constrain };
       })()
     : observing[0]
       ? { decision: "ALLOW", rule: observing[0].rule.id, title: observing[0].rule.title, reason: `observe mode — would ${observing[0].decision}: ${observing[0].why}`, trace }

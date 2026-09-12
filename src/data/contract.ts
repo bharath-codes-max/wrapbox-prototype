@@ -23,6 +23,14 @@ export const EFFECTS: { id: string; label: string; desc: string; fields: Field[]
 ];
 export const effectInfo = (id: string) => EFFECTS.find((e) => e.id === id);
 
+/** A fact about the action's context — provenance, delegation, CI status, counts, hashes.
+ *  `key` is a dotted path into Act.ctx (pr.approvals, ci.passed, sha.match, tables.count …). */
+export interface Cond {
+  key: string;
+  op: "is" | "not" | "gte" | "lte" | "gt" | "lt" | "in" | "not_in";
+  value: string | number | boolean | string[];
+}
+
 export interface Match {
   effect: string[];
   path?: string[];
@@ -33,6 +41,24 @@ export interface Match {
   subject?: CategoryId[];
   destinationNotIn?: string[];
   credentials?: boolean;
+  /** Context that must hold. A key the action cannot prove fails closed. */
+  requires?: Cond[];
+}
+
+/** Raise the decision when a context condition holds — more tables, a sensitive schema. */
+export interface Escalation {
+  when: Cond[];
+  decision: Decision;
+  approvers?: string;
+  quorum?: number;
+  why?: string;
+}
+
+/** A permit the agent must carry into execution. Bound attributes are re-checked before it runs. */
+export interface PermitSpec {
+  ttlSeconds: number;
+  singleUse?: boolean;
+  bind?: string[];
 }
 
 export interface Tier {
@@ -47,6 +73,13 @@ export interface Rule {
   title: string;
   why: string;
   when: Match;
+  /** Content that is never allowed for this effect — matched against sql/command. Forces BLOCK. */
+  forbid?: string[];
+  /** Conditional approval bands, evaluated after the base decision. Most restrictive wins. */
+  escalations?: Escalation[];
+  permit?: PermitSpec;
+  /** Missing or unverifiable context blocks instead of falling through. */
+  failClosed?: boolean;
   decision?: Decision;
   approvers?: string;
   quorum?: number;
@@ -234,6 +267,8 @@ const list = (xs: string[]) => (xs.length === 1 && /^[\w.\-/]+$/.test(xs[0]) ? x
 export const orgSlug = (domain?: string, company?: string) =>
   (domain || company || "wrapbox").split(".")[0].trim().replace(/[^a-z0-9-]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "wrapbox";
 
+const condYaml = (c: Cond) => `key: ${c.key}, op: ${c.op}, value: ${Array.isArray(c.value) ? `[${c.value.join(", ")}]` : typeof c.value === "string" ? q(c.value) : c.value}`;
+
 export function toYaml(rules: Rule[], version: number, org = "wrapbox"): string {
   const out: string[] = [`# wrapbox.yaml · v${version}`, `# One contract for every agent in the org`, `version: 1`, `org: ${org}`, `default: ALLOW`, ``, `rules:`];
   if (!rules.length) out.push(`  []   # empty — every action is allowed by default`);
@@ -251,6 +286,11 @@ export function toYaml(rules: Rule[], version: number, org = "wrapbox"): string 
     if (r.when.subject) out.push(`      agents: ${list(r.when.subject)}`);
     if (r.when.destinationNotIn) out.push(`      destination_not_in: ${list(r.when.destinationNotIn)}`);
     if (r.when.credentials) out.push(`      carries_credentials: true`);
+    if (r.when.requires?.length) {
+      out.push(`      requires:`);
+      for (const c of r.when.requires) out.push(`        - { ${condYaml(c)} }`);
+    }
+    if (r.forbid?.length) out.push(`    forbid: ${list(r.forbid)}`);
     if (r.decision) out.push(`    decision: ${r.decision}`);
     if (r.constrain) out.push(`    constrain: ${r.constrain}`);
     if (r.approvers) out.push(`    approvers: ${r.approvers}`);
@@ -266,6 +306,23 @@ export function toYaml(rules: Rule[], version: number, org = "wrapbox"): string 
         out.push(`      - { ${[cond, `decision: ${t.decision}`, ...extra].join(", ")} }`);
       });
     }
+    if (r.escalations?.length) {
+      out.push(`    escalations:`);
+      for (const e of r.escalations) {
+        out.push(`      - when: [ ${e.when.map((c) => `{ ${condYaml(c)} }`).join(", ")} ]`);
+        out.push(`        decision: ${e.decision}`);
+        if (e.approvers) out.push(`        approvers: ${e.approvers}`);
+        if (e.quorum && e.quorum > 1) out.push(`        quorum: ${e.quorum}`);
+        if (e.why) out.push(`        why: ${q(e.why)}`);
+      }
+    }
+    if (r.permit) {
+      out.push(`    permit:`);
+      out.push(`      ttl_seconds: ${r.permit.ttlSeconds}`);
+      if (r.permit.singleUse) out.push(`      single_use: true`);
+      if (r.permit.bind?.length) out.push(`      bind: ${list(r.permit.bind)}`);
+    }
+    if (r.failClosed) out.push(`    fail_closed: true`);
     if (r.mode === "observe") out.push(`    mode: observe`);
     if (r.scope !== "all") out.push(`    scope: ${r.scope}`);
   }
@@ -279,6 +336,30 @@ export interface ParseIssue {
 }
 const DECISIONS = ["ALLOW", "CONSTRAIN", "REVIEW", "BLOCK"];
 const arr = (v: unknown): string[] | undefined => (v === undefined || v === null ? undefined : Array.isArray(v) ? v.map(String) : [String(v)]);
+
+const OPS = ["is", "not", "gte", "lte", "gt", "lt", "in", "not_in"];
+const condFrom = (v: unknown): Cond | null => {
+  const c = (v ?? {}) as Record<string, unknown>;
+  const key = c.key ? String(c.key) : "";
+  const op = c.op ? String(c.op) : "is";
+  if (!key || !OPS.includes(op)) return null;
+  const raw = c.value;
+  const asText = typeof raw === "string" ? raw.trim() : "";
+  const value = Array.isArray(raw)
+    ? raw.map(String)
+    : typeof raw === "number" || typeof raw === "boolean"
+      ? raw
+      : asText === "true" || asText === "false"
+        ? asText === "true"
+        : asText !== "" && !Number.isNaN(Number(asText))
+          ? Number(asText)
+          : String(raw ?? "");
+  return { key, op: op as Cond["op"], value };
+};
+const condsFrom = (v: unknown): Cond[] | undefined => {
+  const list = Array.isArray(v) ? v.map(condFrom).filter(Boolean) : [];
+  return list.length ? (list as Cond[]) : undefined;
+};
 
 export function fromYaml(text: string): { rules: Rule[]; issues: ParseIssue[] } {
   const issues: ParseIssue[] = [];
@@ -339,7 +420,25 @@ export function fromYaml(text: string): { rules: Rule[]; issues: ParseIssue[] } 
         subject: arr(w.agents) as CategoryId[] | undefined,
         destinationNotIn: arr(w.destination_not_in),
         credentials: w.carries_credentials ? true : undefined,
+        requires: condsFrom(w.requires),
       },
+      forbid: arr(r.forbid),
+      escalations: Array.isArray(r.escalations)
+        ? (r.escalations as Record<string, unknown>[])
+            .map((e) => {
+              const when = condsFrom(e.when);
+              if (!when) return null;
+              return { when, decision: String(e.decision ?? "REVIEW").toUpperCase() as Decision, approvers: e.approvers ? String(e.approvers) : undefined, quorum: e.quorum ? Number(e.quorum) : undefined, why: e.why ? String(e.why) : undefined };
+            })
+            .filter(Boolean) as Escalation[] | undefined
+        : undefined,
+      permit: r.permit
+        ? (() => {
+            const pm = r.permit as Record<string, unknown>;
+            return { ttlSeconds: Number(pm.ttl_seconds ?? 60), singleUse: pm.single_use ? true : undefined, bind: arr(pm.bind) };
+          })()
+        : undefined,
+      failClosed: r.fail_closed ? true : undefined,
       decision: decision as Decision | undefined,
       approvers: r.approvers ? String(r.approvers) : undefined,
       quorum: r.quorum ? Number(r.quorum) : undefined,
@@ -353,6 +452,7 @@ export function fromYaml(text: string): { rules: Rule[]; issues: ParseIssue[] } 
       custom: !INITIAL_RULES.some((x) => x.id === id) || undefined,
     });
   });
+  for (const r of rules) if (r.escalations && !r.escalations.length) delete r.escalations;
   return { rules, issues };
 }
 

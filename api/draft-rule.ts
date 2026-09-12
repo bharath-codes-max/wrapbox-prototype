@@ -51,14 +51,27 @@ Rules of the output:
 - understood: short label/value pairs describing what you extracted, for a non-technical reader.
 - unsupported: things the sentence asks for that this schema cannot express — time-of-day windows, rate limits, per-person approvers, geography, spend budgets over time. Never silently drop them.
 - missing: what the sentence still needs before it can become a rule.
+- requires: context the action must prove before the rule allows it. Use dotted keys such as pr.approvals, sha.deployment_matches_reviewed, ci.required_checks_passed, security.checks_passed, parent.holds_production_authority, delegation.explicit, delegation.privilege_escalation, sql.matches_reviewed_artifact, tables.count, tables.sensitive. ops: is, not, gte, lte, gt, lt, in, not_in.
+- forbid: content that must never run, matched against the SQL or command (for example "drop table", "truncate", "disable row level security").
+- escalations: raise the decision when context holds — for example more than N tables, or a sensitive schema — each with its own approvers and quorum.
+- permit: when the sentence asks for a single-use or time-limited permit, set ttl_seconds, single_use and the attributes it must be bound to.
+- fail_closed: true when the sentence says missing, stale or unverifiable context must block.
 - requirements: EVERY distinct requirement in the sentence, one entry each, in the sentence's own words. Set representable=true only when it maps onto a field above (effect, path, command, branch, env, columns, destination, credentials, agent category, decision, tiers, approvers, quorum, constrain). Provenance, CI status, commit SHAs, inherited authority, permit lifetimes, bindings, invalidation, table counts and conditional escalation are NOT representable — mark them false.
 - Never invent a threshold, an approver or a decision that the sentence does not imply.
 - title: a short sentence-case title. why: the reason an employee sees when stopped.`;
 
+const OPS = ["is", "not", "gte", "lte", "gt", "lt", "in", "not_in"];
+const COND = {
+  type: "object",
+  additionalProperties: false,
+  required: ["key", "op", "value"],
+  properties: { key: { type: "string" }, op: { type: "string", enum: OPS }, value: { type: ["string", "number", "boolean", "array"], items: { type: "string" } } },
+};
+
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["effect", "path", "command", "branch", "env", "columns", "destination_not_in", "credentials", "subject", "decision", "tiers", "unit", "approvers", "quorum", "constrain", "title", "why", "understood", "unsupported", "missing", "requirements"],
+  required: ["effect", "path", "command", "branch", "env", "columns", "destination_not_in", "credentials", "subject", "decision", "tiers", "unit", "approvers", "quorum", "constrain", "title", "why", "understood", "unsupported", "missing", "requirements", "requires", "forbid", "escalations", "permit", "fail_closed"],
   properties: {
     effect: { type: ["string", "null"], enum: [...EFFECT_IDS, null] },
     path: { type: "array", items: { type: "string" } },
@@ -96,6 +109,24 @@ const SCHEMA = {
     },
     unsupported: { type: "array", items: { type: "string" } },
     missing: { type: "array", items: { type: "string" } },
+    requires: { type: "array", items: COND },
+    forbid: { type: "array", items: { type: "string" } },
+    escalations: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["when", "decision", "approvers", "quorum", "why"],
+        properties: { when: { type: "array", items: COND }, decision: { type: "string", enum: DECISIONS }, approvers: { type: ["string", "null"] }, quorum: { type: ["number", "null"] }, why: { type: ["string", "null"] } },
+      },
+    },
+    permit: {
+      type: ["object", "null"],
+      additionalProperties: false,
+      required: ["ttl_seconds", "single_use", "bind"],
+      properties: { ttl_seconds: { type: "number" }, single_use: { type: ["boolean", "null"] }, bind: { type: "array", items: { type: "string" } } },
+    },
+    fail_closed: { type: ["boolean", "null"] },
     requirements: {
       type: "array",
       items: {
@@ -163,6 +194,35 @@ function toRule(d: Record<string, unknown>, existingIds: string[]) {
   if (subject) when.subject = subject;
   for (const k of Object.keys(when)) if (when[k] === undefined) delete when[k];
 
+  const conds = (v: unknown) => {
+    const out = (Array.isArray(v) ? v : [])
+      .map((x) => {
+        const c = (x ?? {}) as Record<string, unknown>;
+        const key = str(c.key);
+        const op = str(c.op);
+        if (!key || !op || !OPS.includes(op)) return null;
+        const raw = c.value;
+        const value = Array.isArray(raw) ? raw.map(String) : typeof raw === "number" || typeof raw === "boolean" ? raw : String(raw ?? "");
+        return { key, op, value };
+      })
+      .filter(Boolean);
+    return out.length ? out : undefined;
+  };
+  const requires = conds(d.requires);
+  if (requires) when.requires = requires;
+  const forbid = clean(arr(d.forbid));
+  const escalations = (Array.isArray(d.escalations) ? d.escalations : [])
+    .map((x) => {
+      const e = (x ?? {}) as Record<string, unknown>;
+      const w = conds(e.when);
+      const dec = str(e.decision);
+      if (!w || !dec || !DECISIONS.includes(dec)) return null;
+      return { when: w, decision: dec, approvers: str(e.approvers), quorum: e.quorum ? Number(e.quorum) : undefined, why: str(e.why) };
+    })
+    .filter(Boolean);
+  const pm = (d.permit ?? null) as Record<string, unknown> | null;
+  const permit = pm && pm.ttl_seconds ? { ttlSeconds: Number(pm.ttl_seconds), singleUse: pm.single_use === true ? true : undefined, bind: clean(arr(pm.bind)) } : undefined;
+
   const base = tiers.length ? `${effect}.tiers` : `${effect}.${(decision ?? "rule").toLowerCase()}`;
   let id = base;
   for (let i = 2; existingIds.includes(id); i++) id = `${base}.${i}`;
@@ -177,6 +237,10 @@ function toRule(d: Record<string, unknown>, existingIds: string[]) {
     ...(approvers && !tiers.length ? { approvers } : {}),
     ...(d.quorum && !tiers.length ? { quorum: Number(d.quorum) } : {}),
     ...(constrain ? { constrain } : {}),
+    ...(forbid ? { forbid } : {}),
+    ...(escalations.length ? { escalations } : {}),
+    ...(permit ? { permit } : {}),
+    ...(d.fail_closed === true ? { failClosed: true } : {}),
     scope: /payment|claim|discount|purchase/.test(effect) ? "business" : /git|filesystem|shell/.test(effect) ? "coding" : "all",
     custom: true,
   };
