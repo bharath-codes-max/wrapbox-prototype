@@ -713,10 +713,21 @@ export function AdminSetup() {
     }
   }
 
+  // Step 7 path selection: prove enforcement with whatever the admin actually connected.
+  // Nothing connected → clearly-labelled preview on sample products. Same canonical evaluate().
+  const connectedIds = Object.keys(connectedMap);
+  const previewMode = connectedIds.length === 0;
+  const pick = (ids: string[], fallback: string) => ids.find((id) => connectedIds.includes(id)) ?? fallback;
+  const codingAgent = pick(["claude-code", "cursor", "codex-cli", "gemini-cli", "copilot-ide", "copilot-cloud"], "claude-code");
+  const mcpAgent = pick(["stripe-mcp", "postgres-mcp", "github-mcp"], "stripe-mcp");
+  const sdkAgent = pick(["langgraph", "openai-agents", "google-adk"], "langgraph");
+  const codingOn = previewMode || connectedIds.some((id) => ["claude-code", "cursor", "codex-cli", "gemini-cli", "copilot-ide", "copilot-cloud"].includes(id));
+  const mcpOn = previewMode || connectedIds.some((id) => ["stripe-mcp", "postgres-mcp", "github-mcp"].includes(id));
+  const sdkOn = previewMode || connectedIds.some((id) => ["langgraph", "openai-agents", "google-adk"].includes(id));
   const TESTS: { key: string; label: string; agentId: string; gate: Gate }[] = [
-    { key: "env", label: "Claude Code reads .env.production", agentId: "claude-code", gate: SCENARIOS.ide.gates[0] },
-    { key: "refund", label: "Stripe refund of $8,000 via MCP", agentId: "stripe-mcp", gate: SCENARIOS["mcp-stripe"].gates[1] },
-    { key: "pii", label: "Agent queries customer emails", agentId: "postgres-mcp", gate: SCENARIOS["mcp-postgres"].gates[0] },
+    ...(codingOn ? [{ key: "coding", label: `${agentById(codingAgent).name} reads .env.production`, agentId: codingAgent, gate: SCENARIOS.ide.gates[0] }] : []),
+    ...(mcpOn ? [{ key: "mcp", label: `Refund of $8,000 through the MCP gateway (${agentById(mcpAgent).name})`, agentId: mcpAgent, gate: SCENARIOS["mcp-stripe"].gates[1] }] : []),
+    ...(sdkOn ? [{ key: "sdk", label: `${agentById(sdkAgent).name} pays a ₹3,00,000 claim via the SDK`, agentId: sdkAgent, gate: SCENARIOS.custom.gates[0] }] : []),
   ];
   async function runTest(key: string) {
     const t = TESTS.find((x) => x.key === key)!;
@@ -1440,13 +1451,18 @@ export function AdminSetup() {
       {step === 6 && (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
           <Card className="p-6 min-w-0">
-            <StepHead n={7} total={total} title="Go live — watch the first decisions" sub="Send a real test action through a connected agent. It goes through the same pipeline as production traffic and shows up in the live stream." />
+            <StepHead n={7} total={total} title="Go live — watch the first decisions" sub="Send a real test action through a connected agent. It runs through the same policy engine as production traffic and shows up in the live stream." />
+            {previewMode && (
+              <div className="mb-3 rounded-xl border border-line bg-surface-2 px-4 py-2.5 text-[12px] text-fg-2">
+                Preview mode — no agent is connected yet. These run against the same evaluator on sample products so you can see the decision; connect an agent in Step 4 to prove it live.
+              </div>
+            )}
             <div className="space-y-2">
               {TESTS.map((t) => {
                 const run = tests.find((x) => x.key === t.key);
                 const agent = agentById(t.agentId);
                 const native = nativeFor(agent, t.gate);
-                const on = !!connectedNow[t.agentId];
+                const on = previewMode || !!connectedNow[t.agentId];
                 const dv = run?.v;
                 return (
                   <div key={t.key} className="rounded-xl border border-line">
@@ -1458,7 +1474,7 @@ export function AdminSetup() {
                       </div>
                       {run?.stage === 4 && dv ? <DecisionPill d={dv.decision} /> : null}
                       {run?.stage === 4 && dv?.observed && <Chip tone="review">would {dv.observed}</Chip>}
-                      {!on && <Chip>connect in step 4</Chip>}
+                      {previewMode ? <Chip>preview</Chip> : !on && <Chip>connect in step 4</Chip>}
                       <Button size="sm" onClick={() => runTest(t.key)} disabled={!on || (!!run && run.stage < 4)}>
                         {run && run.stage < 4 ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3 fill-current" />} {run ? "Run again" : "Send test"}
                       </Button>
