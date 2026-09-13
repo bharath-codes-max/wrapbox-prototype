@@ -115,6 +115,7 @@ interface DeviceSeed {
 const DEVICES: DeviceSeed[] = [
   { id: "dk-macbook-pro", hostname: "dk-macbook-pro.local", ownerId: "dev.k", os: "macOS 15.6", osLogo: "apple", arch: "arm64", enrolledDays: 14, state: "healthy", heartbeatMin: 0.7, agents: [["claude-code", "2.1.104"], ["cursor", "1.8.2"], ["codex-cli", "0.153.4"]], rate: 0.55 },
   { id: "tanvi-mbp", hostname: "tanvi-mbp.local", ownerId: "tanvi.k", os: "macOS 15.5", osLogo: "apple", arch: "arm64", enrolledDays: 9, state: "healthy", heartbeatMin: 2, agents: [["cursor", "1.8.2"], ["windsurf", "1.12.6"], ["unknown:claims-bot.py", "python 3.12", undefined, "api.openai.com"]], rate: 0.45 },
+  { id: "jonas-thinkpad", hostname: "jonas-thinkpad.oakridge.internal", ownerId: "jonas.w", os: "Windows 11", osLogo: "windows", arch: "x86_64", enrolledDays: 11, state: "healthy", heartbeatMin: 1.4, agents: [["claude-code", "2.1.104"], ["copilot-ide", "1.104.2"]], rate: 0.42 },
   { id: "claims-worker-01", hostname: "claims-worker-01.prod.oakridge.internal", ownerId: "rahul.m", os: "Ubuntu 24.04", osLogo: "ubuntu", arch: "x86_64", enrolledDays: 6, state: "heartbeat-lost", heartbeatMin: 12, agents: [["langgraph", "1.4.0"]], rate: 0.12, alwaysOn: true },
 ];
 
@@ -150,7 +151,7 @@ function templatesFor(agentId: string, human: string, endpoint?: string): Tpl[] 
         shell(agentId, human, ["npm test", "npm run typecheck", "git status", "git diff --stat", "pnpm build"], 4),
         featurePush(agentId, human, 1.2),
         secret(agentId, human, 0.15),
-        T(agentId, human, "Edit ~/.zshrc", { effect: "filesystem.write", path: "/Users/" + human.split(".")[0] + "/.zshrc", env: "development" }, 0.06),
+        T(agentId, human, "Edit shell profile", { effect: "filesystem.write", path: "/Users/" + human.split(".")[0] + "/.zshrc", env: "development" }, 0.06),
         T(agentId, human, "Bash(git push origin main)", { effect: "git.push", branch: "main", command: "git push origin main", env: "development" }, 0.05),
         ...model(5),
       ];

@@ -88,6 +88,25 @@ export function Logo({ name, size = 28, bleed, className, rounded = "rounded-[8p
   );
 }
 
+/** A tenant's mark. Real customers upload a logo; until then the monogram carries the brand gradient. */
+export function CompanyMark({ name, size = 30, className }: { name: string; size?: number; className?: string }) {
+  const initials = name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  return (
+    <span
+      className={cn("prism-swatch inline-grid place-items-center rounded-lg font-semibold text-white shrink-0", className)}
+      style={{ width: size, height: size, fontSize: size * 0.42 }}
+      aria-hidden
+    >
+      {initials}
+    </span>
+  );
+}
+
 export function WrapboxMark({ size = 28 }: { size?: number }) {
   return <img src={logoUrl("wrapbox-icon")} alt="Wrapbox" style={{ width: size, height: size }} className="rounded-[22%] shrink-0" />;
 }

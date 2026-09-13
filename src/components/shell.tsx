@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import {
+  ArrowRight,
   BookOpen,
   Building2,
   Bot,
@@ -39,7 +40,7 @@ import { ADMIN, EMPLOYEE, VISIBLE_WORKSPACES, WORKSPACES, getState, regionLabel,
 import { PasskeyModal } from "./insight";
 import { WrapboxWordmark } from "./logo";
 import { useNavStyle } from "../lib/navstyle";
-import { Avatar, Kbd, Logo, PersonFigure, cn } from "./ui";
+import { Avatar, CompanyMark, Kbd, Logo, PersonFigure, cn } from "./ui";
 
 interface NavItem {
   path: string;
@@ -63,7 +64,7 @@ function useNav(role: Role): { section?: string; items: NavItem[] }[] {
   if (fabric)
     return role === "admin"
       ? [
-          { items: [{ path: "/onboarding/admin", label: "Get started", icon: Rocket, badge: onboarded.admin ? undefined : "Setup", tone: "accent" }] },
+          { items: [{ path: "/onboarding/admin", label: onboarded.admin ? "Deployment walkthrough" : "Get started", icon: Rocket, badge: onboarded.admin ? undefined : "Setup", tone: "accent" }] },
           { section: "Enforce", items: [{ path: "/", label: "Fleet", icon: Laptop }, { path: "/gateway", label: "Gateway", icon: Network }] },
           { section: "Deploy", items: [{ path: "/downloads", label: "Downloads", icon: Download }, { path: "/docs", label: "Docs", icon: BookOpen }] },
           { section: "Govern", items: [{ path: "/contract", label: "Intent contract", icon: FileCheck2, badge: ruleCount || undefined }] },
@@ -136,15 +137,33 @@ function isActive(path: string, current: string) {
   return current === path || current.startsWith(path + "/");
 }
 
-function NavLink({ it, current, onNavigate }: { it: NavItem; current: string; onNavigate?: () => void }) {
+function NavLink({ it, current, onNavigate, lead }: { it: NavItem; current: string; onNavigate?: () => void; lead?: boolean }) {
   const active = isActive(it.path, current);
+  // The lead accent item is the setup call to action: carry the brand gradient so it reads as one.
+  if (lead && it.tone === "accent")
+    return (
+      <a
+        href={"#" + it.path}
+        onClick={onNavigate}
+        className={cn("group relative flex items-center gap-2.5 rounded-xl px-3 h-11 text-[13.5px] font-medium text-white overflow-hidden shadow-[0_6px_16px_-8px_rgba(236,74,34,0.55)] transition-transform hover:-translate-y-px", active && "ring-2 ring-fg/15")}
+      >
+        <span className="prism-swatch absolute inset-0" aria-hidden />
+        <it.icon className="relative size-4 shrink-0" strokeWidth={2} />
+        <span className="relative truncate">{it.label}</span>
+        {it.badge !== undefined ? (
+          <span className="relative ml-auto rounded-full bg-white/25 px-1.5 py-px text-[10.5px] font-semibold backdrop-blur-sm">{it.badge}</span>
+        ) : (
+          <ArrowRight className="relative ml-auto size-3.5 opacity-80 transition-transform group-hover:translate-x-0.5" />
+        )}
+      </a>
+    );
   return (
     <a
       href={"#" + it.path}
       onClick={onNavigate}
       className={cn(
         "group relative flex items-center gap-2.5 rounded-lg px-2.5 h-9 text-[13.5px] transition-colors",
-        active ? "bg-surface text-fg font-medium shadow-card border border-line" : "text-fg-2 hover:text-fg hover:bg-surface-2 border border-transparent",
+        active ? "bg-surface text-fg font-medium shadow-card border border-line" : "text-fg-2 hover:text-fg hover:bg-surface border border-transparent",
         it.adminOnly && "opacity-60",
       )}
     >
@@ -168,15 +187,26 @@ function Sidebar({ current, onNavigate }: { current: string; onNavigate?: () => 
   const me = role === "admin" ? ADMIN : EMPLOYEE;
   return (
     <div className="flex h-full flex-col">
-      <nav className="flex-1 overflow-y-auto scroll-thin px-2.5 pt-3 pb-3">
-        {nav.map((g, gi) => (
-          <div key={gi} className="mb-2">
-            {g.section && <div className="eyebrow px-2.5 pt-3 pb-1.5 !text-[10.5px]">{g.section}</div>}
-            {g.items.map((it) => (
-              <NavLink key={it.path} it={it} current={current} onNavigate={onNavigate} />
-            ))}
-          </div>
-        ))}
+      <nav className="flex-1 overflow-y-auto scroll-thin px-2.5 pt-3 pb-3 space-y-2">
+        {nav.map((g, gi) =>
+          // The lead group is a call to action, not a section — it keeps its own emphasis.
+          g.section ? (
+            <div key={gi} className="rounded-2xl border border-line bg-surface-2/60 p-1.5">
+              <div className="eyebrow px-2 pt-1.5 pb-1.5 !text-[10.5px]">{g.section}</div>
+              <div className="space-y-0.5">
+                {g.items.map((it) => (
+                  <NavLink key={it.path} it={it} current={current} onNavigate={onNavigate} />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div key={gi} className="space-y-0.5">
+              {g.items.map((it) => (
+                <NavLink key={it.path} it={it} current={current} onNavigate={onNavigate} lead />
+              ))}
+            </div>
+          ),
+        )}
       </nav>
       <div className="px-2.5 pb-2">
         <NavLink it={{ path: "/settings", label: "Settings", icon: SettingsIcon }} current={current} onNavigate={onNavigate} />
@@ -320,6 +350,8 @@ function WorkspaceMenu() {
   const workspace = useStore((s) => s.workspace);
   const company = useStore((s) => s.company);
   const region = useStore((s) => s.region);
+  const domain = useStore((s) => s.domain);
+  const idp = useStore((s) => s.idp);
   const envFilter = useStore((s) => s.envFilter);
   const events = useStore((s) => s.events);
   const connectedCount = useStore((s) => Object.keys(s.connected).length);
@@ -341,7 +373,8 @@ function WorkspaceMenu() {
   };
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen(!open)} className={cn("flex items-center gap-3 rounded-xl h-10 pl-3.5 pr-2.5 transition-colors ring-1", open ? "bg-(--n-soft-2) ring-(--n-ring-2)" : "bg-(--n-soft) ring-(--n-ring) hover:bg-(--n-soft-2)")}>
+      <button onClick={() => setOpen(!open)} className={cn("flex items-center gap-2.5 rounded-xl h-10 pl-2 pr-2.5 transition-colors ring-1", open ? "bg-(--n-soft-2) ring-(--n-ring-2)" : "bg-(--n-soft) ring-(--n-ring) hover:bg-(--n-soft-2)")}>
+        <CompanyMark name={company} size={24} className="rounded-md" />
         <span className="text-left leading-tight">
           <span className="block text-[12.5px] font-semibold text-(--n-fg)">
             {company}
@@ -357,6 +390,16 @@ function WorkspaceMenu() {
       <AnimatePresence>
         {open && (
           <motion.div initial={{ opacity: 0, y: -4, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4 }} className="absolute left-0 top-12 z-50 w-[360px] rounded-2xl border border-line bg-surface text-fg shadow-float overflow-hidden">
+            <div className="flex items-center gap-3 px-4 pt-4 pb-3.5 border-b border-line">
+              <CompanyMark name={company} size={36} className="rounded-xl" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[14px] font-semibold truncate">{company}</div>
+                <div className="text-[11.5px] text-fg-3 truncate">
+                  {domain} · {regionLabel(region)}
+                </div>
+              </div>
+              {idp && <Logo name={idp.toLowerCase().includes("okta") ? "okta" : "microsoft"} size={20} rounded="rounded" />}
+            </div>
             {VISIBLE_WORKSPACES.length > 1 && <div className="px-4 pt-3.5 pb-2 eyebrow">Workspace</div>}
             <div className={cn("px-2 space-y-1", VISIBLE_WORKSPACES.length <= 1 && "hidden")}>
               {VISIBLE_WORKSPACES.map((id) => {
@@ -398,7 +441,8 @@ function WorkspaceMenu() {
             )}
             <div className={cn("border-t border-line px-4 pt-3 pb-2 eyebrow", VISIBLE_WORKSPACES.length > 1 ? "mt-2" : "border-t-0")}>Environment</div>
             <div className="px-2 pb-2 grid grid-cols-2 gap-1">
-              {ENVS.map((e) => (
+              {/* Only environments this tenant actually runs in — an empty one is noise, not a choice. */}
+              {ENVS.filter((e) => e.id === "all" || (counts[e.id] ?? 0) > 0 || envFilter === e.id).map((e) => (
                 <button key={e.id} onClick={() => setState({ envFilter: e.id })} className={cn("rounded-xl px-2.5 py-2 text-left transition-colors border", envFilter === e.id ? "border-fg bg-surface" : "border-transparent hover:bg-surface-2")}>
                   <span className="flex items-center gap-1.5 text-[12.5px] font-medium">
                     <span className={cn("size-2 rounded-full", e.dot.replace("bg-(--n-fg-3)", "bg-fg-3"))} />
@@ -650,7 +694,7 @@ export function Shell({ current, children, focus }: { current: string; children:
       )}
       <div className="flex flex-1 min-h-0">
         {!focus && (
-          <aside className="relative z-10 hidden lg:block w-[244px] shrink-0 border-r border-[color-mix(in_oklab,var(--fg)_11%,transparent)] bg-bg">
+          <aside className="relative z-10 hidden lg:block w-[252px] shrink-0 border-r border-[color-mix(in_oklab,var(--fg)_11%,transparent)] bg-surface">
             <Sidebar current={current} />
           </aside>
         )}

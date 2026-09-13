@@ -84,6 +84,7 @@ export function Fleet() {
 
   return (
     <div className="mx-auto max-w-[1320px] px-4 lg:px-8 py-8">
+      {admin && <FabricHero devices={devices} gateways={gateways} discovered={discovered.length} version={version} today={today.length} blocked={blocked} />}
       <PageHeader
         eyebrow={admin ? `${company} · Runtime and Gateway` : `${me.name} · ${me.role}`}
         title={admin ? "Fleet" : "My device"}
@@ -144,6 +145,64 @@ export function Fleet() {
       </Card>
       <EvidenceDrawer e={open} onClose={() => setOpen(null)} />
     </div>
+  );
+}
+
+/** The shape of the product in one card: three enforcement points, every number from state. */
+function FabricHero({ devices, gateways, discovered, version, today, blocked }: { devices: FleetDevice[]; gateways: GatewayNode[]; discovered: number; version: number; today: number; blocked: number }) {
+  const platforms = useMemo(() => {
+    const seen = new Map<string, { logo: string; label: string; n: number }>();
+    for (const d of devices) {
+      const label = /win/i.test(d.os) ? "Windows" : /mac/i.test(d.os) ? "macOS" : "Linux";
+      const cur = seen.get(label);
+      seen.set(label, { logo: d.osLogo, label, n: (cur?.n ?? 0) + 1 });
+    }
+    return [...seen.values()];
+  }, [devices]);
+  const points = [
+    { icon: Laptop, label: "Runtime", where: `${devices.length} ${devices.length === 1 ? "device" : "devices"}`, sub: "installed once per machine" },
+    { icon: Network, label: "Gateway", where: `${gateways.length} ${gateways.length === 1 ? "network" : "networks"}`, sub: "installed once per network" },
+    { icon: ShieldCheck, label: "Contract", where: `v${version}`, sub: "one policy, both places" },
+  ];
+  return (
+    <section className="hero-prism relative overflow-hidden rounded-3xl px-6 py-6 lg:px-8 lg:py-7 text-white mb-6 shadow-[0_20px_50px_-28px_rgba(120,40,90,0.5)]">
+      <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr] items-center">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full bg-white/20 ring-1 ring-white/35 backdrop-blur-md px-3 py-1 text-[11.5px] font-medium">
+            <span className="size-1.5 rounded-full bg-[#1b0f33]" />
+            Enforcement Fabric
+          </div>
+          <h2 className="mt-3 text-[26px] lg:text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] [text-shadow:0_2px_20px_rgba(90,20,40,0.2)]">
+            Installed once. Every agent governed.
+          </h2>
+          <p className="mt-2 max-w-[56ch] text-[13.5px] leading-relaxed text-white/90">
+            {discovered} agents were discovered and provisioned across {devices.length} devices — no per-agent setup on any of them. Today {today.toLocaleString("en-US")} actions were checked and {blocked} stopped before they ran.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-2.5">
+            {platforms.map((p) => (
+              <span key={p.label} className="inline-flex items-center gap-1.5 rounded-full bg-white/15 ring-1 ring-white/25 px-2.5 py-1 text-[11.5px] font-medium">
+                <Logo name={p.logo} size={14} rounded="rounded-sm" className="brightness-0 invert opacity-90" />
+                {p.label} <span className="text-white/70 tnum">{p.n}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="grid gap-2">
+          {points.map((p) => (
+            <div key={p.label} className="flex items-center gap-3 rounded-xl bg-white/[0.14] ring-1 ring-white/25 backdrop-blur-md px-3.5 py-2.5">
+              <span className="grid size-8 place-items-center rounded-lg bg-white/20 shrink-0">
+                <p.icon className="size-4" strokeWidth={1.9} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-semibold">{p.label}</div>
+                <div className="text-[11px] text-white/75 truncate">{p.sub}</div>
+              </div>
+              <div className="text-[13px] font-semibold tnum whitespace-nowrap">{p.where}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 

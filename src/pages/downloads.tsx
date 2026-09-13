@@ -15,6 +15,17 @@ function beginDownload(name: string, verify: string) {
 const OS_LOGO: Record<Os, string> = { macos: "apple", windows: "windows", linux: "ubuntu" };
 
 const MDM_LABEL: Record<MdmVendor, string> = { jamf: "Jamf Pro", intune: "Microsoft Intune", kandji: "Kandji" };
+/** Intune is Microsoft's, so it carries the Microsoft mark. Jamf and Kandji ship no public icon set,
+ *  so they get a lettermark in their own brand colour rather than an invented logo. */
+const MDM_TINT: Record<MdmVendor, string> = { jamf: "#3B5DAA", intune: "", kandji: "#6B4EFF" };
+function MdmMark({ vendor }: { vendor: MdmVendor }) {
+  if (vendor === "intune") return <Logo name="microsoft" size={16} rounded="rounded-sm" />;
+  return (
+    <span className="grid size-4 place-items-center rounded-sm text-[9px] font-bold text-white" style={{ background: MDM_TINT[vendor] }} aria-hidden>
+      {MDM_LABEL[vendor][0]}
+    </span>
+  );
+}
 
 export function Downloads() {
   const domain = useStore((s) => s.domain);
@@ -78,7 +89,20 @@ function RuntimeCard({ org, onDevices, totalDevices }: { org: string; onDevices:
         <a href="#/docs/runtime" className="ml-auto inline-flex items-center gap-1 font-medium text-accent"><BookOpen className="size-3.5" /> Runtime docs</a>
       </div>
       <div className="px-6 pt-5 pb-2">
-        <Segmented size="sm" value={os} onChange={setOs} options={OS_ORDER.map((id) => ({ value: id, label: OS_META[id].label }))} />
+        <Segmented
+          size="sm"
+          value={os}
+          onChange={setOs}
+          options={OS_ORDER.map((id) => ({
+            value: id,
+            label: (
+              <>
+                <Logo name={OS_LOGO[id]} size={14} rounded="rounded-sm" className={cn(os !== id && "opacity-60 grayscale")} />
+                {OS_META[id].label}
+              </>
+            ),
+          }))}
+        />
       </div>
       <div className="px-6 pb-6 space-y-5 flex-1">
         {os === "macos" && <MacosPanel org={org} />}
@@ -125,8 +149,8 @@ function GatewayCard({ org, live, name }: { org: string; live: boolean; name?: s
           value={tab}
           onChange={setTab}
           options={[
-            { value: "docker", label: "Docker · fast path" },
-            { value: "helm", label: "Kubernetes · Helm" },
+            { value: "docker", label: <><Logo name="docker" size={14} rounded="rounded-sm" className={cn(tab !== "docker" && "opacity-60 grayscale")} /> Docker · fast path</> },
+            { value: "helm", label: <><Logo name="kubernetes" size={14} rounded="rounded-sm" className={cn(tab !== "helm" && "opacity-60 grayscale")} /> Kubernetes · Helm</> },
           ]}
         />
       </div>
@@ -221,7 +245,8 @@ function MacosPanel({ org }: { org: string }) {
         <div className="space-y-3">
           <div className="flex flex-wrap gap-1.5">
             {MDM_ORDER.map((v) => (
-              <button key={v} onClick={() => setMdm(v)} className={cn("h-7 rounded-full border px-3 text-[12px] font-medium transition-colors", mdm === v ? "border-fg text-fg bg-surface" : "border-line text-fg-2 hover:border-line-strong")}>
+              <button key={v} onClick={() => setMdm(v)} className={cn("inline-flex items-center gap-1.5 h-7 rounded-full border pl-1.5 pr-3 text-[12px] font-medium transition-colors", mdm === v ? "border-fg text-fg bg-surface" : "border-line text-fg-2 hover:border-line-strong")}>
+                <MdmMark vendor={v} />
                 {MDM_LABEL[v]}
               </button>
             ))}
