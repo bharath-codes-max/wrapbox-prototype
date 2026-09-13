@@ -11,9 +11,9 @@ import { GATEWAY, MDM_ORDER, OS_META, OS_ORDER, RUNTIME, orgFor, runtimeInstall,
 import { profileOf } from "../data/profiles";
 import { personById } from "../data/people";
 import { CodeBlock, InlineCmd } from "../components/code";
-import { Avatar, Button, Card, Chip, CopyButton, Logo, Segmented, cn } from "../components/ui";
+import { Avatar, Button, Card, Chip, CompanyMark, CopyButton, Logo, Segmented, cn } from "../components/ui";
 import { go } from "../lib/router";
-import { adminPerson, markOnboarded, toast, useStore } from "../lib/store";
+import { adminPerson, markOnboarded, regionOf, toast, useStore } from "../lib/store";
 
 const STEPS = [
   { t: "Create the workspace", s: "Tenant, identity provider, region" },
@@ -32,19 +32,27 @@ function Frame({ who, title, step, reached, onJump, children }: { who: "admin"; 
   const admin = adminPerson();
   return (
     <div className="mx-auto max-w-[1280px] px-4 lg:px-8 py-8">
-      <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="lg:sticky lg:top-6 self-start">
-          <div className="flex items-center gap-2.5">
-            <Avatar p={admin} size={30} />
-            <div className="min-w-0">
-              <div className="text-[13px] font-semibold truncate">{title}</div>
-              <div className="text-[11.5px] text-fg-3">{admin.name} · {admin.role}</div>
+      <div className="grid gap-6 lg:grid-cols-[290px_minmax(0,1fr)]">
+        <aside className="lg:sticky lg:top-6 self-start rounded-2xl border border-line bg-surface shadow-card overflow-hidden">
+          <div className="prism-swatch h-1" aria-hidden />
+          <div className="px-4 pt-4 pb-3.5 border-b border-line">
+            <div className="flex items-center gap-2.5">
+              <Avatar p={admin} size={30} />
+              <div className="min-w-0">
+                <div className="text-[13px] font-semibold truncate">{title}</div>
+                <div className="text-[11.5px] text-fg-3 truncate">{admin.name} · {admin.role}</div>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <div className="h-1.5 flex-1 rounded-full bg-surface-3 overflow-hidden">
+                <motion.div className="h-full prism-swatch" animate={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
+              </div>
+              <span className="text-[11px] text-fg-3 tnum shrink-0">
+                {step + 1}/{STEPS.length}
+              </span>
             </div>
           </div>
-          <div className="mt-4 h-1 rounded-full bg-surface-3 overflow-hidden">
-            <motion.div className="h-full bg-ink" animate={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
-          </div>
-          <ol className="mt-4 space-y-0.5">
+          <ol className="p-2 space-y-0.5">
             {STEPS.map((x, i) => (
               <li key={x.t}>
                 <button
@@ -52,7 +60,7 @@ function Frame({ who, title, step, reached, onJump, children }: { who: "admin"; 
                   onClick={() => onJump(i)}
                   className={cn(
                     "flex w-full items-start gap-3 rounded-xl px-2.5 py-2 text-left transition-colors disabled:cursor-not-allowed",
-                    i === step ? "bg-surface border border-line shadow-card" : "border border-transparent hover:bg-surface-2",
+                    i === step ? "bg-surface-2 border border-line" : "border border-transparent hover:bg-surface-2",
                   )}
                 >
                   <span className={cn("mt-0.5 grid size-5 place-items-center rounded-full text-[10.5px] font-semibold shrink-0", i < step ? "bg-allow text-white" : i === step ? "bg-ink text-ink-fg" : "border border-line text-fg-3")}>
@@ -66,7 +74,7 @@ function Frame({ who, title, step, reached, onJump, children }: { who: "admin"; 
               </li>
             ))}
           </ol>
-          <button onClick={() => go("/")} className="mt-4 inline-flex items-center gap-1.5 px-2.5 text-[12px] text-fg-3 hover:text-fg">
+          <button onClick={() => go("/")} className="w-full border-t border-line px-4 py-2.5 text-left inline-flex items-center gap-1.5 text-[12px] text-fg-3 hover:text-fg hover:bg-surface-2">
             <X className="size-3.5" /> Exit setup
           </button>
         </aside>
@@ -135,52 +143,89 @@ export function EnrollWizard() {
 }
 
 /* ---- step 0 ---- */
+/** One row of the tenant identity card: a real mark, a value, and what it decides. */
+function IdentityRow({ mark, label, value, sub, right }: { mark: ReactNode; label: string; value: string; sub: string; right?: ReactNode }) {
+  return (
+    <div className="flex items-center gap-3.5 px-5 py-4 border-b border-line last:border-0">
+      {mark}
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-semibold text-fg-3 uppercase tracking-wider">{label}</div>
+        <div className="mt-0.5 text-[14.5px] font-medium truncate">{value}</div>
+        <div className="text-[11.5px] text-fg-3 truncate">{sub}</div>
+      </div>
+      {right}
+    </div>
+  );
+}
+
 function Step0({ company, domain, idp, onNext }: { company: string; domain: string; idp: string; onNext: () => void }) {
+  const region = useStore((s) => s.region);
+  const r = regionOf(region);
+  const members = useStore((s) => s.members);
+  const idpName = idp || "Okta";
+  const idpLogo = idpName.toLowerCase().includes("okta") ? "okta" : "microsoft";
   return (
     <>
       <StepHead n={1} title="Create the workspace" sub="One tenant, one policy engine, one evidence chain. The Runtime and the Gateway will both register into this workspace." />
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_320px]">
-        <Card className="p-6 space-y-4">
-          <div>
-            <div className="text-[12px] font-semibold text-fg-3 uppercase tracking-wider mb-1.5">Company</div>
-            <div className="rounded-xl border border-line px-3.5 py-3 flex items-center gap-3">
-              <div className="grid size-9 place-items-center rounded-lg bg-surface-2 font-semibold text-fg-2">{company.slice(0, 1)}</div>
-              <div>
-                <div className="text-[14px] font-medium">{company}</div>
-                <div className="text-[11.5px] text-fg-3">{domain}</div>
+        <Card className="overflow-hidden">
+          {/* The tenant's identity, carried in the brand gradient the rest of the product uses for it. */}
+          <div className="hero-prism relative px-5 py-5 text-white">
+            <div className="flex items-center gap-3.5">
+              <span className="grid size-12 place-items-center rounded-xl bg-white/20 ring-1 ring-white/35 backdrop-blur-md text-[18px] font-semibold">
+                {company.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+              </span>
+              <div className="min-w-0">
+                <div className="text-[18px] font-semibold tracking-tight truncate">{company}</div>
+                <div className="text-[12px] text-white/85 truncate">{domain} · {members.length} people in the directory</div>
               </div>
             </div>
           </div>
-          <div>
-            <div className="text-[12px] font-semibold text-fg-3 uppercase tracking-wider mb-1.5">Identity provider</div>
-            <div className="rounded-xl border border-line px-3.5 py-3 flex items-center gap-3">
-              <Logo name={idp.toLowerCase().includes("okta") ? "okta" : "microsoft"} size={28} rounded="rounded-md" />
-              <div>
-                <div className="text-[14px] font-medium">{idp || "Okta"}</div>
-                <div className="text-[11.5px] text-fg-3">SSO and SCIM directory sync</div>
-              </div>
-              <Chip tone="allow" className="ml-auto">Connected</Chip>
-            </div>
-          </div>
-          <div>
-            <div className="text-[12px] font-semibold text-fg-3 uppercase tracking-wider mb-1.5">Data region</div>
-            <div className="rounded-xl border border-line px-3.5 py-3 flex items-center gap-3">
-              <div className="grid size-9 place-items-center rounded-lg bg-surface-2 text-fg-2 text-[12px] font-mono">US</div>
-              <div>
-                <div className="text-[14px] font-medium">United States · us-east-1</div>
-                <div className="text-[11.5px] text-fg-3">Evidence, receipts and vault leases stay in the region.</div>
-              </div>
-            </div>
-          </div>
+          <IdentityRow
+            mark={<CompanyMark name={company} size={40} className="rounded-xl" />}
+            label="Company"
+            value={company}
+            sub={domain}
+            right={<Chip tone="allow">Tenant created</Chip>}
+          />
+          <IdentityRow
+            mark={<span className="grid size-10 place-items-center rounded-xl border border-line bg-surface"><Logo name={idpLogo} size={24} rounded="rounded-md" /></span>}
+            label="Identity provider"
+            value={idpName}
+            sub="SSO and SCIM directory sync"
+            right={<Chip tone="allow">Connected</Chip>}
+          />
+          <IdentityRow
+            mark={<Logo name={r.flag} size={40} rounded="rounded-xl" />}
+            label="Data region"
+            value={`${r.country} · ${r.label}`}
+            sub="Evidence, receipts and vault leases stay in the region."
+            right={<Chip>Pinned</Chip>}
+          />
         </Card>
         <Card className="p-5 h-fit">
           <div className="text-[13px] font-semibold">What lands in this workspace</div>
-          <ul className="mt-3 space-y-2 text-[12.5px] text-fg-2">
-            <li className="flex gap-2"><Package className="size-3.5 mt-0.5 text-fg-3 shrink-0" /> Every enrolled device</li>
-            <li className="flex gap-2"><Container className="size-3.5 mt-0.5 text-fg-3 shrink-0" /> Every Gateway you deploy</li>
-            <li className="flex gap-2"><ShieldCheck className="size-3.5 mt-0.5 text-fg-3 shrink-0" /> One policy bundle, one signing key</li>
+          <ul className="mt-3 space-y-2.5 text-[12.5px] text-fg-2">
+            {[
+              [Package, "Every enrolled device", "macOS, Windows and Linux"],
+              [Container, "Every Gateway you deploy", "one per network"],
+              [ShieldCheck, "One policy bundle", "and one signing key"],
+            ].map(([Icon, t, s]) => {
+              const I = Icon as typeof Package;
+              return (
+                <li key={t as string} className="flex gap-2.5">
+                  <span className="grid size-7 place-items-center rounded-lg bg-surface-2 text-fg-2 shrink-0">
+                    <I className="size-3.5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-medium text-fg">{t as string}</span>
+                    <span className="block text-[11.5px] text-fg-3">{s as string}</span>
+                  </span>
+                </li>
+              );
+            })}
           </ul>
-          <p className="mt-3 text-[11.5px] text-fg-3">Simulated: signup and SSO are already provisioned in this walkthrough.</p>
+          <p className="mt-4 pt-3 border-t border-line text-[11.5px] text-fg-3">Simulated: signup and SSO are already provisioned in this walkthrough.</p>
         </Card>
       </div>
       <Footer onNext={onNext} />

@@ -180,8 +180,10 @@ function FabricHero({ devices, gateways, discovered, version, today, blocked }: 
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-2.5">
             {platforms.map((p) => (
-              <span key={p.label} className="inline-flex items-center gap-1.5 rounded-full bg-white/15 ring-1 ring-white/25 px-2.5 py-1 text-[11.5px] font-medium">
-                <Logo name={p.logo} size={14} rounded="rounded-sm" className="brightness-0 invert opacity-90" />
+              <span key={p.label} className="inline-flex items-center gap-1.5 rounded-full bg-white/15 ring-1 ring-white/25 pl-1 pr-2.5 py-1 text-[11.5px] font-medium">
+                <span className="grid size-5 place-items-center rounded-full bg-white shadow-sm">
+                  <Logo name={p.logo} size={13} rounded="rounded-none" />
+                </span>
                 {p.label} <span className="text-white/70 tnum">{p.n}</span>
               </span>
             ))}

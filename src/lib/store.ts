@@ -542,8 +542,15 @@ export function adminPerson(s: State = state): Person {
   const m = s.members.find((x) => x.roles.includes("Admin"));
   return (m && Object.values(PEOPLE).find((p) => p.id === m.id)) || ADMIN;
 }
+/** Where a tenant's control plane runs. One table so the label, the country and the flag never drift. */
+export const REGIONS: Record<string, { label: string; country: string; flag: string }> = {
+  us: { label: "us-east-1", country: "United States", flag: "flag-us" },
+  eu: { label: "eu-central-1", country: "European Union", flag: "flag-eu" },
+  in: { label: "ap-south-1", country: "India", flag: "flag-in" },
+};
+export const regionOf = (region: string) => REGIONS[region] ?? REGIONS.us;
 /** Region label for the control plane — the same string onboarding shows when the workspace is created. */
-export const regionLabel = (region: string) => (region === "eu" ? "eu-central-1" : region === "in" ? "ap-south-1" : "us-east-1");
+export const regionLabel = (region: string) => regionOf(region).label;
 
 /* ================= alerts: derived from what the laptops report ================= */
 export function deriveAlerts(devices: Device[]): Alert[] {
