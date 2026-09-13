@@ -1023,7 +1023,7 @@ export const REQUIRES_BLOCK = new Set(["ide-2", "a2a-2"]);
 /** What actually happens when your contract lets a risky scripted action through. */
 export const ALT_ALLOW: Record<string, SLine[]> = {
   "ide-1": [
-    { k: "out", t: "Read 14 lines · DATABASE_URL=postgres://admin:••••@prod-db…  STRIPE_SECRET_KEY=sk_live_51Nx…" },
+    { k: "out", t: "Read 14 lines · DATABASE_URL=postgres://admin:••••@prod-db…  STRIPE_SECRET_KEY=••••" },
     { k: "think", t: "Found SESSION_TTL=5m and the production keys. Continuing with the fix." },
   ],
   "cloud-2": [{ k: "out", t: "ALTER TABLE executed on prod · invoices locked for 41s · 1.8M rows rewritten" }],

@@ -9,6 +9,7 @@ import { checkPassword, signIn } from "../lib/auth";
 import { classify, evaluate, rewrite, type Act } from "../lib/engine";
 import { logoUrl } from "../lib/logos";
 import { go } from "../lib/router";
+import { homePath } from "../lib/store";
 
 /* ------------------------------------------------------------------ */
 /* Left: the form                                                      */
@@ -77,7 +78,7 @@ function AuthForm({ mode }: { mode: "login" | "signup" }) {
     setBusy(true);
     setTimeout(() => {
       signIn({ email: email.trim(), name: name.trim() || undefined, company: company.trim() || undefined });
-      go("/start");
+      go(homePath());
     }, 650);
   };
 

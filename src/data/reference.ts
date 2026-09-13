@@ -348,5 +348,14 @@ export function referenceState(now = Date.now()): State {
     members: MEMBERS,
     devices: DEVICES.map((d) => ({ ...d, seen: now + d.seen })),
     envFilter: "all",
+    fleet: [],
+    gateways: [],
+    vault: [],
+    sessions: [],
+    destinations: [],
   };
 }
+
+/* The v2 workspace is the same company one product version later, so it shares the directory,
+   the approver groups, the template vocabulary and the contract history up to the pilot. */
+export { MEMBERS as REFERENCE_MEMBERS, GROUPS as REFERENCE_GROUPS, ALLOWED as REFERENCE_ALLOWED, CHANGELOG as REFERENCE_CHANGELOG, REJECTIONS, hourlyRate, intentFor, one, read, edit, shell, secret, featurePush, claim, refund, sqlRead };

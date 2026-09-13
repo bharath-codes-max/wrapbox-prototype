@@ -8,6 +8,7 @@ import { Avatar, CopyButton, D_DOT, cn } from "../components/ui";
 import { useAccount } from "../lib/auth";
 import { logoUrl } from "../lib/logos";
 import { go } from "../lib/router";
+import { homePath } from "../lib/store";
 import { Terminal } from "./auth";
 
 import shotOverview from "../assets/shots/overview.jpg";
@@ -120,7 +121,7 @@ function Nav() {
         </nav>
         <div className="ml-auto flex items-center gap-2">
           {account ? (
-            <button onClick={() => go("/start")} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#111113] px-4 text-[13.5px] font-medium text-white hover:opacity-90">
+            <button onClick={() => go(homePath())} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#111113] px-4 text-[13.5px] font-medium text-white hover:opacity-90">
               Open the app <ArrowRight className="size-3.5" />
             </button>
           ) : (

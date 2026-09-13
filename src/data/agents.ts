@@ -2029,6 +2029,19 @@ with NovaAct(starting_page="https://vendor.example/orders") as nova:
   },
 ];
 
-export const agentById = (id: string) => AGENTS.find((a) => a.id === id)!;
+/* A process the Runtime attributed to a model call but could not match to any profile. It renders
+   like any agent (name, logo, activity) so Evidence and Fleet can show it; nothing is known about it. */
+const unknownAgents = new Map<string, Agent>();
+export const isUnknownAgent = (id: string) => id.startsWith("unknown:");
+function unknownAgent(id: string): Agent {
+  let a = unknownAgents.get(id);
+  if (!a) {
+    const binary = id.slice("unknown:".length);
+    a = { id, name: binary, vendor: "Unrecognized process", category: "custom", logo: "process", adapter: "runtime", surface: "terminal", file: "—", fileNote: "Not matched to any agent profile. Seen only through the model-egress gate.", lang: "bash", snippet: "", install: "", hookEvents: [], docs: "", connected: false, owner: "—", env: "—" };
+    unknownAgents.set(id, a);
+  }
+  return a;
+}
+export const agentById = (id: string): Agent => AGENTS.find((a) => a.id === id) ?? unknownAgent(id);
 export const categoryById = (id: CategoryId) => CATEGORIES.find((c) => c.id === id)!;
 export const agentsIn = (c: CategoryId) => AGENTS.filter((a) => a.category === c);

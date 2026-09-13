@@ -3,6 +3,8 @@ import { AGENTS, METHODS, agentById, type Assurance, type Decision } from "../da
 import { INITIAL_RULES, ruleSig, type Rule } from "../data/contract";
 import { PEOPLE, personById, type Person } from "../data/people";
 import { REFERENCE_TEMPLATES, referenceState } from "../data/reference";
+import { fabricState, fabricTemplates } from "../data/fabric";
+import type { AdapterKind, LaunchMode } from "../data/profiles";
 import { SCENARIOS, actOf, type Gate, type Scenario } from "../data/scenarios";
 import { evaluate, type Act, type Env, type Verdict } from "./engine";
 import type { Permit } from "./permit";
@@ -11,28 +13,35 @@ import { TEMPLATES, approvalFrom, approversFor, categoryOf, gateFromAct, mkEvt, 
 export { TEMPLATES, approvalFrom, categoryOf, gateFromAct, genericSignals, spaceOf } from "./traffic";
 
 export type Role = "admin" | "employee";
-export type WorkspaceId = "prod" | "demo" | "fresh";
+export type WorkspaceId = "fabric" | "prod" | "demo" | "fresh";
 export const EMPLOYEE = PEOPLE.dev;
 export const ADMIN = PEOPLE.priya;
 export const NONE: string[] = [];
 
-/** The three environments. `labs` is the prototype scaffolding (playground, scripted flows, test traffic):
- *  it exists to explain and test Wrapbox, never in the production reference. */
+/** The environments. `labs` is the prototype scaffolding (playground, scripted flows, test traffic): it exists to
+ *  explain and test Wrapbox, never in a reference. `fabric` is the install-once product; `sims` allows its
+ *  "Simulate" controls (tamper, stop the runtime, quarantine) — device events the browser cannot cause for real. */
 export interface WorkspaceMeta {
   id: WorkspaceId;
   label: string;
   kind: "reference" | "sandbox" | "fresh";
   labs: boolean;
+  fabric: boolean;
+  sims: boolean;
   /** Milliseconds between background decisions while the stream is live. */
   tick: number;
   blurb: string;
 }
 export const WORKSPACES: Record<WorkspaceId, WorkspaceMeta> = {
-  prod: { id: "prod", label: "Production", kind: "reference", labs: false, tick: 16_000, blurb: "A company three months into Wrapbox — the reference for how the product should look and behave." },
-  demo: { id: "demo", label: "Demo", kind: "sandbox", labs: true, tick: 2_400, blurb: "Scripted scenarios, a playground and test traffic for explaining and trying every decision path." },
-  fresh: { id: "fresh", label: "Fresh workspace", kind: "fresh", labs: true, tick: 2_400, blurb: "Completely empty. Start from zero and watch every page fill in." },
+  fabric: { id: "fabric", label: "Enforcement Fabric — v2", kind: "reference", labs: false, fabric: true, sims: true, tick: 12_000, blurb: "Installed once per device. Every agent on it is discovered, provisioned, confined and credential-brokered — nothing installed per agent." },
+  prod: { id: "prod", label: "Production", kind: "reference", labs: false, fabric: false, sims: false, tick: 16_000, blurb: "A company three months into Wrapbox — the reference for how the product should look and behave." },
+  demo: { id: "demo", label: "Demo", kind: "sandbox", labs: true, fabric: false, sims: false, tick: 2_400, blurb: "Scripted scenarios, a playground and test traffic for explaining and trying every decision path." },
+  fresh: { id: "fresh", label: "Fresh workspace", kind: "fresh", labs: true, fabric: false, sims: false, tick: 2_400, blurb: "Completely empty. Start from zero and watch every page fill in." },
 };
-export const WORKSPACE_ORDER: WorkspaceId[] = ["prod", "demo", "fresh"];
+export const WORKSPACE_ORDER: WorkspaceId[] = ["fabric", "prod", "demo", "fresh"];
+/** The product ships one workspace. The earlier ones stay reachable for regression only, behind ?workspaces=all. */
+export const ALL_WORKSPACES = typeof location !== "undefined" && new URLSearchParams(location.search).has("workspaces");
+export const VISIBLE_WORKSPACES: WorkspaceId[] = ALL_WORKSPACES ? WORKSPACE_ORDER : ["fabric"];
 
 export interface Evt {
   id: string;
@@ -136,6 +145,80 @@ export interface ContractChange {
   removed: string[];
 }
 
+/* ================= Enforcement Fabric: devices, gateway, broker, destinations ================= */
+export type DeviceState = "enrolling" | "healthy" | "heartbeat-lost" | "quarantined";
+export type AdapterState = "provisioned" | "tampered" | "re-provisioned";
+export interface DiscoveredAgent {
+  /** A catalog id, or "unknown:<binary>" for a process no profile matched. */
+  agentId: string;
+  binary: string;
+  version: string;
+  launchMode: LaunchMode;
+  discoveredAt: number;
+  /** For an unprofiled process: the model host the egress gate saw it reach. */
+  endpoint?: string;
+  adapter?: { path: string; kind: AdapterKind; state: AdapterState; writtenAt: number; sha256: string };
+}
+export interface FleetDevice {
+  id: string;
+  hostname: string;
+  ownerId: string;
+  os: string;
+  osLogo: string;
+  arch: string;
+  enrolledAt: number;
+  runtimeVersion: string;
+  policyBundleVersion: number;
+  heartbeat: number;
+  state: DeviceState;
+  killSwitch: boolean;
+  /** Fingerprint of the device's enrollment key (Secure Enclave / TPM). Public, not a secret. */
+  keyId: string;
+  agents: DiscoveredAgent[];
+}
+export interface GatewayNode {
+  id: string;
+  region: string;
+  version: string;
+  state: "healthy" | "degraded";
+  heartbeat: number;
+  policyBundleVersion: number;
+  /** MCP servers fronted by the virtual MCP server (catalog ids). */
+  upstreams: string[];
+  /** API hosts whose credentials the forward proxy injects. */
+  brokered: string[];
+}
+export interface VaultRef {
+  id: string;
+  /** Reference only. The value never leaves the vault. */
+  ref: string;
+  kind: "api-key" | "oauth" | "db" | "cloud";
+  upstream: string;
+  provider: string;
+  rotatedAt: number;
+}
+export interface SessionToken {
+  id: string;
+  agentId: string;
+  deviceId: string;
+  personId: string;
+  issuedAt: number;
+  ttlSeconds: number;
+  scope: string[];
+  state: "active" | "expired" | "revoked";
+  revokedAt?: number;
+  revokedBy?: string;
+  reason?: string;
+}
+export interface Destination {
+  id: string;
+  kind: "scm.push" | "deploy" | "payment" | "mcp";
+  label: string;
+  host: string;
+  tier0: boolean;
+  verifier: string;
+}
+
 export interface Toast {
   id: number;
   title: string;
@@ -179,6 +262,11 @@ export interface State {
   members: Member[];
   devices: Device[];
   envFilter: "all" | Env;
+  fleet: FleetDevice[];
+  gateways: GatewayNode[];
+  vault: VaultRef[];
+  sessions: SessionToken[];
+  destinations: Destination[];
 }
 
 /** Decisions kept in memory per workspace. A real deployment pages older ones from the API. */
@@ -291,6 +379,11 @@ function demoState(): State {
     members: DEMO_MEMBERS,
     devices: DEMO_DEVICES,
     envFilter: "all",
+    fleet: [],
+    gateways: [],
+    vault: [],
+    sessions: [],
+    destinations: [],
   };
 }
 
@@ -325,6 +418,11 @@ function freshState(): State {
     members: [{ id: "priya.m", roles: ["Admin", "Owner"], status: "active" }],
     devices: [],
     envFilter: "all",
+    fleet: [],
+    gateways: [],
+    vault: [],
+    sessions: [],
+    destinations: [],
   };
 }
 
@@ -359,16 +457,16 @@ function loadFresh(): State {
 /* ================= the store ================= */
 /** Workspaces are built on first use: the reference tenant carries two weeks of decisions and is only paid for when opened. */
 const spaces: Partial<Record<WorkspaceId, State>> = {};
-const BUILD: Record<WorkspaceId, () => State> = { prod: () => referenceState(), demo: demoState, fresh: loadFresh };
+const BUILD: Record<WorkspaceId, () => State> = { fabric: () => fabricState(), prod: () => referenceState(), demo: demoState, fresh: loadFresh };
 export function space(id: WorkspaceId): State {
   return (spaces[id] ??= BUILD[id]());
 }
 const theme = read<"light" | "dark">("wbx-theme", "light");
-const savedWs = read<string>("wbx-ws", "prod");
-const startWs: WorkspaceId = savedWs in WORKSPACES ? (savedWs as WorkspaceId) : "prod";
+const savedWs = read<string>("wbx-ws", "fabric");
+const startWs: WorkspaceId = ALL_WORKSPACES && savedWs in WORKSPACES ? (savedWs as WorkspaceId) : "fabric";
 let state: State = { ...space(startWs), theme };
 if (typeof window !== "undefined") {
-  const warm = () => WORKSPACE_ORDER.forEach((id) => space(id));
+  const warm = () => VISIBLE_WORKSPACES.forEach((id) => space(id));
   if ("requestIdleCallback" in window) window.requestIdleCallback(warm);
   else setTimeout(warm, 800);
 }
@@ -396,6 +494,8 @@ export function useStore<T>(sel: (s: State) => T): T {
 }
 export const wsMeta = (id: WorkspaceId = state.workspace) => WORKSPACES[id];
 export const useWorkspace = () => useStore((s) => WORKSPACES[s.workspace]);
+/** Where a signed-in person lands: the Fleet in the install-once product, the workspace hub otherwise. */
+export const homePath = () => (WORKSPACES[state.workspace].fabric ? "/" : "/start");
 
 export function switchWorkspace(id: WorkspaceId) {
   if (state.workspace === id) return;
@@ -590,8 +690,8 @@ let timer: number | undefined;
 let lastTick = 0;
 export function tickTraffic(n = 1) {
   const s = getState();
-  const templates = s.workspace === "prod" ? REFERENCE_TEMPLATES : TEMPLATES;
-  const ctx = { rules: s.published, kill: s.killSwitch, members: s.members, allowed: s.allowed, admin: adminPerson(s).id };
+  const templates = s.workspace === "fabric" ? fabricTemplates(s) : s.workspace === "prod" ? REFERENCE_TEMPLATES : TEMPLATES;
+  const ctx = { rules: s.published, kill: s.killSwitch, members: s.members, allowed: s.allowed, admin: adminPerson(s).id, attributeAsIs: WORKSPACES[s.workspace].fabric };
   const evts: Evt[] = [];
   const aps: Approval[] = [];
   for (let i = 0; i < n; i++) {
@@ -635,8 +735,9 @@ export const TOUR = [
   { path: "/team", title: "Monitor people and devices", body: "Who uses which agent, hook health per laptop, shadow agents, and exception requests." },
   { path: "/onboarding/employee", title: "The employee side", body: "Accept the invite, one command on the laptop, the rules in plain English, try a blocked action, approve from Slack.", role: "employee" as Role },
 ];
-/** The tour for the active workspace: prototype-only stops are left out where the scaffolding isn't shown. */
-export const tourFor = (id: WorkspaceId = state.workspace) => TOUR.filter((t) => !("labs" in t && t.labs) || WORKSPACES[id].labs);
+/** The tour for the active workspace: prototype-only stops are left out where the scaffolding isn't shown.
+ *  The install-once product gets its own tour (built with its onboarding); until then it has none. */
+export const tourFor = (id: WorkspaceId = state.workspace) => (WORKSPACES[id].fabric ? [] : TOUR.filter((t) => !("labs" in t && t.labs) || WORKSPACES[id].labs));
 
 /* ================= directory & devices (fresh workspaces grow through these) ================= */
 export const DEFAULT_ROLES: Record<string, string[]> = {

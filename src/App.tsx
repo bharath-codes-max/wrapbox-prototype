@@ -2,8 +2,9 @@ import { MotionConfig, motion } from "motion/react";
 import { useEffect } from "react";
 import { Shell } from "./components/shell";
 import { useRoute } from "./lib/router";
-import { WORKSPACES, startLive, useStore } from "./lib/store";
+import { WORKSPACES, homePath, startLive, useStore } from "./lib/store";
 import { AgentDetail, AgentsPage } from "./pages/agents";
+import { Fleet, FleetDeviceDetail } from "./pages/fleet";
 import { Approvals } from "./pages/approvals";
 import { ContractPage } from "./pages/contract";
 import { EmployeeHome } from "./pages/employee";
@@ -40,12 +41,16 @@ export default function App() {
   const authRoute = seg[0] === "login" || seg[0] === "signup";
   const landing = seg[0] === "landing";
 
+  const meta = WORKSPACES[workspace];
   const labsRoute = seg[0] === "playground" || seg[0] === "flows";
+  // The install-once product has no per-agent pages, no workspace picker and no v1 setup wizards.
+  const v1Route = ["start", "onboarding", "agents", "team"].includes(seg[0] ?? "");
   useEffect(() => {
     if (!account && !authRoute && !landing) go("/landing");
-    else if (account && authRoute) go("/start");
-    else if (labsRoute && !WORKSPACES[workspace].labs) go("/");
-  }, [account, authRoute, landing, labsRoute, workspace]);
+    else if (account && authRoute) go(homePath());
+    else if (labsRoute && !meta.labs) go("/");
+    else if (v1Route && meta.fabric) go("/");
+  }, [account, authRoute, landing, labsRoute, v1Route, meta]);
 
   if (landing || (!account && !authRoute))
     return (
@@ -64,7 +69,10 @@ export default function App() {
   let page: React.ReactNode;
   switch (seg[0]) {
     case undefined:
-      page = role === "admin" ? <Overview /> : <EmployeeHome />;
+      page = meta.fabric ? <Fleet /> : role === "admin" ? <Overview /> : <EmployeeHome />;
+      break;
+    case "fleet":
+      page = seg[1] ? <FleetDeviceDetail key={seg[1]} id={seg[1]} /> : <Fleet />;
       break;
     case "welcome":
       page = <Welcome />;
@@ -88,13 +96,13 @@ export default function App() {
       page = <Playground key={role} />;
       break;
     case "gateway":
-      page = role === "admin" ? <Gateway /> : <Locked what="MCP gateway" />;
+      page = role === "admin" ? <Gateway /> : <Locked what={meta.fabric ? "Gateway" : "MCP gateway"} />;
       break;
     case "approvals":
       page = <Approvals />;
       break;
     case "evidence":
-      page = <Evidence />;
+      page = <Evidence query={query} />;
       break;
     case "settings":
       page = <SettingsPage />;
@@ -103,7 +111,7 @@ export default function App() {
       page = role === "admin" ? <Team /> : <Locked what="Team & devices" />;
       break;
     default:
-      page = <Overview />;
+      page = meta.fabric ? <Fleet /> : <Overview />;
   }
 
   return (

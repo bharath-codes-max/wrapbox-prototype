@@ -256,7 +256,7 @@ function AddServer({ open, onClose }: { open: boolean; onClose: () => void }) {
 export function Gateway() {
   const connected = useStore((s) => s.connected);
   const events = useStore((s) => s.events);
-  const { labs } = useWorkspace();
+  const { labs, fabric } = useWorkspace();
   const dayStart = new Date().setHours(0, 0, 0, 0);
   const callsOf = (u: Upstream) => events.filter((e) => e.agentId === u.agentId && e.ts >= dayStart).length;
   const [open, setOpen] = useState(false);
@@ -264,9 +264,9 @@ export function Gateway() {
   return (
     <div className="mx-auto max-w-[1280px] px-4 lg:px-8 py-8">
       <PageHeader
-        eyebrow="MCP tools & servers · gateway-enforced"
-        title="MCP gateway"
-        sub="Wrap any MCP server — including your payment gateways — behind one policy. Clients use the Wrapbox URL instead of the real one; approved calls are forwarded, everything else never reaches the upstream."
+        eyebrow={fabric ? "Installed once per network · gateway-enforced" : "MCP tools & servers · gateway-enforced"}
+        title={fabric ? "Gateway" : "MCP gateway"}
+        sub={fabric ? "One front door for every MCP server and API your agents reach. Clients use the Wrapbox URL instead of the real one; approved calls are forwarded with a brokered credential, everything else never reaches the upstream." : "Wrap any MCP server — including your payment gateways — behind one policy. Clients use the Wrapbox URL instead of the real one; approved calls are forwarded, everything else never reaches the upstream."}
         right={
           <Button variant="primary" onClick={() => setOpen(true)}>
             <Plus className="size-3.5" /> Wrap a server
@@ -344,7 +344,7 @@ export function Gateway() {
             sub={connected[sel.agentId] ? "Live policy for every client that uses the wrapped URL" : "Not wrapped yet"}
             right={
               connected[sel.agentId] ? (
-                <Button size="sm" onClick={() => go(labs ? `/flows/${agentById(sel.agentId).scenario}?agent=${sel.agentId}` : `/agents/${sel.agentId}?tab=activity`)}>
+                <Button size="sm" onClick={() => go(labs ? `/flows/${agentById(sel.agentId).scenario}?agent=${sel.agentId}` : fabric ? `/evidence?agent=${sel.agentId}` : `/agents/${sel.agentId}?tab=activity`)}>
                   {labs ? "Happy flow" : "Activity"} <ArrowRight className="size-3" />
                 </Button>
               ) : (

@@ -23,6 +23,10 @@ export const EFFECTS: { id: string; label: string; desc: string; fields: Field[]
   { id: "payments.create", label: "Create a payment link", desc: "Stripe, Razorpay payment links", fields: ["amount"], unit: "USD" },
   { id: "payments.payout", label: "Pay out to a bank account", desc: "Settlements, transfers", fields: ["amount"], unit: "USD" },
   { id: "billing.cancel", label: "Cancel a subscription", desc: "Stripe, Chargebee, any billing route", fields: [] },
+  { id: "model.request", label: "Call a model provider", desc: "Anthropic, OpenAI, Google, vendor backends — seen by the egress gate", fields: ["destination"] },
+  { id: "http.request", label: "Call an API", desc: "Any HTTPS request through the proxy or the Gateway", fields: ["destination"] },
+  { id: "secret.use", label: "Use a credential", desc: "A vault reference resolved at execution time", fields: [] },
+  { id: "runtime.integrity", label: "Adapter integrity check", desc: "A provisioned file changed outside Wrapbox", fields: ["path"] },
 ];
 export const effectInfo = (id: string) => EFFECTS.find((e) => e.id === id);
 

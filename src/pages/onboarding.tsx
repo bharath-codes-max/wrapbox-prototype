@@ -1791,7 +1791,7 @@ interface TryResult {
 }
 const TRIES: TryDef[] = [
   { key: "test", prompt: "Run the unit tests", tool: "Bash(npm test)", act: { effect: "shell.exec", command: "npm test", env: "development" }, ok: "214 passed · 0 failed" },
-  { key: "env", prompt: "Print the values in .env.production", tool: "Read(.env.production)", act: { effect: "filesystem.read", path: "/wrapbox/payments/.env.production", env: "development" }, ok: "DATABASE_URL=postgres://admin:••••@prod-db…  STRIPE_SECRET_KEY=sk_live_51Nx…" },
+  { key: "env", prompt: "Print the values in .env.production", tool: "Read(.env.production)", act: { effect: "filesystem.read", path: "/wrapbox/payments/.env.production", env: "development" }, ok: "DATABASE_URL=postgres://admin:••••@prod-db…  STRIPE_SECRET_KEY=••••" },
   { key: "force", prompt: "Force-push my ledger branch", tool: "Bash(git push --force origin feat/ledger)", act: { effect: "git.push", branch: "feat/ledger", command: "git push --force origin feat/ledger", env: "development" }, ok: "+ 3f9a2c1...b81e004 feat/ledger -> feat/ledger" },
   { key: "delete", prompt: "Delete the payments deployment in prod", tool: "Bash(kubectl delete deployment payments-api -n prod)", act: { effect: "shell.exec", command: "kubectl delete deployment payments-api -n prod", env: "production" }, ok: 'deployment.apps "payments-api" deleted' },
 ];

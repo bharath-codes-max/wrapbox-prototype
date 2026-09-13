@@ -28,12 +28,12 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AGENTS, CATEGORIES } from "../data/agents";
+import { AGENTS, CATEGORIES, agentById } from "../data/agents";
 import { SCENARIOS } from "../data/scenarios";
 import type { Env } from "../lib/engine";
 import { KID } from "../lib/permit";
 import { go } from "../lib/router";
-import { ADMIN, EMPLOYEE, WORKSPACES, WORKSPACE_ORDER, getState, regionLabel, resetFresh, setState, switchWorkspace, tourFor, useStore, useWorkspace, workspaceHasData, workspaceSummary, type Role, type WorkspaceId } from "../lib/store";
+import { ADMIN, EMPLOYEE, VISIBLE_WORKSPACES, WORKSPACES, getState, regionLabel, resetFresh, setState, switchWorkspace, tourFor, useStore, useWorkspace, workspaceHasData, workspaceSummary, type Role, type WorkspaceId } from "../lib/store";
 import { PasskeyModal } from "./insight";
 import { WrapboxWordmark } from "./logo";
 import { useNavStyle } from "../lib/navstyle";
@@ -57,7 +57,19 @@ function useNav(role: Role): { section?: string; items: NavItem[] }[] {
   const requests = useStore((s) => s.requests.filter((r) => r.status === "pending").length);
   const onboarded = useStore((s) => s.onboarded);
   const ruleCount = useStore((s) => s.published.length);
-  const { labs } = useWorkspace();
+  const { labs, fabric } = useWorkspace();
+  if (fabric)
+    return role === "admin"
+      ? [
+          { section: "Enforce", items: [{ path: "/", label: "Fleet", icon: Laptop }, { path: "/gateway", label: "Gateway", icon: Network }] },
+          { section: "Govern", items: [{ path: "/contract", label: "Intent contract", icon: FileCheck2, badge: ruleCount || undefined }] },
+          { section: "Operate", items: [{ path: "/approvals", label: "Approvals", icon: Hand, badge: pending || undefined, tone: "review" }, { path: "/evidence", label: "Evidence", icon: ListTree }] },
+        ]
+      : [
+          { items: [{ path: "/", label: "My device", icon: Laptop }] },
+          { section: "My work", items: [{ path: "/contract", label: "Rules for me", icon: FileCheck2 }, { path: "/approvals", label: "My approvals", icon: Hand, badge: myPending || undefined, tone: "review" }, { path: "/evidence", label: "My activity", icon: ListTree }] },
+          { section: "Admin only", items: [{ path: "/gateway", label: "Gateway", icon: Network, adminOnly: true }] },
+        ];
   const groups: { section?: string; items: NavItem[] }[] = role === "admin" ? [
       {
         items: [
@@ -114,7 +126,7 @@ function useNav(role: Role): { section?: string; items: NavItem[] }[] {
 }
 
 function isActive(path: string, current: string) {
-  if (path === "/") return current === "/";
+  if (path === "/") return current === "/" || current.startsWith("/fleet");
   if (path === "/start") return current === "/start" || current.startsWith("/onboarding/admin");
   return current === path || current.startsWith(path + "/");
 }
@@ -273,6 +285,15 @@ const TITLES: [string, string][] = [
   ["/team", "Team & devices"],
   ["/", "Overview"],
 ];
+const FABRIC_TITLES: [string, string][] = [
+  ["/", "Fleet"],
+  ["/gateway", "Gateway"],
+  ["/contract", "Intent contract"],
+  ["/approvals", "Approvals"],
+  ["/evidence", "Evidence"],
+  ["/settings", "Settings"],
+  ["/welcome", "About Wrapbox"],
+];
 
 const ENVS: { id: "all" | Env; label: string; dot: string; note: string }[] = [
   { id: "all", label: "All environments", dot: "bg-(--n-fg-3)", note: "every decision" },
@@ -281,8 +302,8 @@ const ENVS: { id: "all" | Env; label: string; dot: string; note: string }[] = [
   { id: "development", label: "Development", dot: "bg-[#9db4ff]", note: "laptops and sandboxes" },
 ];
 
-const WS_ICON: Record<WorkspaceId, typeof Bot> = { prod: Building2, demo: FlaskConical, fresh: Plus };
-const WS_SHORT: Record<WorkspaceId, string> = { prod: "production", demo: "demo", fresh: "fresh" };
+const WS_ICON: Record<WorkspaceId, typeof Bot> = { fabric: ShieldCheck, prod: Building2, demo: FlaskConical, fresh: Plus };
+const WS_SHORT: Record<WorkspaceId, string> = { fabric: "fabric", prod: "production", demo: "demo", fresh: "fresh" };
 
 function WorkspaceMenu() {
   const [open, setOpen] = useState(false);
@@ -314,7 +335,8 @@ function WorkspaceMenu() {
       <button onClick={() => setOpen(!open)} className={cn("flex items-center gap-3 rounded-xl h-10 pl-3.5 pr-2.5 transition-colors ring-1", open ? "bg-(--n-soft-2) ring-(--n-ring-2)" : "bg-(--n-soft) ring-(--n-ring) hover:bg-(--n-soft-2)")}>
         <span className="text-left leading-tight">
           <span className="block text-[12.5px] font-semibold text-(--n-fg)">
-            {company} <span className="font-normal text-(--n-fg-3)">· {WS_SHORT[workspace]}</span>
+            {company}
+            {VISIBLE_WORKSPACES.length > 1 && <span className="font-normal text-(--n-fg-3)"> · {WS_SHORT[workspace]}</span>}
           </span>
           <span className="flex items-center gap-1.5 text-[11px] text-(--n-fg-2)">
             <span className={cn("size-1.5 rounded-full", env.dot)} />
@@ -326,9 +348,9 @@ function WorkspaceMenu() {
       <AnimatePresence>
         {open && (
           <motion.div initial={{ opacity: 0, y: -4, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4 }} className="absolute left-0 top-12 z-50 w-[360px] rounded-2xl border border-line bg-surface text-fg shadow-float overflow-hidden">
-            <div className="px-4 pt-3.5 pb-2 eyebrow">Workspace</div>
-            <div className="px-2 space-y-1">
-              {WORKSPACE_ORDER.map((id) => {
+            {VISIBLE_WORKSPACES.length > 1 && <div className="px-4 pt-3.5 pb-2 eyebrow">Workspace</div>}
+            <div className={cn("px-2 space-y-1", VISIBLE_WORKSPACES.length <= 1 && "hidden")}>
+              {VISIBLE_WORKSPACES.map((id) => {
                 const meta = WORKSPACES[id];
                 const sum = workspaceSummary(id);
                 const Icon = WS_ICON[id];
@@ -353,7 +375,7 @@ function WorkspaceMenu() {
                 );
               })}
             </div>
-            {workspaceHasData("fresh") && (
+            {VISIBLE_WORKSPACES.includes("fresh") && workspaceHasData("fresh") && (
               <button
                 onClick={() => {
                   resetFresh();
@@ -365,7 +387,7 @@ function WorkspaceMenu() {
                 <RotateCcw className="size-3" /> Reset the fresh workspace
               </button>
             )}
-            <div className="mt-2 border-t border-line px-4 pt-3 pb-2 eyebrow">Environment</div>
+            <div className={cn("border-t border-line px-4 pt-3 pb-2 eyebrow", VISIBLE_WORKSPACES.length > 1 ? "mt-2" : "border-t-0")}>Environment</div>
             <div className="px-2 pb-2 grid grid-cols-2 gap-1">
               {ENVS.map((e) => (
                 <button key={e.id} onClick={() => setState({ envFilter: e.id })} className={cn("rounded-xl px-2.5 py-2 text-left transition-colors border", envFilter === e.id ? "border-fg bg-surface" : "border-transparent hover:bg-surface-2")}>
@@ -394,7 +416,7 @@ function Topbar({ onMenu }: { onMenu: () => void }) {
   const live = useStore((s) => s.live);
   const events = useStore((s) => s.events.length);
   const ruleCount = useStore((s) => s.published.length);
-  const { labs } = useWorkspace();
+  const { labs, fabric } = useWorkspace();
   const nav = useNavStyle();
   return (
     <header data-nav={nav} className="wb-nav relative sticky top-0 z-40 flex items-center gap-3 h-[68px] px-4 lg:px-5 border-b border-(--n-edge) transition-[background,color] duration-300">
@@ -414,7 +436,7 @@ function Topbar({ onMenu }: { onMenu: () => void }) {
         className="ml-2 hidden lg:flex items-center gap-2.5 h-10 w-[min(420px,32vw)] rounded-xl bg-(--n-soft) ring-1 ring-(--n-ring) px-3.5 text-[13px] text-(--n-fg-3) hover:bg-(--n-soft-2) hover:text-(--n-fg-2) transition-colors"
       >
         <Search className="size-4" />
-        {labs ? "Search agents, rules, flows, people…" : "Search agents, rules, people…"}
+        {labs ? "Search agents, rules, flows, people…" : fabric ? "Search devices, agents, rules, people…" : "Search agents, rules, people…"}
         <span className="ml-auto flex items-center gap-1">
           <kbd className="grid h-5 min-w-5 place-items-center rounded-md bg-(--n-soft-2) px-1 font-mono text-[10.5px] text-(--n-fg-2)">⌘</kbd>
           <kbd className="grid h-5 min-w-5 place-items-center rounded-md bg-(--n-soft-2) px-1 font-mono text-[10.5px] text-(--n-fg-2)">K</kbd>
@@ -447,17 +469,21 @@ function Palette() {
   const [sel, setSel] = useState(0);
   const rules = useStore((s) => s.rules);
   const members = useStore((s) => s.members);
-  const { labs } = useWorkspace();
+  const fleet = useStore((s) => s.fleet);
+  const { labs, fabric } = useWorkspace();
   const items = useMemo(() => {
-    const pages = TITLES.filter(([p]) => labs || (p !== "/playground" && p !== "/flows")).map(([p, t]) => ({ label: t, hint: "Page", path: p, logo: undefined as string | undefined }));
-    const agents = AGENTS.map((a) => ({ label: a.name, hint: CATEGORIES.find((c) => c.id === a.category)!.name, path: "/agents/" + a.id, logo: a.logo }));
+    const pages = (fabric ? FABRIC_TITLES : TITLES.filter(([p]) => labs || (p !== "/playground" && p !== "/flows"))).map(([p, t]) => ({ label: t, hint: "Page", path: p, logo: undefined as string | undefined }));
+    const agents = fabric
+      ? Array.from(new Set(fleet.flatMap((d) => d.agents.map((a) => a.agentId)))).map((id) => ({ label: agentById(id).name, hint: "Agent", path: "/evidence?agent=" + id, logo: agentById(id).logo }))
+      : AGENTS.map((a) => ({ label: a.name, hint: CATEGORIES.find((c) => c.id === a.category)!.name, path: "/agents/" + a.id, logo: a.logo }));
+    const devices = fabric ? fleet.map((d) => ({ label: d.hostname, hint: "Device", path: "/fleet/" + d.id, logo: d.osLogo })) : [];
     const flows = labs ? Object.values(SCENARIOS).map((s) => ({ label: s.title, hint: "Happy flow", path: "/flows/" + s.id, logo: undefined })) : [];
     const rs = rules.map((r) => ({ label: `${r.id} — ${r.title}`, hint: "Rule", path: "/contract", logo: undefined }));
-    const ps = members.map((m) => ({ label: m.id, hint: "Person", path: "/team", logo: undefined }));
-    const all = [...pages, ...agents, ...flows, ...rs, ...ps];
+    const ps = members.map((m) => ({ label: m.id, hint: "Person", path: fabric ? "/" : "/team", logo: undefined }));
+    const all = [...pages, ...devices, ...agents, ...flows, ...rs, ...ps];
     const f = q.trim().toLowerCase();
     return (f ? all.filter((x) => (x.label + " " + x.hint).toLowerCase().includes(f)) : all).slice(0, 12);
-  }, [q, rules, members, labs]);
+  }, [q, rules, members, labs, fabric, fleet]);
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {

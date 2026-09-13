@@ -4,7 +4,7 @@ import { Button, Card, PageHeader, cn } from "../components/ui";
 import { setNavStyle, useNavStyle, type NavStyle } from "../lib/navstyle";
 import { signOut, useAccount } from "../lib/auth";
 import { go } from "../lib/router";
-import { setState, setTheme, useStore } from "../lib/store";
+import { setState, setTheme, tourFor, useStore } from "../lib/store";
 import { aiPreferred, aiStatus, setAiPreferred } from "../lib/draft";
 
 /** OpenAI drafting status. The key lives in a server environment variable — this screen never holds it. */
@@ -95,6 +95,8 @@ function BarPreview({ style, active, onClick }: { style: NavStyle; active: boole
 
 export function SettingsPage() {
   const theme = useStore((s) => s.theme);
+  const workspace = useStore((s) => s.workspace);
+  const hasTour = tourFor(workspace).length > 0;
   const nav = useNavStyle();
   const account = useAccount();
   return (
@@ -150,14 +152,18 @@ export function SettingsPage() {
         </Row>
       </Card>
 
-      <div className="eyebrow mt-7 mb-2 px-1">Help</div>
-      <Card className="overflow-hidden">
-        <Row title="Guided tour" sub="Walks you through each page step by step: agents, the intent contract, approvals and evidence." last>
-          <Button variant="primary" onClick={() => setState({ tour: 0 })}>
-            <Compass className="size-4" /> Start the tour
-          </Button>
-        </Row>
-      </Card>
+      {hasTour && (
+        <>
+          <div className="eyebrow mt-7 mb-2 px-1">Help</div>
+          <Card className="overflow-hidden">
+            <Row title="Guided tour" sub="Walks you through each page step by step: agents, the intent contract, approvals and evidence." last>
+              <Button variant="primary" onClick={() => setState({ tour: 0 })}>
+                <Compass className="size-4" /> Start the tour
+              </Button>
+            </Row>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

@@ -91,13 +91,13 @@ function exportTo(target: "splunk" | "datadog" | "pack", n: number) {
   setTimeout(() => toast(target === "pack" ? "Evidence pack ready" : `Exported to ${label}`, target === "pack" ? "wrapbox-evidence-30d.pdf · signed" : `${n} decisions delivered · 0 failed`, "allow"), 1500);
 }
 
-export function Evidence() {
+export function Evidence({ query }: { query?: URLSearchParams }) {
   const role = useStore((s) => s.role);
   const allRaw = useStore((s) => s.events);
   const envFilter = useStore((s) => s.envFilter);
   const all = useMemo(() => (envFilter === "all" ? allRaw : allRaw.filter((e) => e.env === envFilter)), [allRaw, envFilter]);
   const [d, setD] = useState<"all" | Decision>("all");
-  const [agent, setAgent] = useState("all");
+  const [agent, setAgent] = useState(query?.get("agent") || "all");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<Evt | null>(null);
   const [limit, setLimit] = useState(80);
@@ -157,7 +157,7 @@ export function Evidence() {
           />
           <select value={agent} onChange={(e) => setAgent(e.target.value)} className="h-7 rounded-full border border-line bg-surface px-3 text-[12.5px] text-fg-2 outline-none">
             <option value="all">All agents</option>
-            {AGENTS.filter((a) => agentsInLog.includes(a.id)).map((a) => (
+            {[...AGENTS.filter((a) => agentsInLog.includes(a.id)), ...agentsInLog.filter((id) => !AGENTS.some((a) => a.id === id)).map(agentById)].map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>

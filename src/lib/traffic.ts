@@ -223,10 +223,13 @@ export interface TrafficCtx {
   /** Which agents each person may use. A template whose person isn't allowed the agent is re-attributed. */
   allowed?: Record<string, string[]>;
   admin?: string;
+  /** Device-attributed traffic: the Runtime already knows who is logged in, so the person is never re-attributed. */
+  attributeAsIs?: boolean;
 }
 
 /** Who this action is attributed to: the template's person, if they exist and may use the agent; otherwise someone who may. */
 export function attribute(t: Tpl, s: TrafficCtx): string {
+  if (s.attributeAsIs) return t.human;
   const admin = s.admin ?? PEOPLE.priya.id;
   const isMember = !s.members || s.members.some((m) => m.id === t.human);
   const may = (id: string) => id === admin || !s.allowed || (s.allowed[id] ?? []).includes(t.agentId);
