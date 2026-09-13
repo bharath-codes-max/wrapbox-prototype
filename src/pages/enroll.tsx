@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ArrowRight, BookOpen, Check, CheckCircle2, Container, Copy as CopyIcon, Download, Info, Loader2, Package, Rocket, ShieldCheck, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { agentById } from "../data/agents";
-import { GATEWAY, MDM_ORDER, RUNTIME, orgFor, type MdmVendor, type Os } from "../data/install";
+import { AVAILABLE_OS, GATEWAY, MDM_ORDER, OS_META, OS_ORDER, RUNTIME, comingLabel, orgFor, osAvailable, runtimeInstall, type MdmVendor, type Os } from "../data/install";
 import { profileOf } from "../data/profiles";
 import { personById } from "../data/people";
 import { CodeBlock, InlineCmd } from "../components/code";
@@ -104,6 +104,9 @@ function Footer({ onBack, onNext, next = "Continue", disabled }: { onBack?: () =
 export function EnrollWizard() {
   const [step, setStep] = useState(0);
   const [reached, setReached] = useState(0);
+  // Everything the summary counts is scoped to this session — the workspace's own history is not
+  // something this admin just produced, so it would be wrong to show it on the last screen.
+  const [since] = useState(() => Date.now());
   const company = useStore((s) => s.company);
   const domain = useStore((s) => s.domain);
   const idp = useStore((s) => s.idp);
@@ -126,7 +129,7 @@ export function EnrollWizard() {
       {step === 3 && <Step3 fleet={fleet} onNext={next} onBack={back} />}
       {step === 4 && <Step4 onNext={next} onBack={back} />}
       {step === 5 && <Step5 org={org} onNext={next} onBack={back} />}
-      {step === 6 && <Step6 onFinish={() => { markOnboarded("admin"); go("/"); toast("Wrapbox Enforcement Fabric is live", "Every page now reflects your enrolled fleet.", "allow"); }} onBack={back} />}
+      {step === 6 && <Step6 since={since} onFinish={() => { markOnboarded("admin"); go("/"); toast("Wrapbox Enforcement Fabric is live", "Every page now reflects your enrolled fleet.", "allow"); }} onBack={back} />}
     </Frame>
   );
 }
@@ -191,8 +194,8 @@ function Step1({ org, fleet, gateways, onNext, onBack }: { org: string; fleet: a
   const [mdm, setMdm] = useState<MdmVendor>("jamf");
   const [rolling, setRolling] = useState<"idle" | "pushing" | "done">(fleet.length ? "done" : "idle");
   const [gwState, setGwState] = useState<"idle" | "deploying" | "live">(gateways.length ? "live" : "idle");
+  const [linkOs, setLinkOs] = useState<Os>("macos");
   const macDevices = fleet.filter((d) => /mac/i.test(d.os)).length;
-  const winDevices = fleet.filter((d) => /win/i.test(d.os)).length;
   const linuxDevices = fleet.filter((d) => /ubuntu|linux|debian|rhel|fedora/i.test(d.os)).length;
 
   const pushMdm = () => { setRolling("pushing"); setTimeout(() => setRolling("done"), 1600); };
@@ -243,10 +246,11 @@ function Step1({ org, fleet, gateways, onNext, onBack }: { org: string; fleet: a
                 <div className="rounded-xl border border-line bg-surface-2 px-4 py-3.5">
                   <div className="text-[12px] font-medium mb-1.5">What IT sends</div>
                   <ul className="space-y-1 text-[12px] text-fg-2">
-                    <li>· <span className="font-mono">{RUNTIME.macos.pkg.name}</span> (macOS) · <span className="font-mono">{RUNTIME.windows.msi.name}</span> (Windows) · <span className="font-mono">wrapbox-runtime</span> apt / rpm (Linux)</li>
+                    <li>· <span className="font-mono">{RUNTIME.macos.pkg.name}</span> (macOS) · <span className="font-mono">wrapbox-runtime</span> apt / rpm (Linux)</li>
                     <li>· <span className="font-mono">wrapbox-runtime-macos.mobileconfig</span> with the System Extension, PPPC and Content Filter payloads</li>
-                    <li>· One MDM smart group covering every laptop and server that needs Wrapbox</li>
+                    <li>· One MDM smart group covering every macOS and Linux machine that needs Wrapbox</li>
                   </ul>
+                  <div className="mt-2 pt-2 border-t border-line text-[11.5px] text-fg-3">{OS_META.windows.label} devices are not included — the {OS_META.windows.label} Runtime is {comingLabel("windows").toLowerCase()}.</div>
                 </div>
                 <div>
                   <div className="text-[12px] font-medium mb-1.5">MDM steps · {mdm === "jamf" ? "Jamf Pro" : mdm === "intune" ? "Microsoft Intune" : "Kandji"}</div>
@@ -265,8 +269,9 @@ function Step1({ org, fleet, gateways, onNext, onBack }: { org: string; fleet: a
                       {rolling === "pushing" && <div className="animate-pulse">· devices checking in…</div>}
                       {rolling === "done" && (
                         <>
-                          <div className="text-[#3fd49b]">✓ {macDevices || 2} macOS · {winDevices} Windows · {linuxDevices || 1} Linux devices enrolled</div>
+                          <div className="text-[#3fd49b]">✓ {macDevices} macOS · {linuxDevices} Linux devices enrolled</div>
                           <div className="text-[#3fd49b]">✓ First heartbeat received · policy bundle v{fleet[0]?.policyBundleVersion ?? 27} cached</div>
+                          <div className="text-[#5f6a88]">· {OS_META.windows.label} not scanned · Runtime {comingLabel("windows").toLowerCase()}</div>
                         </>
                       )}
                     </>
@@ -290,20 +295,9 @@ function Step1({ org, fleet, gateways, onNext, onBack }: { org: string; fleet: a
                     <li>2. Download the artifact for their OS and run one command:</li>
                   </ol>
                 </div>
-                <div>
-                  <div className="text-[12px] font-medium mb-1.5">macOS · one line</div>
-                  <InlineCmd cmd={`${RUNTIME.macos.shell} && ${RUNTIME.enroll(org)}`} />
-                </div>
-                <div>
-                  <div className="text-[12px] font-medium mb-1.5">Linux · one line</div>
-                  <InlineCmd cmd={`${RUNTIME.linux.apt} && ${RUNTIME.enroll(org)}`} />
-                </div>
-                <div>
-                  <div className="text-[12px] font-medium mb-1.5">Windows · run in an elevated shell</div>
-                  <InlineCmd cmd={RUNTIME.windows.shell} />
-                  <div className="mt-1.5"><InlineCmd cmd={RUNTIME.enroll(org)} /></div>
-                </div>
-                <p className="text-[11.5px] text-fg-3">The invite that goes to engineers on step 6 carries these same commands and a link to <a href="#/downloads" className="underline underline-offset-2 text-fg">Downloads</a>.</p>
+                <OsPicker value={linkOs} onChange={setLinkOs} />
+                <OsCommand os={linkOs} org={org} />
+                <p className="text-[11.5px] text-fg-3">The invite that goes to engineers on step 6 carries the command for their own OS and a link to <a href="#/downloads" className="underline underline-offset-2 text-fg">Downloads</a>.</p>
               </>
             )}
           </div>
@@ -368,11 +362,59 @@ function Step1({ org, fleet, gateways, onNext, onBack }: { org: string; fleet: a
   );
 }
 
+/** The OS picker used wherever an engineer-facing command is shown. Roadmap platforms are selectable
+ *  so their note can be read, but never offer a command. */
+function OsPicker({ value, onChange }: { value: Os; onChange: (v: Os) => void }) {
+  return (
+    <Segmented
+      size="sm"
+      value={value}
+      onChange={onChange}
+      options={OS_ORDER.map((id) => ({
+        value: id,
+        disabled: !osAvailable(id),
+        title: osAvailable(id) ? undefined : OS_META[id].note,
+        onDisabledClick: () => onChange(id),
+        label: osAvailable(id) ? (
+          OS_META[id].label
+        ) : (
+          <>
+            {OS_META[id].label}
+            <span className="rounded-full bg-surface-3 px-1.5 py-px text-[10px] font-medium text-fg-3">{comingLabel(id)}</span>
+          </>
+        ),
+      }))}
+    />
+  );
+}
+
+/** The install line for one OS, or the roadmap note where there is nothing to run. */
+function OsCommand({ os, org }: { os: Os; org: string }) {
+  const install = runtimeInstall(os, org);
+  if (!install)
+    return (
+      <div className="rounded-xl border border-line bg-surface-2 px-4 py-3.5">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-[12px] font-medium text-fg-2">{OS_META[os].label}</span>
+          <Chip>{comingLabel(os)}</Chip>
+        </div>
+        <p className="text-[12px] text-fg-3">{OS_META[os].note}</p>
+      </div>
+    );
+  return (
+    <div>
+      <div className="text-[12px] font-medium mb-1.5">{OS_META[os].label} · one line</div>
+      <InlineCmd cmd={install.oneLiner ?? install.install} />
+    </div>
+  );
+}
+
 /* ---- step 2: Discover agents ---- */
 function Step2({ fleet, onNext, onBack }: { fleet: any[]; onNext: () => void; onBack: () => void }) {
   const discovered = fleet.flatMap((d) => d.agents);
   const withProfile = discovered.filter((a) => profileOf(a.agentId));
   const unknown = discovered.length - withProfile.length;
+  const coming = OS_ORDER.filter((id) => !osAvailable(id));
   return (
     <>
       <StepHead n={3} title="Discover agents" sub={`The Runtime scans each device against its agent profiles — binaries, signing IDs, IDE extensions, MCP config files. Anything unmatched shows up flagged. Your fleet has ${discovered.length} agents discovered across ${fleet.length} devices.`} />
@@ -406,6 +448,15 @@ function Step2({ fleet, onNext, onBack }: { fleet: any[]; onNext: () => void; on
                   );
                 })}
               </div>
+            </div>
+          ))}
+          {coming.map((id) => (
+            <div key={id} className="flex flex-wrap items-center gap-3 px-6 py-3.5 bg-surface-2/50">
+              <Logo name={id === "macos" ? "apple" : id === "linux" ? "ubuntu" : "windows"} size={20} rounded="rounded-md" className="opacity-45 grayscale" />
+              <span className="text-[12.5px] text-fg-3">
+                {OS_META[id].label} devices — Runtime {comingLabel(id).toLowerCase()}. Not scanned yet.
+              </span>
+              <Chip className="ml-auto">{comingLabel(id)}</Chip>
             </div>
           ))}
         </div>
@@ -497,6 +548,8 @@ function Step5({ org, onNext, onBack }: { org: string; onNext: () => void; onBac
   const members = useStore((s) => s.members);
   const withoutDevice = members.filter((m) => m.status === "invited").length;
   const inviteUrl = `https://app.wrapbox.ai/join/${org}`;
+  const [emailOs, setEmailOs] = useState<Os>("macos");
+  const install = runtimeInstall(emailOs, org);
   return (
     <>
       <StepHead n={6} title="Invite your team" sub={`Every invited engineer installs the Runtime on their own machine — same commands as the Downloads page. ${members.length} people in the directory today; ${withoutDevice} still to install.`} />
@@ -509,13 +562,28 @@ function Step5({ org, onNext, onBack }: { org: string; onNext: () => void; onBac
         <p className="mt-2 text-[12px] text-fg-3">The invite carries the engineer's OS-specific install command and links back to <a href="#/downloads" className="underline underline-offset-2 text-fg">Downloads</a>.</p>
       </Card>
       <Card className="mt-5 p-6">
-        <div className="text-[13px] font-semibold mb-3">What arrives in their inbox</div>
+        <div className="flex flex-wrap items-center gap-3 mb-3">
+          <div className="text-[13px] font-semibold">What arrives in their inbox</div>
+          <OsPicker value={emailOs} onChange={setEmailOs} />
+          <span className="text-[11.5px] text-fg-3">Each engineer gets the line for their own machine.</span>
+        </div>
         <div className="rounded-xl border border-line bg-surface-2 p-4 text-[12.5px] text-fg-2 leading-relaxed">
           <div className="font-semibold text-fg">You're invited to Wrapbox Enforcement Fabric</div>
           <p className="mt-2">Your admin set up Wrapbox for {org}. To finish, install the Wrapbox Runtime on your laptop and run one enrolment command — takes about three minutes.</p>
-          <ol className="mt-2 space-y-1">
+          <ol className="mt-2 space-y-1.5">
             <li>1. Download the Runtime for your OS: <a href="#/downloads" className="text-accent underline underline-offset-2">app.wrapbox.ai/downloads</a></li>
-            <li>2. macOS: <code className="font-mono text-[11.5px] bg-surface-3 px-1 py-0.5 rounded">{RUNTIME.macos.shell}</code></li>
+            <li>
+              2.{" "}
+              {install ? (
+                <>
+                  {OS_META[emailOs].label}: <code className="font-mono text-[11.5px] bg-surface-3 px-1 py-0.5 rounded">{install.installOnly}</code>
+                </>
+              ) : (
+                <span className="text-fg-3">
+                  {OS_META[emailOs].label} Runtime — {comingLabel(emailOs).toLowerCase()}. Nothing to install yet; we'll email you when it ships.
+                </span>
+              )}
+            </li>
             <li>3. Enrol: <code className="font-mono text-[11.5px] bg-surface-3 px-1 py-0.5 rounded">{RUNTIME.enroll(org)}</code></li>
           </ol>
           <p className="mt-2">Your device will show up on Fleet within a minute. Reply here if anything sticks — the <a href="#/docs/runtime/troubleshooting" className="text-accent underline underline-offset-2">Troubleshooting docs</a> cover the usual issues.</p>
@@ -526,25 +594,31 @@ function Step5({ org, onNext, onBack }: { org: string; onNext: () => void; onBac
   );
 }
 
-/* ---- step 6: go live ---- */
-function Step6({ onFinish, onBack }: { onFinish: () => void; onBack: () => void }) {
+/* ---- step 6: go live ----
+   Counts are scoped to this setup session, not the workspace's history: one screen after finishing
+   setup, nothing has been asked and almost nothing has run. `since` is the moment the wizard opened. */
+function Step6({ since, onFinish, onBack }: { since: number; onFinish: () => void; onBack: () => void }) {
   const fleet = useStore((s) => s.fleet);
   const gateways = useStore((s) => s.gateways);
   const events = useStore((s) => s.events);
   const approvals = useStore((s) => s.approvals);
+  const fresh = events.filter((e) => e.ts >= since);
+  const waiting = approvals.filter((a) => a.status === "pending" && a.createdAt >= since);
+  const gwLive = gateways.some((g) => g.state === "healthy");
   return (
     <>
-      <StepHead n={7} title="Go live" sub="One Control Plane, one Runtime on every device, one Gateway on your network. Every action from now on is decided by one policy and lands on Evidence." />
+      <StepHead n={7} title="Go live" sub="One Control Plane, one Runtime on every device, one Gateway on your network. Every action from here on is decided by one policy and lands on Evidence." />
       <Card className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-line overflow-hidden mb-4">
         {[
-          ["Devices enrolled", String(fleet.length)],
-          ["Gateway", gateways.length ? "live" : "not yet"],
-          ["Decisions today", events.filter((e) => e.ts >= new Date().setHours(0, 0, 0, 0)).length.toLocaleString("en-US")],
-          ["Waiting", String(approvals.filter((a) => a.status === "pending").length)],
-        ].map(([l, v]) => (
+          ["Devices enrolled", String(fleet.length), `${AVAILABLE_OS.map((o) => OS_META[o].label).join(" and ")} today`],
+          ["Gateway", gwLive ? "live" : "not yet", gwLive ? gateways[0].region : "deploy on step 2"],
+          ["Decisions so far", String(fresh.length), fresh.length ? "since setup started" : "nothing has run yet"],
+          ["Waiting for a human", String(waiting.length), waiting.length ? "open Approvals" : "nothing asked yet"],
+        ].map(([l, v, s]) => (
           <div key={l} className="px-6 py-5">
             <div className="text-[12px] text-fg-3">{l}</div>
             <div className="mt-1 text-[22px] font-semibold tracking-tight tnum">{v}</div>
+            <div className="text-[11.5px] text-fg-3 mt-0.5 truncate">{s}</div>
           </div>
         ))}
       </Card>
@@ -552,7 +626,7 @@ function Step6({ onFinish, onBack }: { onFinish: () => void; onBack: () => void 
         <div className="flex items-start gap-3">
           <Rocket className="size-5 text-accent mt-0.5" />
           <div className="flex-1">
-            <div className="text-[14px] font-semibold">Everything is in place.</div>
+            <div className="text-[14px] font-semibold">Fleet is ready. The first decision will show up as soon as an agent runs.</div>
             <p className="mt-1 text-[12.5px] text-fg-2">Fleet shows every device and gateway; Evidence records every decision; Approvals lands the ones that need a person. If you add a new agent tomorrow, no install — a profile entry, and the Runtime writes the adapter on the next heartbeat.</p>
           </div>
         </div>

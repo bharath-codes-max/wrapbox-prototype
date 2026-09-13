@@ -175,7 +175,9 @@ export function Segmented<T extends string>({
   size = "md",
   className,
 }: {
-  options: { value: T; label: ReactNode }[];
+  /** `disabled` renders the option muted and unselectable — used for a platform that hasn't shipped.
+   *  `onDisabledClick` lets the caller reveal a roadmap note instead of doing nothing silently. */
+  options: { value: T; label: ReactNode; disabled?: boolean; title?: string; onDisabledClick?: () => void }[];
   value: T;
   onChange: (v: T) => void;
   size?: "sm" | "md";
@@ -188,14 +190,16 @@ export function Segmented<T extends string>({
           key={o.value}
           role="tab"
           aria-selected={value === o.value}
-          onClick={() => onChange(o.value)}
+          aria-disabled={o.disabled || undefined}
+          title={o.title}
+          onClick={() => (o.disabled ? o.onDisabledClick?.() : onChange(o.value))}
           className={cn(
             "relative rounded-full font-medium transition-colors inline-flex items-center gap-1.5",
             size === "sm" ? "px-2.5 h-6 text-[12px]" : "px-3.5 h-7.5 text-[12.5px]",
-            value === o.value ? "text-fg" : "text-fg-3 hover:text-fg-2",
+            o.disabled ? "text-fg-3/55 cursor-default" : value === o.value ? "text-fg" : "text-fg-3 hover:text-fg-2",
           )}
         >
-          {value === o.value && (
+          {value === o.value && !o.disabled && (
             <motion.span layoutId={`seg-${options.map((x) => x.value).join("")}`} className="absolute inset-0 rounded-full bg-surface shadow-card border border-line" transition={{ type: "spring", duration: 0.35, bounce: 0.15 }} />
           )}
           <span className="relative inline-flex items-center gap-1.5">{o.label}</span>
