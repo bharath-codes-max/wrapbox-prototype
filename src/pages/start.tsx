@@ -1,10 +1,11 @@
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, Check, Database, Plus, UserRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowRight, Building2, Check, FlaskConical, Plus, UserRound } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { AGENTS, agentById, type Decision } from "../data/agents";
 import { Button, Card, DecisionPill, Logo, cn } from "../components/ui";
 import { go } from "../lib/router";
-import { setState, switchWorkspace, useStore, workspaceHasData, workspaceSummary } from "../lib/store";
+import { WORKSPACES, setState, switchWorkspace, useStore, workspaceHasData, workspaceSummary } from "../lib/store";
+import { REFERENCE_LOG_DAYS } from "../data/reference";
 
 const TICKER: { agent: string; action: string; d: Decision; why: string }[] = [
   { agent: "claude-code", action: "Read .env.production", d: "BLOCK", why: "secrets are never read autonomously" },
@@ -61,12 +62,18 @@ export function Start() {
   const s = useStore((x) => x);
   const freshHasData = workspaceHasData("fresh");
   const demo = workspaceSummary("demo");
+  const prod = workspaceSummary("prod");
+  const meta = WORKSPACES[workspace];
+  const p50 = useMemo(() => {
+    const xs = s.events.map((e) => e.latency).sort((a, b) => a - b);
+    return xs.length ? xs[Math.floor(xs.length / 2)] : 3;
+  }, [s.events]);
 
   const steps: { label: string; done: boolean; path: string; hint: string }[] = [
     { label: "Create the workspace", done: s.onboarded.admin || !!s.idp, path: "/onboarding/admin", hint: "SSO, company, data region" },
     { label: "Connect your first agent", done: Object.keys(s.connected).length > 0, path: "/agents", hint: `${Object.keys(s.connected).length} of ${AGENTS.length} connected` },
     { label: "Publish your intent contract", done: s.version > 0 && s.published.length > 0, path: "/contract", hint: s.published.length ? `v${s.version} · ${s.published.length} rules` : "empty — everything is allowed" },
-    { label: "Send your first action", done: s.events.length > 0, path: "/playground", hint: `${s.events.length} decisions so far` },
+    { label: meta.labs ? "Send your first action" : "See the first decision", done: s.events.length > 0, path: meta.labs ? "/playground" : "/evidence", hint: `${s.events.length.toLocaleString("en-US")} decisions so far` },
     { label: "Bring in your team", done: s.members.length > 1, path: "/team", hint: `${s.members.length} ${s.members.length === 1 ? "person" : "people"}` },
     { label: "An employee installs Wrapbox", done: s.devices.length > 0, path: "/onboarding/employee", hint: `${s.devices.length} laptops reporting` },
     { label: "First signed human approval", done: s.approvals.some((a) => a.status === "approved"), path: "/approvals", hint: `${s.approvals.filter((a) => a.status === "pending").length} waiting` },
@@ -78,6 +85,11 @@ export function Start() {
     switchWorkspace("fresh");
     setState({ role });
     go(role === "admin" ? "/onboarding/admin" : "/onboarding/employee");
+  };
+  const open = (id: "prod" | "demo") => {
+    switchWorkspace(id);
+    setState({ role: "admin" });
+    go("/");
   };
 
   return (
@@ -112,15 +124,8 @@ export function Start() {
               <button onClick={() => startFresh("admin")} className="inline-flex items-center gap-2 h-11 rounded-full bg-[#1b0f33] px-5 text-[14px] font-semibold text-white shadow-[0_10px_24px_-10px_rgba(27,15,51,0.8)] hover:bg-[#2a1850] transition-colors">
                 <Plus className="size-4" /> Build from zero
               </button>
-              <button
-                onClick={() => {
-                  switchWorkspace("demo");
-                  setState({ role: "admin" });
-                  go("/");
-                }}
-                className="inline-flex items-center gap-2 h-11 rounded-full bg-[#1b0f33]/20 ring-1 ring-white/55 backdrop-blur-md px-5 text-[14px] font-semibold text-white hover:bg-[#1b0f33]/30 transition-colors"
-              >
-                Explore the live demo <ArrowRight className="size-4" />
+              <button onClick={() => open("prod")} className="inline-flex items-center gap-2 h-11 rounded-full bg-[#1b0f33]/20 ring-1 ring-white/55 backdrop-blur-md px-5 text-[14px] font-semibold text-white hover:bg-[#1b0f33]/30 transition-colors">
+                Explore a live company <ArrowRight className="size-4" />
               </button>
             </div>
           </div>
@@ -128,7 +133,7 @@ export function Start() {
             <div className="flex items-center justify-between mb-3">
               <span className="text-[12px] font-semibold text-white">Decisions, as they happen</span>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium text-white">
-                <span className="size-1.5 rounded-full bg-[#5ef0b5] live-dot" /> p50 3 ms
+                <span className="size-1.5 rounded-full bg-[#5ef0b5] live-dot" /> p50 {p50} ms
               </span>
             </div>
             <Ticker />
@@ -136,19 +141,25 @@ export function Start() {
         </div>
       </section>
 
-      <div className="mt-6 grid gap-3 md:grid-cols-3">
+      <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <PathCard
-          icon={<Database className="size-4.5" />}
-          tag="Demo workspace"
-          title="Explore a live company"
-          body={`${demo.decisions.toLocaleString("en-US")} decisions across ${demo.agents} connected agents, a contract at v${demo.version}, ${demo.approvals} approvals waiting, ${demo.devices} laptops reporting. Poke anything.`}
+          icon={<Building2 className="size-4.5" />}
+          tag={`${prod.company} · production`}
+          title="See it fully deployed"
+          body={`${prod.members} people, ${prod.agents} connected agents and a contract at v${prod.version}. ${prod.decisions.toLocaleString("en-US")} decisions in the last ${REFERENCE_LOG_DAYS} days, ${prod.approvals} approvals waiting, ${prod.devices} laptops reporting.`}
+          cta="Open the workspace"
+          active={workspace === "prod"}
+          primary
+          onClick={() => open("prod")}
+        />
+        <PathCard
+          icon={<FlaskConical className="size-4.5" />}
+          tag={`${demo.company} · demo`}
+          title="Try every decision path"
+          body={`Scripted scenarios for each agent platform, a playground for any action, and test traffic — ${demo.agents} agents connected, contract v${demo.version}. Poke anything.`}
           cta="Open the demo"
           active={workspace === "demo"}
-          onClick={() => {
-            switchWorkspace("demo");
-            setState({ role: "admin" });
-            go("/");
-          }}
+          onClick={() => open("demo")}
         />
         <PathCard
           icon={<Plus className="size-4.5" />}
@@ -157,12 +168,11 @@ export function Start() {
           body="No data anywhere. Create the workspace, write the contract, connect agents, invite people — and watch every page fill in from what you do."
           cta={freshHasData ? "Resume admin setup" : "Start from zero"}
           active={workspace === "fresh"}
-          primary
           onClick={() => startFresh("admin")}
         />
         <PathCard
           icon={<UserRound className="size-4.5" />}
-          tag={workspace === "fresh" ? "In your fresh workspace" : "In the demo workspace"}
+          tag={workspace === "fresh" ? "In your fresh workspace" : `In ${s.company}`}
           title="Join as an employee"
           body="Accept the invite, run one command, see the rules in plain English, try a blocked action, approve from Slack. About 3 minutes."
           cta="Join as Dev"
@@ -176,7 +186,7 @@ export function Start() {
       <Card className="mt-6 overflow-hidden">
         <div className="flex flex-wrap items-center gap-4 px-6 pt-5 pb-4">
           <div className="flex-1 min-w-[260px]">
-            <div className="eyebrow">{workspace === "fresh" ? "Your fresh workspace" : "Demo workspace"} · setup checklist</div>
+            <div className="eyebrow">{workspace === "fresh" ? "Your fresh workspace" : `${s.company} · ${meta.label.toLowerCase()}`} · setup checklist</div>
             <div className="mt-1 text-[18px] font-semibold tracking-tight">
               {done === steps.length ? "Everything is live." : `${done} of ${steps.length} done — ${steps.find((x) => !x.done)?.label.toLowerCase()} next.`}
             </div>

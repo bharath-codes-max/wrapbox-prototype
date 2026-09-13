@@ -34,6 +34,17 @@ export const PEOPLE = {
   kiran: p("kiran.b", "Kiran Bose", "Account executive", 190),
   neha: p("neha.j", "Neha Joshi", "Accounts payable", 300),
   vikram: p("vikram.s", "Vikram Sethi", "Finance controller", 100),
+  // Directory entries without a synced photo — rendered as initials, like any IdP-sourced user.
+  maya: p("maya.s", "Maya Sundaram", "Head of Security", 262),
+  rahul: p("rahul.m", "Rahul Mehta", "Site reliability engineer", 142),
+  tanvi: p("tanvi.k", "Tanvi Kulkarni", "Frontend engineer", 12),
+  ishaan: p("ishaan.p", "Ishaan Patel", "Data engineer", 208),
+  farah: p("farah.a", "Farah Ahmed", "Support engineer", 318),
+  nikhil: p("nikhil.r", "Nikhil Reddy", "Claims adjuster", 62),
+  leah: p("leah.c", "Leah Chen", "Payments manager", 176),
+  omar: p("omar.h", "Omar Haddad", "Database administrator", 236),
+  sneha: p("sneha.g", "Sneha Gupta", "IT administrator", 88),
+  jonas: p("jonas.w", "Jonas Weber", "Backend engineer", 30),
 };
 
 export type PersonKey = keyof typeof PEOPLE;

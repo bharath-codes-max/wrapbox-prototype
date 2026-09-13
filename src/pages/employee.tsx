@@ -23,6 +23,18 @@ export function EmployeeHome() {
   const allRequests = useStore((s) => s.requests);
   const requests = useMemo(() => allRequests.filter((r) => r.person.id === EMPLOYEE.id), [allRequests]);
   const version = useStore((s) => s.version);
+  const published = useStore((s) => s.published);
+  const onCall = useStore((s) => (s.groups["oncall-sre"] ?? []).includes(EMPLOYEE.id));
+  // The rules that reach this person's agents, in the order they'd be noticed. Derived from the published contract.
+  const notice = useMemo(() => {
+    type D = "ALLOW" | "CONSTRAIN" | "REVIEW" | "BLOCK";
+    const rows = published
+      .filter((r) => r.scope !== "business")
+      .map((r) => ({ d: (r.mode === "observe" ? "ALLOW" : r.attenuate ? "BLOCK" : (r.decision ?? r.tiers?.[r.tiers.length - 1]?.decision ?? "ALLOW")) as D, t: r.title + (r.mode === "observe" ? " — watching, not enforced yet" : "") }));
+    // A few of each kind, hardest first, so the list reads like the day will: what stops, what gets rewritten, what waits.
+    const take = (d: D, n: number) => rows.filter((r) => r.d === d).slice(0, n);
+    return [...take("BLOCK", 3), ...take("CONSTRAIN", 2), ...take("REVIEW", 3), { d: "ALLOW" as const, t: "Everything else: edits, tests, builds, feature branches" }];
+  }, [published]);
   const [open, setOpen] = useState<Evt | null>(null);
   const [ask, setAsk] = useState<Evt | null>(null);
   const [doctor, setDoctor] = useState<"idle" | "run" | "ok">("idle");
@@ -156,7 +168,7 @@ export function EmployeeHome() {
 
         <div className="space-y-5 min-w-0">
           <Card className={cn("overflow-hidden", waiting.length && "border-review/40")}>
-            <CardHead title={<span className="flex items-center gap-2"><Hand className="size-4 text-review" /> Waiting on you</span>} sub="You're on call — production deletes need your signature." />
+            <CardHead title={<span className="flex items-center gap-2"><Hand className="size-4 text-review" /> Waiting on you</span>} sub={onCall ? "You're on call — production changes need your signature." : "Requests assigned to you as an approver."} />
             <div className="border-t border-line">
               {waiting.map((a) => {
                 const ag = agentById(a.agentId);
@@ -182,19 +194,10 @@ export function EmployeeHome() {
           <Card className="p-6">
             <div className="text-[13.5px] font-semibold">When you'll notice Wrapbox</div>
             <ul className="mt-3 space-y-2">
-              {(
-                [
-                  ["BLOCK", "Reading .env, keys or credentials"],
-                  ["BLOCK", "Pushing or merging to main"],
-                  ["CONSTRAIN", "Querying customer PII — masked automatically"],
-                  ["CONSTRAIN", "git push --force — becomes --force-with-lease"],
-                  ["REVIEW", "Deleting anything in production"],
-                  ["ALLOW", "Everything else: edits, tests, builds, feature branches"],
-                ] as const
-              ).map(([d, t]) => (
+              {notice.map(({ d, t }) => (
                 <li key={t} className="flex items-center gap-2.5 text-[12.5px]">
-                  <DecisionPill d={d} size="sm" className="w-[84px] justify-center" />
-                  {t}
+                  <DecisionPill d={d} size="sm" className="w-[84px] shrink-0 justify-center" />
+                  <span className="min-w-0">{t}</span>
                 </li>
               ))}
             </ul>

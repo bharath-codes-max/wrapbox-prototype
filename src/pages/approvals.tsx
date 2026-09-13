@@ -1,5 +1,5 @@
 import { ArrowRight, Check, CircleSlash, Clock, FlaskConical, Lightbulb, Repeat2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { agentById } from "../data/agents";
 import { SCENARIOS } from "../data/scenarios";
 import { DecisionSpace, Signals, SlackCard } from "../components/insight";
@@ -8,19 +8,49 @@ import { Avatar, Button, Card, Chip, DecisionPill, Logo, PageHeader, cn } from "
 import { approvalArgs, approvalPermitArgs, approveWithPasskey } from "../lib/actions";
 import { canonical, mintPermit, sha256, short, verifyPermit, type Check as VCheck } from "../lib/permit";
 import { ago, go } from "../lib/router";
-import { EMPLOYEE, attachPermit, reject, toast, useStore, type Approval } from "../lib/store";
+import { EMPLOYEE, attachPermit, reject, toast, useStore, useWorkspace, type Approval } from "../lib/store";
+
+const fmtDuration = (ms: number) => {
+  const s = Math.round(ms / 1000);
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${(s / 3600).toFixed(1)}h`;
+};
+
+/** Suggestions an approver can act on, keyed by the rule that keeps producing requests. */
+const SUGGEST: Record<string, string> = {
+  "prod.k8s.delete": "Prefer `kubectl rollout restart` — it avoids downtime and could be ALLOW.",
+  "payments.refund": "Most of this queue sits between the automatic tier and the block tier — raise the automatic tier if the rejection rate stays low.",
+  "claims.payout": "Payouts under the first tier are automatic; everything here is above it by design.",
+};
 
 export function Approvals() {
   const role = useStore((s) => s.role);
   const all = useStore((s) => s.approvals);
-  const workspace = useStore((s) => s.workspace);
+  const eventCount = useStore((s) => s.events.length);
+  const { labs } = useWorkspace();
   const mine = role === "employee";
   const list = mine ? all.filter((a) => a.approvers.some((p) => p.id === EMPLOYEE.id)) : all;
   const hidden = all.length - list.length;
   const [sel, setSel] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const current = list.find((a) => a.id === sel) ?? list.find((a) => a.status === "pending") ?? list[0];
   const pending = list.filter((a) => a.status === "pending");
   const done = list.filter((a) => a.status !== "pending");
+  const shownDone = showAll ? done : done.slice(0, 25);
+  // Derived from the resolved requests in this workspace — never a typed-in figure.
+  const health = useMemo(() => {
+    const resolved = all.filter((a) => a.status !== "pending" && a.resolvedAt);
+    if (resolved.length < 3) return null;
+    const times = resolved.map((a) => a.resolvedAt! - a.createdAt).sort((x, y) => x - y);
+    const days = Math.max(1, Math.ceil((Date.now() - Math.min(...resolved.map((a) => a.createdAt))) / 86_400_000));
+    const approvers = new Set(resolved.flatMap((a) => a.approvedBy.length ? a.approvedBy : a.approvers.map((p) => p.id)));
+    return {
+      days,
+      median: times[Math.floor(times.length / 2)],
+      perPersonDay: resolved.length / days / Math.max(1, approvers.size),
+      rejected: resolved.filter((a) => a.status === "rejected").length / resolved.length,
+      share: all.length / Math.max(1, eventCount),
+    };
+  }, [all, eventCount]);
 
   return (
     <div className="mx-auto max-w-[1320px] px-4 lg:px-8 py-8">
@@ -38,31 +68,41 @@ export function Approvals() {
             ))}
             {!pending.length && (
               <div className="px-5 py-8 text-[12.5px] text-fg-3">
-                All clear. REVIEW decisions land here and in Slack the moment an agent hits one.{" "}
-                <a href="#/playground" className="underline underline-offset-2 text-fg">
-                  Try one in the playground
-                </a>
-                .
+                All clear. REVIEW decisions land here and in Slack the moment an agent hits one.
+                {labs && (
+                  <>
+                    {" "}
+                    <a href="#/playground" className="underline underline-offset-2 text-fg">
+                      Try one in the playground
+                    </a>
+                    .
+                  </>
+                )}
               </div>
             )}
           </Card>
           {done.length > 0 && (
             <Card className="overflow-hidden">
               <div className="px-5 py-3 border-b border-line text-[12px] font-medium text-fg-3">Resolved · {done.length}</div>
-              {done.map((a) => (
+              {shownDone.map((a) => (
                 <Row key={a.id} a={a} active={current?.id === a.id} onClick={() => setSel(a.id)} />
               ))}
+              {done.length > shownDone.length && (
+                <button onClick={() => setShowAll(true)} className="w-full px-5 py-2.5 text-left text-[12px] text-fg-3 hover:text-fg border-t border-line">
+                  Show {done.length - shownDone.length} older
+                </button>
+              )}
             </Card>
           )}
           {mine && hidden > 0 && <p className="px-1 text-[12px] text-fg-3">{hidden} other approvals are assigned to other people and aren't visible to you.</p>}
-          {!mine && workspace === "demo" && (
+          {!mine && health && (
             <Card className="p-4">
-              <div className="text-[12.5px] font-semibold">Approval health · 30 days</div>
+              <div className="text-[12.5px] font-semibold">Approval health · {health.days} {health.days === 1 ? "day" : "days"}</div>
               <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
                 {[
-                  ["2m 40s", "median time"],
-                  ["0.8", "per person / day"],
-                  ["9%", "rejected"],
+                  [fmtDuration(health.median), "median time"],
+                  [health.perPersonDay.toFixed(1), "per person / day"],
+                  [`${Math.round(health.rejected * 100)}%`, "rejected"],
                 ].map(([v, l]) => (
                   <div key={l} className="rounded-lg bg-surface-2 py-2">
                     <div className="text-[15px] font-semibold tnum">{v}</div>
@@ -70,7 +110,7 @@ export function Approvals() {
                   </div>
                 ))}
               </dl>
-              <p className="mt-2 text-[11.5px] text-fg-3">Only 0.9% of agent actions needed a human. Everything else was allowed, rewritten or blocked by policy alone.</p>
+              <p className="mt-2 text-[11.5px] text-fg-3">Only {(health.share * 100).toFixed(1)}% of agent actions needed a human. Everything else was allowed, rewritten or blocked by policy alone.</p>
             </Card>
           )}
         </div>
@@ -126,6 +166,15 @@ function Detail({ a, mine }: { a: Approval; mine: boolean }) {
   const [probe, setProbe] = useState<{ label: string; checks: VCheck[] } | null>(null);
   const [why, setWhy] = useState("");
   const version = useStore((s) => s.version);
+  const all = useStore((s) => s.approvals);
+  // How requests under this rule went — from this workspace's own resolved requests; a scripted gate's authored
+  // history only when there are none.
+  const similar = useMemo(() => {
+    const xs = all.filter((x) => x.id !== a.id && x.rule === a.rule && x.status !== "pending");
+    if (!xs.length) return g.history ? { ...g.history, days: 90 } : null;
+    const days = Math.max(1, Math.ceil((Date.now() - Math.min(...xs.map((x) => x.createdAt))) / 86_400_000));
+    return { approved: xs.filter((x) => x.status === "approved").length, rejected: xs.filter((x) => x.status === "rejected").length, days, suggestion: g.history?.suggestion ?? SUGGEST[a.rule] };
+  }, [all, a.id, a.rule, g.history]);
 
   useEffect(() => {
     sha256(canonical(approvalArgs(a))).then((h) => setHash("sha256:" + h));
@@ -137,7 +186,8 @@ function Detail({ a, mine }: { a: Approval; mine: boolean }) {
     let alive = true;
     (async () => {
       const p = await mintPermit({
-        decision_id: "d-" + (parseInt(a.gateId.replace(/\D/g, "") || "7", 10) * 40503).toString(16).slice(-6).padStart(6, "7"),
+        id: a.permitId,
+        decision_id: a.gateId.startsWith("d-") ? a.gateId : "d-" + (parseInt(a.gateId.replace(/\D/g, "") || "7", 10) * 40503).toString(16).slice(-6).padStart(6, "7"),
         subject_agent: a.agentId,
         on_behalf_of: a.human.id,
         action: g.effect,
@@ -218,19 +268,19 @@ function Detail({ a, mine }: { a: Approval; mine: boolean }) {
           <Card className="p-6">
             <div className="grid gap-5 sm:grid-cols-[1fr_200px] items-center">
               <div>
-                <div className="eyebrow mb-1.5">Similar requests · 90 days</div>
+                <div className="eyebrow mb-1.5">Similar requests · {similar ? `${similar.days} days` : "none yet"}</div>
                 <div className="flex gap-4 text-[13px]">
                   <span>
-                    <b className="tnum">{g.history?.approved ?? 0}</b> <span className="text-fg-3">approved</span>
+                    <b className="tnum">{similar?.approved ?? 0}</b> <span className="text-fg-3">approved</span>
                   </span>
                   <span>
-                    <b className="tnum">{g.history?.rejected ?? 0}</b> <span className="text-fg-3">rejected</span>
+                    <b className="tnum">{similar?.rejected ?? 0}</b> <span className="text-fg-3">rejected</span>
                   </span>
                 </div>
-                {g.history?.suggestion && !mine && (
+                {similar?.suggestion && !mine && (
                   <div className="mt-3 rounded-lg border border-line bg-surface-2 p-2.5">
                     <div className="flex items-start gap-2 text-[12px] text-fg-2">
-                      <Lightbulb className="size-3.5 mt-0.5 text-review shrink-0" /> {g.history.suggestion}
+                      <Lightbulb className="size-3.5 mt-0.5 text-review shrink-0" /> {similar.suggestion}
                     </div>
                     <Button size="sm" className="mt-2" onClick={() => toast("Draft rule added", `Contract v${version + 1} draft · replay it before publishing`, "review")}>
                       Draft a rule

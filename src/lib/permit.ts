@@ -60,19 +60,23 @@ const rand = (n: number) => Array.from(crypto.getRandomValues(new Uint8Array(n))
 export const newDecisionId = () => "d-" + rand(3);
 
 const usedNonces = new Set<string>();
+/** The control plane's current signing key id. Shown wherever a permit's provenance is. */
+export const KID = "wbx-2026-09";
 
 type PermitInput = Omit<Permit, "id" | "kid" | "args_hash" | "issued_at" | "expires_at" | "nonce" | "signature"> & {
   args: Record<string, unknown>;
   ttl?: number;
+  /** The id assigned when the request was opened, so the evidence record and the permit agree. */
+  id?: string;
 };
 
 export async function mintPermit(input: PermitInput): Promise<Permit> {
-  const { args, ttl = 60, ...rest } = input;
+  const { args, ttl = 60, id, ...rest } = input;
   const issued = Date.now();
   const body = {
     ...rest,
-    id: "wbp_" + rand(4),
-    kid: "wbx-2026-09",
+    id: id ?? "wbp_" + rand(4),
+    kid: KID,
     args_hash: "sha256:" + (await sha256(canonical(args))),
     issued_at: issued,
     expires_at: issued + ttl * 1000,

@@ -25,7 +25,7 @@ import { DecisionStream } from "../components/stream";
 import { AssuranceBadge, Button, Card, Chip, CopyButton, DecisionPill, Logo, Modal, PageHeader, Segmented, cn } from "../components/ui";
 import type { Act } from "../lib/engine";
 import { ago, go } from "../lib/router";
-import { EMPLOYEE, NONE, adminPerson, connectAgent, disconnectAgent, evaluateNow, getState, setState, toast, useStore } from "../lib/store";
+import { EMPLOYEE, NONE, adminPerson, connectAgent, disconnectAgent, evaluateNow, getState, setState, toast, useStore, useWorkspace } from "../lib/store";
 import { EvidenceDrawer } from "./evidence";
 import type { Evt } from "../lib/store";
 
@@ -46,6 +46,7 @@ export function AgentsPage({ query }: { query: URLSearchParams }) {
   const [req, setReq] = useState<Agent | null>(null);
   const focus = query.get("c") as CategoryId | null;
   const mine = role === "employee";
+  const { labs } = useWorkspace();
 
   const list = (c: CategoryId) =>
     AGENTS.filter(
@@ -175,9 +176,11 @@ export function AgentsPage({ query }: { query: URLSearchParams }) {
                       {groups.length > 1 ? <h3 className="text-[14px] font-semibold">{cat.name.split(" · ")[1]?.replace(/^\w/, (s) => s.toUpperCase()) ?? cat.name}</h3> : null}
                       <Chip tone={cat.timing === "NOW" ? "allow" : cat.timing === "NEXT" ? "accent" : "muted"}>{cat.timing}</Chip>
                       <span className="text-[12.5px] text-fg-3">{cat.method}</span>
-                      <a href={`#/flows/${cat.scenario}`} className="ml-auto text-[12.5px] font-medium text-accent inline-flex items-center gap-1">
-                        Happy flow <ArrowRight className="size-3" />
-                      </a>
+                      {labs && (
+                        <a href={`#/flows/${cat.scenario}`} className="ml-auto text-[12.5px] font-medium text-accent inline-flex items-center gap-1">
+                          Happy flow <ArrowRight className="size-3" />
+                        </a>
+                      )}
                     </div>
                     <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                       {items.map((a) => (
@@ -320,6 +323,7 @@ export function AgentDetail({ id, query }: { id: string; query: URLSearchParams 
   const conn = useStore((s) => (agent ? s.connected[agent.id] : undefined));
   const role = useStore((s) => s.role);
   const allowed = useStore((s) => s.allowed[EMPLOYEE.id] ?? NONE);
+  const { labs } = useWorkspace();
   const [tab, setTab] = useState<"connect" | "flow" | "activity">((query.get("tab") as "flow") ?? "connect");
   if (!agent) return <div className="p-10">Unknown agent.</div>;
   const cat = categoryById(agent.category);
@@ -388,9 +392,17 @@ export function AgentDetail({ id, query }: { id: string; query: URLSearchParams 
               <Unplug className="size-3.5" /> Disconnect
             </Button>
           )}
-          <Button variant="primary" onClick={() => setTab("flow")}>
-            <Play className="size-3.5 fill-current" /> Run happy flow
-          </Button>
+          {labs ? (
+            <Button variant="primary" onClick={() => setTab("flow")}>
+              <Play className="size-3.5 fill-current" /> Run happy flow
+            </Button>
+          ) : (
+            conn && (
+              <Button variant="primary" onClick={() => setTab("activity")}>
+                Activity <ArrowRight className="size-3.5" />
+              </Button>
+            )
+          )}
         </div>
       </div>
 
@@ -401,7 +413,9 @@ export function AgentDetail({ id, query }: { id: string; query: URLSearchParams 
             ["flow", "Happy flow"],
             ["activity", "Activity"],
           ] as const
-        ).map(([k, l]) => (
+        )
+          .filter(([k]) => labs || k !== "flow")
+          .map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} className={cn("relative pb-3 text-[13.5px] font-medium transition-colors", tab === k ? "text-fg" : "text-fg-3 hover:text-fg-2")}>
             {l}
             {tab === k && <motion.span layoutId="agent-tab" className="absolute left-0 right-0 -bottom-px h-0.5 bg-fg rounded-full" />}
@@ -419,9 +433,9 @@ export function AgentDetail({ id, query }: { id: string; query: URLSearchParams 
         ) : roadmap ? (
           <RoadmapPlan agent={agent} />
         ) : (
-          <ConnectWizard agent={agent} onRun={() => setTab("flow")} />
+          <ConnectWizard agent={agent} onRun={() => setTab(labs ? "flow" : "activity")} runLabel={labs ? "Run the happy flow" : "See its activity"} />
         ))}
-      {tab === "flow" && <FlowRunner key={agent.id} scenario={scenarioFor(agent)} agent={agent} />}
+      {tab === "flow" && labs && <FlowRunner key={agent.id} scenario={scenarioFor(agent)} agent={agent} />}
       {tab === "activity" && <AgentActivity agent={agent} />}
     </div>
   );
@@ -476,6 +490,7 @@ function RoadmapPlan({ agent }: { agent: Agent }) {
 
 function AgentActivity({ agent }: { agent: Agent }) {
   const events = useStore((s) => s.events);
+  const { labs } = useWorkspace();
   const [open, setOpen] = useState<Evt | null>(null);
   const mine = useMemo(() => events.filter((e) => e.agentId === agent.id), [events, agent.id]);
   const c = { ALLOW: 0, CONSTRAIN: 0, REVIEW: 0, BLOCK: 0 };
@@ -483,7 +498,7 @@ function AgentActivity({ agent }: { agent: Agent }) {
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_280px]">
       <Card className="overflow-hidden">
-        {mine.length ? <DecisionStream events={mine} limit={30} onPick={setOpen} /> : <div className="p-12 text-center text-[13px] text-fg-3">No decisions yet. Run the happy flow or send an action from the playground.</div>}
+        {mine.length ? <DecisionStream events={mine} limit={30} onPick={setOpen} /> : <div className="p-12 text-center text-[13px] text-fg-3">{labs ? "No decisions yet. Run the happy flow or send an action from the playground." : "No decisions yet — they appear here the moment this agent acts."}</div>}
       </Card>
       <Card className="p-6 h-fit space-y-3">
         <div className="text-[13.5px] font-semibold">In this workspace</div>
@@ -542,7 +557,7 @@ const PROBES: Record<CategoryId, { display: string; act: Act }[]> = {
   ],
 };
 
-function ConnectWizard({ agent, onRun }: { agent: Agent; onRun: () => void }) {
+function ConnectWizard({ agent, onRun, runLabel }: { agent: Agent; onRun: () => void; runLabel: string }) {
   const conn = useStore((s) => s.connected[agent.id]);
   const version = useStore((s) => s.version);
   const published = useStore((s) => s.published.length);
@@ -682,7 +697,7 @@ function ConnectWizard({ agent, onRun }: { agent: Agent; onRun: () => void }) {
             ))}
           </dl>
           <Button className="mt-5 w-full" variant={done ? "primary" : "secondary"} onClick={onRun} disabled={!done}>
-            <Play className="size-3.5 fill-current" /> Run the happy flow
+            <Play className="size-3.5 fill-current" /> {runLabel}
           </Button>
         </Card>
         <Card className="p-6">

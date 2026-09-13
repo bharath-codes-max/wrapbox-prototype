@@ -759,7 +759,7 @@ export function AdminSetup() {
     }
     markOnboarded("admin");
     setState({ role: "admin" });
-    toast("Wrapbox is live", fresh ? "Every page now reflects what you set up. Invite employees next, or send an action from the playground." : "The demo workspace keeps its 30 days of traffic.", "allow");
+    toast("Wrapbox is live", fresh ? "Every page now reflects what you set up. Invite employees next, or send an action from the playground." : "Every page now follows the contract you published.", "allow");
     go("/");
   }
 

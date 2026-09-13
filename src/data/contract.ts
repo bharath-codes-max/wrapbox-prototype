@@ -20,6 +20,9 @@ export const EFFECTS: { id: string; label: string; desc: string; fields: Field[]
   { id: "payment.submit", label: "Submit a payment in a browser", desc: "The final click", fields: ["amount"], unit: "USD" },
   { id: "network.egress", label: "Send data to a domain", desc: "curl, fetch, webhooks", fields: ["destination"] },
   { id: "purchase.order", label: "Place a delegated order", desc: "Subagents spending money", fields: [] },
+  { id: "payments.create", label: "Create a payment link", desc: "Stripe, Razorpay payment links", fields: ["amount"], unit: "USD" },
+  { id: "payments.payout", label: "Pay out to a bank account", desc: "Settlements, transfers", fields: ["amount"], unit: "USD" },
+  { id: "billing.cancel", label: "Cancel a subscription", desc: "Stripe, Chargebee, any billing route", fields: [] },
 ];
 export const effectInfo = (id: string) => EFFECTS.find((e) => e.id === id);
 
@@ -466,86 +469,7 @@ export function evalTier(rule: Rule, value: number): { decision: Decision; tier:
   return { decision: "ALLOW", tier: -1 };
 }
 
-function mulberry32(a: number) {
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function logSeries(seed: number, n: number, lo: number, hi: number) {
-  const r = mulberry32(seed);
-  const a = Math.log(lo),
-    b = Math.log(hi);
-  return Array.from({ length: n }, () => Math.round(Math.exp(a + (b - a) * Math.pow(r(), 1.6))));
-}
-
-export const HISTORY: Record<string, number[]> = {
-  "payments.refund": logSeries(7, 1240, 5, 12000),
-  "claims.payout": logSeries(11, 860, 1500, 480000),
-  "crm.discount": logSeries(19, 310, 1, 48),
-};
-
-export interface ReplayResult {
-  total: number;
-  changed: number;
-  newlyBlocked: number;
-  newlyReview: number;
-  newlyAllowed: number;
-  samples: { rule: string; value: number; unit: string; from: Decision; to: Decision }[];
-}
-
-export function replay(draft: Rule[], published: Rule[]): ReplayResult {
-  const res: ReplayResult = { total: 0, changed: 0, newlyBlocked: 0, newlyReview: 0, newlyAllowed: 0, samples: [] };
-  for (const id of Object.keys(HISTORY)) {
-    const d = draft.find((r) => r.id === id);
-    const p = published.find((r) => r.id === id);
-    for (const v of HISTORY[id]) {
-      res.total++;
-      const a: Decision = p?.tiers ? evalTier(p, v).decision : "ALLOW";
-      const b: Decision = d?.tiers ? evalTier(d, v).decision : "ALLOW";
-      if (a !== b) {
-        res.changed++;
-        if (b === "BLOCK") res.newlyBlocked++;
-        else if (b === "REVIEW") res.newlyReview++;
-        else res.newlyAllowed++;
-        if (res.samples.length < 6) res.samples.push({ rule: id, value: v, unit: (d ?? p)?.unit ?? "", from: a, to: b });
-      }
-    }
-  }
-  const ids = new Set([...draft, ...published].filter((r) => !r.tiers).map((r) => r.id));
-  for (const id of ids) {
-    const r = draft.find((x) => x.id === id);
-    const p = published.find((x) => x.id === id);
-    const volume = FIXED_VOLUME[id] ?? 40;
-    res.total += volume;
-    const from: Decision = p && p.mode !== "observe" ? (p.decision ?? "ALLOW") : "ALLOW";
-    const to: Decision = r && r.mode !== "observe" ? (r.decision ?? "ALLOW") : "ALLOW";
-    if (from !== to) {
-      res.changed += volume;
-      if (to === "BLOCK") res.newlyBlocked += volume;
-      else if (to === "REVIEW" || to === "CONSTRAIN") res.newlyReview += volume;
-      else res.newlyAllowed += volume;
-      res.samples.push({ rule: id, value: volume, unit: "actions", from, to });
-    }
-  }
-  return res;
-}
-
-const FIXED_VOLUME: Record<string, number> = {
-  "secrets.read": 212,
-  "git.main": 64,
-  "git.force": 31,
-  "git.feature": 3810,
-  "prod.k8s.delete": 18,
-  "prod.db.migrate": 9,
-  "db.prod.write": 41,
-  "browser.payment": 57,
-  "network.egress": 23,
-  "pii.read": 388,
-};
+/* Replay lives in src/lib/replay.ts — it re-runs the runtime evaluator over the workspace's own decision log. */
 
 export function fmtValue(v: number, unit?: string) {
   if (unit === "INR") return "₹" + v.toLocaleString("en-IN");

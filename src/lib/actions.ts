@@ -20,6 +20,7 @@ export async function approveWithPasskey(a: Approval, person: Person) {
   if (done && !now?.permit) {
     const g = a.gate;
     const permit = await mintPermit({
+      id: a.permitId,
       decision_id: newDecisionId(),
       subject_agent: a.agentId,
       on_behalf_of: a.human.id,

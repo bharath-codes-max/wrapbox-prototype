@@ -2,7 +2,7 @@ import { MotionConfig, motion } from "motion/react";
 import { useEffect } from "react";
 import { Shell } from "./components/shell";
 import { useRoute } from "./lib/router";
-import { startLive, useStore } from "./lib/store";
+import { WORKSPACES, startLive, useStore } from "./lib/store";
 import { AgentDetail, AgentsPage } from "./pages/agents";
 import { Approvals } from "./pages/approvals";
 import { ContractPage } from "./pages/contract";
@@ -40,10 +40,12 @@ export default function App() {
   const authRoute = seg[0] === "login" || seg[0] === "signup";
   const landing = seg[0] === "landing";
 
+  const labsRoute = seg[0] === "playground" || seg[0] === "flows";
   useEffect(() => {
     if (!account && !authRoute && !landing) go("/landing");
     else if (account && authRoute) go("/start");
-  }, [account, authRoute, landing]);
+    else if (labsRoute && !WORKSPACES[workspace].labs) go("/");
+  }, [account, authRoute, landing, labsRoute, workspace]);
 
   if (landing || (!account && !authRoute))
     return (

@@ -6,7 +6,7 @@ import { DecisionStream } from "../components/stream";
 import { Avatar, Button, Card, CardHead, D_DOT, DecisionPill, Logo, PageHeader, Segmented, Toggle, cn } from "../components/ui";
 import { useAccount } from "../lib/auth";
 import { ago, go } from "../lib/router";
-import { adminPerson, getState, setState, spaceOf, tickTraffic, toast, useStore, type Evt } from "../lib/store";
+import { adminPerson, getState, setState, spaceOf, tickTraffic, toast, useStore, useWorkspace, type Evt } from "../lib/store";
 import { EvidenceDrawer } from "./evidence";
 
 function greeting() {
@@ -88,8 +88,10 @@ export function Overview() {
   const envFilter = useStore((s) => s.envFilter);
   const events = useMemo(() => (envFilter === "all" ? allEvents : allEvents.filter((e) => e.env === envFilter)), [allEvents, envFilter]);
   const baseline = useStore((s) => s.baseline);
-  const workspace = useStore((s) => s.workspace);
-  const fresh = workspace === "fresh";
+  const ws = useWorkspace();
+  const company = useStore((s) => s.company);
+  const fresh = ws.kind === "fresh";
+  const sandbox = ws.kind === "sandbox";
   const approvals = useStore((s) => s.approvals);
   const connected = useStore((s) => s.connected);
   const kill = useStore((s) => s.killSwitch);
@@ -107,12 +109,15 @@ export function Overview() {
     return { p50: q(0.5), p99: q(0.99) };
   }, [allEvents]);
   const shown = filter === "all" ? events : events.filter((e) => e.decision === filter);
-  const live_ = allEvents.filter((e) => e.source !== "seed");
-  const total = baseline.decisions + (fresh ? allEvents.length : live_.length);
-  const blocked = baseline.blocked + (fresh ? allEvents : live_).filter((e) => e.decision === "BLOCK").length;
-  const rewritten = baseline.rewritten + (fresh ? allEvents : live_).filter((e) => e.decision === "CONSTRAIN").length;
+  // "Today" is the calendar day in the reference workspace, everything in a fresh one, and the seeded baseline plus
+  // what has happened since load in the sandbox.
+  const dayStart = new Date().setHours(0, 0, 0, 0);
+  const scope = sandbox ? allEvents.filter((e) => e.source !== "seed") : fresh ? allEvents : allEvents.filter((e) => e.ts >= dayStart);
+  const total = (sandbox ? baseline.decisions : 0) + scope.length;
+  const blocked = (sandbox ? baseline.blocked : 0) + scope.filter((e) => e.decision === "BLOCK").length;
+  const rewritten = (sandbox ? baseline.rewritten : 0) + scope.filter((e) => e.decision === "CONSTRAIN").length;
   const nConnected = Object.keys(connected).length;
-  const wouldStop = (fresh ? allEvents : live_).filter((e) => e.observed === "BLOCK" || e.observed === "REVIEW").length;
+  const wouldStop = scope.filter((e) => e.observed === "BLOCK" || e.observed === "REVIEW").length;
 
   const byAssurance = useMemo(() => {
     const m: Record<Assurance, number> = { "observe-only": 0, "hook-enforced": 0, "gateway-enforced": 0, "endpoint-enforced": 0, "resource-verified": 0 };
@@ -147,17 +152,23 @@ export function Overview() {
   return (
     <div className="mx-auto max-w-[1320px] px-4 lg:px-8 py-8">
       <PageHeader
-        eyebrow={`${greeting()} · ${fresh ? "fresh workspace" : "Wrapbox production control plane"}`}
-        title={total ? (blocked === 0 && wouldStop > 0 ? `${total.toLocaleString("en-US")} agent actions checked. ${wouldStop} would be stopped once you enforce.` : `${total.toLocaleString("en-US")} agent actions checked. ${blocked.toLocaleString("en-US")} stopped before they ran.`) : nConnected ? "Agents connected. Waiting for their first action." : "Nothing to govern yet — connect your first agent."}
-        sub={total ? `${greeting()}, ${first}. Across ${nConnected} connected agents — every action checked against contract v${getState().version}, every risky one stopped, rewritten or held for a person.` : "Every page fills in as you go: connect an agent, write a rule, send an action from the playground or run a happy flow."}
+        eyebrow={`${greeting()} · ${fresh ? "fresh workspace" : sandbox ? "Wrapbox production control plane" : `${company} · production`}`}
+        title={total ? (blocked === 0 && wouldStop > 0 ? `${total.toLocaleString("en-US")} agent actions checked today. ${wouldStop} would be stopped once you enforce.` : `${total.toLocaleString("en-US")} agent actions checked today. ${blocked.toLocaleString("en-US")} stopped before they ran.`) : nConnected ? "Agents connected. Waiting for their first action." : "Nothing to govern yet — connect your first agent."}
+        sub={total ? `${greeting()}, ${first}. Across ${nConnected} connected agents — every action checked against contract v${getState().version}, every risky one stopped, rewritten or held for a person.` : ws.labs ? "Every page fills in as you go: connect an agent, write a rule, send an action from the playground or run a happy flow." : "Every page fills in as agents act: connect an agent and publish a rule, and decisions appear here."}
         right={
           <>
             <Button onClick={() => go("/agents")}>
               <Plug className="size-3.5" /> Connect agent
             </Button>
-            <Button variant="primary" onClick={() => go("/flows/cli")}>
-              <Play className="size-3.5 fill-current" /> Run a happy flow
-            </Button>
+            {ws.labs ? (
+              <Button variant="primary" onClick={() => go("/flows/cli")}>
+                <Play className="size-3.5 fill-current" /> Run a happy flow
+              </Button>
+            ) : (
+              <Button variant="primary" onClick={() => go("/approvals")}>
+                Review approvals{pending.length ? <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[11px] tnum">{pending.length}</span> : null}
+              </Button>
+            )}
           </>
         }
       />
@@ -206,16 +217,18 @@ export function Overview() {
             ) : (
               <div className="px-6 py-12 text-center">
                 <div className="text-[13.5px] font-semibold">No decisions yet</div>
-                <p className="mt-1 text-[12.5px] text-fg-3">{nConnected ? "Send an action from the playground or run a happy flow — it appears here instantly." : "Connect an agent, then send it an action."}</p>
+                <p className="mt-1 text-[12.5px] text-fg-3">{nConnected ? (ws.labs ? "Send an action from the playground or run a happy flow — it appears here instantly." : "Decisions appear here the moment a connected agent acts.") : "Connect an agent, then send it an action."}</p>
                 <div className="mt-4 flex justify-center gap-2">
                   {!nConnected && (
                     <Button size="sm" variant="primary" onClick={() => go("/agents")}>
                       <Plug className="size-3.5" /> Connect an agent
                     </Button>
                   )}
-                  <Button size="sm" onClick={() => go("/playground")}>
-                    <FlaskConical className="size-3.5" /> Open the playground
-                  </Button>
+                  {ws.labs && (
+                    <Button size="sm" onClick={() => go("/playground")}>
+                      <FlaskConical className="size-3.5" /> Open the playground
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
@@ -291,7 +304,7 @@ export function Overview() {
                   </a>
                 );
               })}
-              {!pending.length && <div className="px-5 py-6 text-[12.5px] text-fg-3">Nothing waiting. Run a happy flow to create one.</div>}
+              {!pending.length && <div className="px-5 py-6 text-[12.5px] text-fg-3">{ws.labs ? "Nothing waiting. Run a happy flow to create one." : "Nothing waiting. REVIEW decisions land here the moment an agent hits one."}</div>}
             </div>
           </Card>
 
@@ -346,7 +359,7 @@ export function Overview() {
               <div className="text-[13.5px] font-semibold">Decisions · last 24 hours</div>
               <div className="text-[12px] text-fg-3">Per hour, stacked by outcome</div>
             </div>
-            <HourlyChart events={fresh ? allEvents : undefined} />
+            <HourlyChart events={sandbox ? undefined : allEvents} />
           </Card>
           <Card className="overflow-hidden">
             <CardHead title="Rules doing the work" sub="Non-allow decisions in the stream" right={<Button size="sm" variant="ghost" onClick={() => go("/contract")}>Contract <ArrowRight className="size-3" /></Button>} />

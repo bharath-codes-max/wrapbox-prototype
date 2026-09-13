@@ -5,7 +5,7 @@ import { personById } from "../data/people";
 import { CodeBlock, json } from "../components/code";
 import { Avatar, Button, Card, DecisionPill, Drawer, Logo, PageHeader, Segmented, cn } from "../components/ui";
 import { clock } from "../lib/router";
-import { EMPLOYEE, getState, toast, useStore, type Evt } from "../lib/store";
+import { EMPLOYEE, getState, toast, useStore, useWorkspace, type Evt } from "../lib/store";
 
 export function EvidenceDrawer({ e, onClose }: { e: Evt | null; onClose: () => void }) {
   return (
@@ -100,6 +100,8 @@ export function Evidence() {
   const [agent, setAgent] = useState("all");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<Evt | null>(null);
+  const [limit, setLimit] = useState(80);
+  const { labs } = useWorkspace();
   const mine = role === "employee";
   const rows = useMemo(
     () =>
@@ -161,6 +163,7 @@ export function Evidence() {
               </option>
             ))}
           </select>
+          <span className="text-[12px] text-fg-3 tnum">{rows.length.toLocaleString("en-US")} {rows.length === 1 ? "decision" : "decisions"}</span>
           <div className="ml-auto flex items-center gap-2 h-7 rounded-full border border-line bg-surface px-3 w-[240px] max-w-full">
             <Search className="size-3.5 text-fg-3" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search action, rule or id" className="flex-1 bg-transparent outline-none text-[12.5px] placeholder:text-fg-3" />
@@ -179,7 +182,7 @@ export function Evidence() {
               </tr>
             </thead>
             <tbody>
-              {rows.slice(0, 80).map((e) => {
+              {rows.slice(0, limit).map((e) => {
                 const a = agentById(e.agentId);
                 const p = personById(e.human);
                 return (
@@ -203,7 +206,12 @@ export function Evidence() {
               })}
             </tbody>
           </table>
-          {!rows.length && <div className="px-4 py-12 text-center text-[13px] text-fg-3">{allRaw.length ? "No decisions match these filters." : "No decisions yet — they appear here the moment an agent acts. Try the playground."}</div>}
+          {!rows.length && <div className="px-4 py-12 text-center text-[13px] text-fg-3">{allRaw.length ? "No decisions match these filters." : labs ? "No decisions yet — they appear here the moment an agent acts. Try the playground." : "No decisions yet — they appear here the moment an agent acts."}</div>}
+          {rows.length > limit && (
+            <button onClick={() => setLimit(limit + 120)} className="w-full border-t border-line px-4 py-3 text-[12.5px] text-fg-2 hover:bg-surface-2">
+              Show {Math.min(120, rows.length - limit)} more · {(rows.length - limit).toLocaleString("en-US")} older
+            </button>
+          )}
         </div>
       </Card>
       <EvidenceDrawer e={open} onClose={() => setOpen(null)} />

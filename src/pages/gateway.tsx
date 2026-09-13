@@ -1,21 +1,22 @@
 import { motion } from "motion/react";
 import { ArrowRight, Check, Loader2, Plus, ShieldCheck } from "lucide-react";
 import { useState } from "react";
-import { agentById, type Decision } from "../data/agents";
+import { agentById } from "../data/agents";
 import { CodeBlock, InlineCmd } from "../components/code";
 import { Button, Card, CardHead, Chip, CopyButton, DecisionPill, Drawer, Logo, PageHeader, Segmented, cn } from "../components/ui";
+import type { Act } from "../lib/engine";
 import { go } from "../lib/router";
-import { connectAgent, toast, useStore } from "../lib/store";
+import { connectAgent, evaluateNow, toast, useStore, useWorkspace } from "../lib/store";
 
 interface Upstream {
   id: string;
-  agentId?: string;
+  agentId: string;
   name: string;
   logo: string;
   upstream: string;
   slug: string;
-  tools: { name: string; effect: string; risk: "low" | "medium" | "high"; decision: Decision | "tiers" }[];
-  calls: number;
+  /** Each tool with a representative normalized call. The decision column is evaluated, never typed in. */
+  tools: { name: string; effect: string; risk: "low" | "medium" | "high"; act: Act }[];
 }
 
 const UPSTREAMS: Upstream[] = [
@@ -26,13 +27,12 @@ const UPSTREAMS: Upstream[] = [
     logo: "stripe",
     upstream: "https://mcp.stripe.com",
     slug: "stripe",
-    calls: 2140,
     tools: [
-      { name: "list_customers", effect: "payments.read", risk: "low", decision: "ALLOW" },
-      { name: "list_payment_intents", effect: "payments.read", risk: "low", decision: "ALLOW" },
-      { name: "create_refund", effect: "payments.refund", risk: "high", decision: "tiers" },
-      { name: "create_payment_link", effect: "payments.create", risk: "medium", decision: "REVIEW" },
-      { name: "cancel_subscription", effect: "billing.cancel", risk: "high", decision: "REVIEW" },
+      { name: "list_customers", effect: "payments.read", risk: "low", act: { effect: "payments.read", env: "production" } },
+      { name: "list_payment_intents", effect: "payments.read", risk: "low", act: { effect: "payments.read", env: "production" } },
+      { name: "create_refund", effect: "payments.refund", risk: "high", act: { effect: "payments.refund", amount: 30000, amountUsd: 300, env: "production" } },
+      { name: "create_payment_link", effect: "payments.create", risk: "medium", act: { effect: "payments.create", amount: 25000, amountUsd: 250, env: "production" } },
+      { name: "cancel_subscription", effect: "billing.cancel", risk: "high", act: { effect: "billing.cancel", env: "production" } },
     ],
   },
   {
@@ -42,13 +42,12 @@ const UPSTREAMS: Upstream[] = [
     logo: "razorpay",
     upstream: "https://mcp.razorpay.com/mcp",
     slug: "razorpay",
-    calls: 0,
     tools: [
-      { name: "fetch_payment", effect: "payments.read", risk: "low", decision: "ALLOW" },
-      { name: "fetch_settlements", effect: "payments.read", risk: "low", decision: "ALLOW" },
-      { name: "create_refund", effect: "payments.refund", risk: "high", decision: "tiers" },
-      { name: "create_payment_link", effect: "payments.create", risk: "medium", decision: "REVIEW" },
-      { name: "create_payout", effect: "payments.payout", risk: "high", decision: "BLOCK" },
+      { name: "fetch_payment", effect: "payments.read", risk: "low", act: { effect: "payments.read", env: "production" } },
+      { name: "fetch_settlements", effect: "payments.read", risk: "low", act: { effect: "payments.read", env: "production" } },
+      { name: "create_refund", effect: "payments.refund", risk: "high", act: { effect: "payments.refund", amount: 4000, amountUsd: 48, env: "production" } },
+      { name: "create_payment_link", effect: "payments.create", risk: "medium", act: { effect: "payments.create", amount: 4000, amountUsd: 48, env: "production" } },
+      { name: "create_payout", effect: "payments.payout", risk: "high", act: { effect: "payments.payout", amount: 100000, amountUsd: 1200, env: "production" } },
     ],
   },
   {
@@ -58,12 +57,11 @@ const UPSTREAMS: Upstream[] = [
     logo: "github_light",
     upstream: "https://api.githubcopilot.com/mcp/",
     slug: "github",
-    calls: 3310,
     tools: [
-      { name: "get_file_contents", effect: "git.read", risk: "low", decision: "ALLOW" },
-      { name: "create_issue", effect: "git.issue.create", risk: "low", decision: "ALLOW" },
-      { name: "create_pull_request", effect: "git.pr.create", risk: "low", decision: "ALLOW" },
-      { name: "merge_pull_request", effect: "git.merge", risk: "high", decision: "BLOCK" },
+      { name: "get_file_contents", effect: "git.read", risk: "low", act: { effect: "git.read", env: "production" } },
+      { name: "create_issue", effect: "git.issue.create", risk: "low", act: { effect: "git.issue.create", env: "production" } },
+      { name: "create_pull_request", effect: "git.pr.create", risk: "low", act: { effect: "git.pr.create", env: "production" } },
+      { name: "merge_pull_request", effect: "git.merge", risk: "high", act: { effect: "git.merge", branch: "main", env: "production" } },
     ],
   },
   {
@@ -73,17 +71,24 @@ const UPSTREAMS: Upstream[] = [
     logo: "postgresql",
     upstream: "stdio: postgres-mcp --access-mode=unrestricted",
     slug: "postgres-prod",
-    calls: 670,
     tools: [
-      { name: "execute_sql · SELECT", effect: "database.read", risk: "low", decision: "ALLOW" },
-      { name: "execute_sql · SELECT on PII", effect: "database.read · PII", risk: "medium", decision: "CONSTRAIN" },
-      { name: "execute_sql · UPDATE/DELETE", effect: "database.write", risk: "high", decision: "BLOCK" },
-      { name: "execute_sql · DDL", effect: "database.migrate", risk: "high", decision: "BLOCK" },
+      { name: "execute_sql · SELECT", effect: "database.read", risk: "low", act: { effect: "database.read", columns: ["count(*)"], sql: "SELECT count(*) FROM claims", env: "production" } },
+      { name: "execute_sql · SELECT on PII", effect: "database.read · PII", risk: "medium", act: { effect: "database.read", columns: ["email", "phone"], sql: "SELECT email, phone FROM customers", env: "production" } },
+      { name: "execute_sql · UPDATE/DELETE", effect: "database.write", risk: "high", act: { effect: "database.write", sql: "DELETE FROM claims WHERE status = 'test'", env: "production" } },
+      { name: "execute_sql · DDL", effect: "database.migrate", risk: "high", act: { effect: "database.migrate", sql: "ALTER TABLE claims ADD COLUMN note text", env: "production" } },
     ],
   },
 ];
 
-function ToolTable({ tools }: { tools: Upstream["tools"] }) {
+/** What the published contract decides for a representative call of each tool. */
+function ToolTable({ tools, agentId }: { tools: Upstream["tools"]; agentId: string }) {
+  const published = useStore((s) => s.published);
+  useStore((s) => s.killSwitch);
+  const decide = (act: Act) => {
+    const v = evaluateNow(act, agentId);
+    const rule = published.find((r) => r.id === v.rule);
+    return { v, tiers: !!rule?.tiers };
+  };
   return (
     <div className="overflow-x-auto rounded-xl border border-line">
       <table className="w-full min-w-[520px] text-left text-[12.5px]">
@@ -96,16 +101,28 @@ function ToolTable({ tools }: { tools: Upstream["tools"] }) {
           </tr>
         </thead>
         <tbody>
-          {tools.map((t, i) => (
-            <motion.tr key={t.name} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.08 }} className="border-b border-line last:border-0">
-              <td className="px-4 py-2.5 font-mono">{t.name}</td>
-              <td className="px-4 py-2.5 font-mono text-fg-2">{t.effect}</td>
-              <td className="px-4 py-2.5">
-                <Chip tone={t.risk === "high" ? "block" : t.risk === "medium" ? "review" : "muted"}>{t.risk}</Chip>
-              </td>
-              <td className="px-4 py-2.5">{t.decision === "tiers" ? <span className="font-mono text-[11.5px] text-fg">rule payments.refund (tiers)</span> : <DecisionPill d={t.decision} size="sm" />}</td>
-            </motion.tr>
-          ))}
+          {tools.map((t, i) => {
+            const { v, tiers } = decide(t.act);
+            return (
+              <motion.tr key={t.name} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.08 }} className="border-b border-line last:border-0">
+                <td className="px-4 py-2.5 font-mono">{t.name}</td>
+                <td className="px-4 py-2.5 font-mono text-fg-2">{t.effect}</td>
+                <td className="px-4 py-2.5">
+                  <Chip tone={t.risk === "high" ? "block" : t.risk === "medium" ? "review" : "muted"}>{t.risk}</Chip>
+                </td>
+                <td className="px-4 py-2.5">
+                  {tiers ? (
+                    <span className="font-mono text-[11.5px] text-fg">rule {v.rule} (tiers)</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-2">
+                      <DecisionPill d={v.decision} size="sm" />
+                      <span className="font-mono text-[11px] text-fg-3">{v.rule}</span>
+                    </span>
+                  )}
+                </td>
+              </motion.tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -179,7 +196,7 @@ function AddServer({ open, onClose }: { open: boolean; onClose: () => void }) {
             <p className="text-[13px] text-fg-2">
               Wrapbox called <span className="font-mono">tools/list</span> on {pick.name} and classified each tool into the normalized action model. Refund tools inherit your existing <span className="font-mono">payments.refund</span> tiers automatically.
             </p>
-            <ToolTable tools={pick.tools} />
+            <ToolTable tools={pick.tools} agentId={pick.agentId} />
             <div className="flex gap-2">
               <Button variant="ghost" onClick={() => setStep(0)}>
                 Back
@@ -221,7 +238,7 @@ function AddServer({ open, onClose }: { open: boolean; onClose: () => void }) {
             <Button
               variant="primary"
               onClick={() => {
-                if (pick.agentId) connectAgent(pick.agentId, "gateway", "gateway-enforced");
+                connectAgent(pick.agentId, "gateway", "gateway-enforced");
                 toast(`${pick.name} is behind Wrapbox`, `${pick.tools.length} tools governed · ${url.replace("https://", "")}`, "allow");
                 onClose();
                 setStep(0);
@@ -238,9 +255,10 @@ function AddServer({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 export function Gateway() {
   const connected = useStore((s) => s.connected);
-  const workspace = useStore((s) => s.workspace);
   const events = useStore((s) => s.events);
-  const callsOf = (u: Upstream) => (workspace === "demo" ? u.calls : events.filter((e) => e.agentId === u.agentId).length);
+  const { labs } = useWorkspace();
+  const dayStart = new Date().setHours(0, 0, 0, 0);
+  const callsOf = (u: Upstream) => events.filter((e) => e.agentId === u.agentId && e.ts >= dayStart).length;
   const [open, setOpen] = useState(false);
   const [sel, setSel] = useState<Upstream>(UPSTREAMS[0]);
   return (
@@ -280,7 +298,7 @@ export function Gateway() {
             <div className="eyebrow mb-2">Real upstream servers</div>
             <div className="flex gap-1.5">
               {UPSTREAMS.map((u) => (
-                <Logo key={u.id} name={u.logo} size={30} className={cn(!connected[u.agentId!] && "opacity-35 grayscale")} />
+                <Logo key={u.id} name={u.logo} size={30} className={cn(!connected[u.agentId] && "opacity-35 grayscale")} />
               ))}
             </div>
           </div>
@@ -292,7 +310,7 @@ export function Gateway() {
           <CardHead title="Wrapped servers" sub="Click one to see how its tools are governed." />
           <div className="border-t border-line">
             {UPSTREAMS.map((u) => {
-              const on = !!connected[u.agentId!];
+              const on = !!connected[u.agentId];
               return (
                 <button key={u.id} onClick={() => setSel(u)} className={cn("flex w-full items-center gap-3 px-6 py-4 border-b border-line last:border-0 text-left transition-colors", sel.id === u.id ? "bg-surface-2" : "hover:bg-surface-2")}>
                   <Logo name={u.logo} size={30} />
@@ -323,11 +341,11 @@ export function Gateway() {
                 <Logo name={sel.logo} size={20} rounded="rounded-md" /> {sel.name} tools
               </span>
             }
-            sub={connected[sel.agentId!] ? "Live policy for every client that uses the wrapped URL" : "Not wrapped yet"}
+            sub={connected[sel.agentId] ? "Live policy for every client that uses the wrapped URL" : "Not wrapped yet"}
             right={
-              connected[sel.agentId!] ? (
-                <Button size="sm" onClick={() => go(`/flows/${agentById(sel.agentId!).scenario}?agent=${sel.agentId}`)}>
-                  Happy flow <ArrowRight className="size-3" />
+              connected[sel.agentId] ? (
+                <Button size="sm" onClick={() => go(labs ? `/flows/${agentById(sel.agentId).scenario}?agent=${sel.agentId}` : `/agents/${sel.agentId}?tab=activity`)}>
+                  {labs ? "Happy flow" : "Activity"} <ArrowRight className="size-3" />
                 </Button>
               ) : (
                 <Button size="sm" variant="primary" onClick={() => setOpen(true)}>
@@ -337,10 +355,10 @@ export function Gateway() {
             }
           />
           <div className="px-5 pb-5 space-y-4">
-            <ToolTable tools={sel.tools} />
+            <ToolTable tools={sel.tools} agentId={sel.agentId} />
             <div>
               <div className="text-[12px] font-medium mb-1.5">Or add it from the CLI</div>
-              <InlineCmd cmd={agentById(sel.agentId!).install} />
+              <InlineCmd cmd={agentById(sel.agentId).install} />
             </div>
           </div>
         </Card>

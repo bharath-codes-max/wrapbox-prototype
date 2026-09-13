@@ -31,8 +31,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AGENTS, CATEGORIES } from "../data/agents";
 import { SCENARIOS } from "../data/scenarios";
 import type { Env } from "../lib/engine";
+import { KID } from "../lib/permit";
 import { go } from "../lib/router";
-import { ADMIN, EMPLOYEE, TOUR, getState, resetFresh, setState, switchWorkspace, useStore, workspaceHasData, workspaceSummary, type Role, type WorkspaceId } from "../lib/store";
+import { ADMIN, EMPLOYEE, WORKSPACES, WORKSPACE_ORDER, getState, regionLabel, resetFresh, setState, switchWorkspace, tourFor, useStore, useWorkspace, workspaceHasData, workspaceSummary, type Role, type WorkspaceId } from "../lib/store";
 import { PasskeyModal } from "./insight";
 import { WrapboxWordmark } from "./logo";
 import { useNavStyle } from "../lib/navstyle";
@@ -45,6 +46,8 @@ interface NavItem {
   badge?: number | string;
   adminOnly?: boolean;
   tone?: "review" | "accent";
+  /** Prototype scaffolding: shown only in workspaces that exist to explain and test Wrapbox. */
+  labs?: boolean;
 }
 
 function useNav(role: Role): { section?: string; items: NavItem[] }[] {
@@ -54,8 +57,8 @@ function useNav(role: Role): { section?: string; items: NavItem[] }[] {
   const requests = useStore((s) => s.requests.filter((r) => r.status === "pending").length);
   const onboarded = useStore((s) => s.onboarded);
   const ruleCount = useStore((s) => s.published.length);
-  if (role === "admin")
-    return [
+  const { labs } = useWorkspace();
+  const groups: { section?: string; items: NavItem[] }[] = role === "admin" ? [
       {
         items: [
           { path: "/start", label: "Get started", icon: Rocket, badge: onboarded.admin ? undefined : "Setup", tone: "accent" },
@@ -73,15 +76,15 @@ function useNav(role: Role): { section?: string; items: NavItem[] }[] {
       {
         section: "Operate",
         items: [
-          { path: "/playground", label: "Playground", icon: FlaskConical },
-          { path: "/flows", label: "Happy flows", icon: CirclePlay },
+          { path: "/playground", label: "Playground", icon: FlaskConical, labs: true },
+          { path: "/flows", label: "Happy flows", icon: CirclePlay, labs: true },
           { path: "/approvals", label: "Approvals", icon: Hand, badge: pending || undefined, tone: "review" },
           { path: "/evidence", label: "Evidence", icon: ListTree },
         ],
       },
       { section: "Organization", items: [{ path: "/team", label: "Team & devices", icon: Users, badge: requests || undefined, tone: "review" }] },
-    ];
-  return [
+    ]
+  : [
     {
       items: [
         { path: "/onboarding/employee", label: "Get started", icon: Rocket, badge: onboarded.employee ? undefined : "Setup", tone: "accent" },
@@ -93,8 +96,8 @@ function useNav(role: Role): { section?: string; items: NavItem[] }[] {
       items: [
         { path: "/agents", label: "My agents", icon: Bot },
         { path: "/contract", label: "Rules for me", icon: FileCheck2 },
-        { path: "/playground", label: "Playground", icon: FlaskConical },
-        { path: "/flows", label: "Happy flows", icon: CirclePlay },
+        { path: "/playground", label: "Playground", icon: FlaskConical, labs: true },
+        { path: "/flows", label: "Happy flows", icon: CirclePlay, labs: true },
         { path: "/approvals", label: "My approvals", icon: Hand, badge: myPending || undefined, tone: "review" },
         { path: "/evidence", label: "My activity", icon: ListTree },
       ],
@@ -107,6 +110,7 @@ function useNav(role: Role): { section?: string; items: NavItem[] }[] {
       ],
     },
   ];
+  return groups.map((g) => ({ ...g, items: g.items.filter((it) => !it.labs || labs) }));
 }
 
 function isActive(path: string, current: string) {
@@ -277,11 +281,15 @@ const ENVS: { id: "all" | Env; label: string; dot: string; note: string }[] = [
   { id: "development", label: "Development", dot: "bg-[#9db4ff]", note: "laptops and sandboxes" },
 ];
 
+const WS_ICON: Record<WorkspaceId, typeof Bot> = { prod: Building2, demo: FlaskConical, fresh: Plus };
+const WS_SHORT: Record<WorkspaceId, string> = { prod: "production", demo: "demo", fresh: "fresh" };
+
 function WorkspaceMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const workspace = useStore((s) => s.workspace);
   const company = useStore((s) => s.company);
+  const region = useStore((s) => s.region);
   const envFilter = useStore((s) => s.envFilter);
   const events = useStore((s) => s.events);
   const connectedCount = useStore((s) => Object.keys(s.connected).length);
@@ -306,7 +314,7 @@ function WorkspaceMenu() {
       <button onClick={() => setOpen(!open)} className={cn("flex items-center gap-3 rounded-xl h-10 pl-3.5 pr-2.5 transition-colors ring-1", open ? "bg-(--n-soft-2) ring-(--n-ring-2)" : "bg-(--n-soft) ring-(--n-ring) hover:bg-(--n-soft-2)")}>
         <span className="text-left leading-tight">
           <span className="block text-[12.5px] font-semibold text-(--n-fg)">
-            {company} <span className="font-normal text-(--n-fg-3)">· {workspace === "fresh" ? "fresh" : "demo"}</span>
+            {company} <span className="font-normal text-(--n-fg-3)">· {WS_SHORT[workspace]}</span>
           </span>
           <span className="flex items-center gap-1.5 text-[11px] text-(--n-fg-2)">
             <span className={cn("size-1.5 rounded-full", env.dot)} />
@@ -320,21 +328,30 @@ function WorkspaceMenu() {
           <motion.div initial={{ opacity: 0, y: -4, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4 }} className="absolute left-0 top-12 z-50 w-[360px] rounded-2xl border border-line bg-surface text-fg shadow-float overflow-hidden">
             <div className="px-4 pt-3.5 pb-2 eyebrow">Workspace</div>
             <div className="px-2 space-y-1">
-              {(
-                [
-                  { id: "demo", title: `${company === "Wrapbox" || workspace === "fresh" ? "Wrapbox" : company} — demo`, desc: (({ agents, approvals, version }) => `${agents} agents connected · ${approvals} approvals waiting · contract v${version}`)(workspaceSummary("demo")) },
-                  { id: "fresh", title: "Fresh workspace", desc: workspaceHasData("fresh") ? `Your own build · ${workspace === "fresh" ? connectedCount : "…"} agents · resumes where you left off` : "Completely empty. Start from zero and watch every page fill in." },
-                ] as const
-              ).map((w) => (
-                <button key={w.id} onClick={() => pickWs(w.id)} className={cn("flex w-full items-start gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors", workspace === w.id ? "bg-surface-2" : "hover:bg-surface-2")}>
-                  <span className={cn("mt-0.5 grid size-8 place-items-center rounded-lg shrink-0", w.id === "demo" ? "bg-surface-2 border border-line" : "border border-dashed border-line-strong")}>{w.id === "demo" ? <Building2 className="size-4 text-fg-2" /> : <Plus className="size-4 text-fg-2" />}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-semibold">{w.title}</span>
-                    <span className="block text-[11.5px] text-fg-3 leading-snug">{w.desc}</span>
-                  </span>
-                  {workspace === w.id && <Check className="size-4 text-fg mt-1" />}
-                </button>
-              ))}
+              {WORKSPACE_ORDER.map((id) => {
+                const meta = WORKSPACES[id];
+                const sum = workspaceSummary(id);
+                const Icon = WS_ICON[id];
+                const title = id === "fresh" ? meta.label : `${sum.company} · ${meta.label}`;
+                const desc =
+                  id === "fresh"
+                    ? workspaceHasData("fresh")
+                      ? `Your own build · ${workspace === "fresh" ? connectedCount : sum.agents} agents · resumes where you left off`
+                      : meta.blurb
+                    : `${sum.agents} agents connected · ${sum.approvals} approvals waiting · contract v${sum.version}`;
+                return (
+                  <button key={id} onClick={() => pickWs(id)} className={cn("flex w-full items-start gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors", workspace === id ? "bg-surface-2" : "hover:bg-surface-2")}>
+                    <span className={cn("mt-0.5 grid size-8 place-items-center rounded-lg shrink-0", id === "fresh" ? "border border-dashed border-line-strong" : "bg-surface-2 border border-line")}>
+                      <Icon className="size-4 text-fg-2" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13px] font-semibold">{title}</span>
+                      <span className="block text-[11.5px] text-fg-3 leading-snug">{desc}</span>
+                    </span>
+                    {workspace === id && <Check className="size-4 text-fg mt-1" />}
+                  </button>
+                );
+              })}
             </div>
             {workspaceHasData("fresh") && (
               <button
@@ -363,7 +380,7 @@ function WorkspaceMenu() {
               ))}
             </div>
             <div className="flex items-center gap-2 border-t border-line bg-surface-2 px-4 py-2.5 text-[11px] text-fg-3">
-              <KeyRound className="size-3" /> Signing key wbx-2026-09 · ECDSA P-256 · region us-east-1
+              <KeyRound className="size-3" /> Signing key {KID} · ECDSA P-256 · region {regionLabel(region)}
             </div>
           </motion.div>
         )}
@@ -377,6 +394,7 @@ function Topbar({ onMenu }: { onMenu: () => void }) {
   const live = useStore((s) => s.live);
   const events = useStore((s) => s.events.length);
   const ruleCount = useStore((s) => s.published.length);
+  const { labs } = useWorkspace();
   const nav = useNavStyle();
   return (
     <header data-nav={nav} className="wb-nav relative sticky top-0 z-40 flex items-center gap-3 h-[68px] px-4 lg:px-5 border-b border-(--n-edge) transition-[background,color] duration-300">
@@ -396,7 +414,7 @@ function Topbar({ onMenu }: { onMenu: () => void }) {
         className="ml-2 hidden lg:flex items-center gap-2.5 h-10 w-[min(420px,32vw)] rounded-xl bg-(--n-soft) ring-1 ring-(--n-ring) px-3.5 text-[13px] text-(--n-fg-3) hover:bg-(--n-soft-2) hover:text-(--n-fg-2) transition-colors"
       >
         <Search className="size-4" />
-        Search agents, rules, flows, people…
+        {labs ? "Search agents, rules, flows, people…" : "Search agents, rules, people…"}
         <span className="ml-auto flex items-center gap-1">
           <kbd className="grid h-5 min-w-5 place-items-center rounded-md bg-(--n-soft-2) px-1 font-mono text-[10.5px] text-(--n-fg-2)">⌘</kbd>
           <kbd className="grid h-5 min-w-5 place-items-center rounded-md bg-(--n-soft-2) px-1 font-mono text-[10.5px] text-(--n-fg-2)">K</kbd>
@@ -429,16 +447,17 @@ function Palette() {
   const [sel, setSel] = useState(0);
   const rules = useStore((s) => s.rules);
   const members = useStore((s) => s.members);
+  const { labs } = useWorkspace();
   const items = useMemo(() => {
-    const pages = TITLES.map(([p, t]) => ({ label: t, hint: "Page", path: p, logo: undefined as string | undefined }));
+    const pages = TITLES.filter(([p]) => labs || (p !== "/playground" && p !== "/flows")).map(([p, t]) => ({ label: t, hint: "Page", path: p, logo: undefined as string | undefined }));
     const agents = AGENTS.map((a) => ({ label: a.name, hint: CATEGORIES.find((c) => c.id === a.category)!.name, path: "/agents/" + a.id, logo: a.logo }));
-    const flows = Object.values(SCENARIOS).map((s) => ({ label: s.title, hint: "Happy flow", path: "/flows/" + s.id, logo: undefined }));
+    const flows = labs ? Object.values(SCENARIOS).map((s) => ({ label: s.title, hint: "Happy flow", path: "/flows/" + s.id, logo: undefined })) : [];
     const rs = rules.map((r) => ({ label: `${r.id} — ${r.title}`, hint: "Rule", path: "/contract", logo: undefined }));
     const ps = members.map((m) => ({ label: m.id, hint: "Person", path: "/team", logo: undefined }));
     const all = [...pages, ...agents, ...flows, ...rs, ...ps];
     const f = q.trim().toLowerCase();
     return (f ? all.filter((x) => (x.label + " " + x.hint).toLowerCase().includes(f)) : all).slice(0, 12);
-  }, [q, rules, members]);
+  }, [q, rules, members, labs]);
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -522,7 +541,9 @@ function Toasts() {
 
 function TourCard() {
   const step = useStore((s) => s.tour);
-  if (step === null) return null;
+  const workspace = useStore((s) => s.workspace);
+  const TOUR = tourFor(workspace);
+  if (step === null || !TOUR[step]) return null;
   const t = TOUR[step];
   const goStep = (i: number) => {
     const n = TOUR[i];

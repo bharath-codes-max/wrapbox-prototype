@@ -8,7 +8,7 @@ import { DecisionStream } from "../components/stream";
 import { Button, Card, Chip, DecisionPill, Logo, Segmented, cn } from "../components/ui";
 import { mintPermit, type Permit } from "../lib/permit";
 import { go } from "../lib/router";
-import { setState, useStore } from "../lib/store";
+import { setState, useStore, useWorkspace } from "../lib/store";
 
 function useHeroPermit() {
   const [p, setP] = useState<Permit | null>(null);
@@ -51,6 +51,7 @@ const HERO_AGENTS = ["claudecode", "cursor", "codex", "githubcopilot", "geminicl
 export function Welcome() {
   const permit = useHeroPermit();
   const events = useStore((s) => s.events);
+  const { labs } = useWorkspace();
   const [tab, setTab] = useState<"claude" | "cursor" | "sdk" | "mcp">("claude");
   const snippet = {
     claude: AGENTS.find((a) => a.id === "claude-code")!,
@@ -82,8 +83,8 @@ export function Welcome() {
             <Button variant="primary" size="lg" onClick={() => setState({ tour: 0 })}>
               <Compass className="size-4" /> Start guided tour
             </Button>
-            <Button size="lg" onClick={() => go("/flows/cli")}>
-              Watch a happy flow <ArrowRight className="size-4" />
+            <Button size="lg" onClick={() => go(labs ? "/flows/cli" : "/approvals")}>
+              {labs ? "Watch a happy flow" : "Open the approval studio"} <ArrowRight className="size-4" />
             </Button>
           </div>
           <div className="mt-7 flex items-center gap-3">
@@ -92,7 +93,7 @@ export function Welcome() {
                 <Logo key={l} name={l} size={28} bleed={l === "browseruse"} rounded="rounded-full" className="ring-2 ring-bg" />
               ))}
             </div>
-            <span className="text-[12.5px] text-fg-3">8 agent platforms · 25 integrations · one contract</span>
+            <span className="text-[12.5px] text-fg-3">{CATEGORIES.length} agent platforms · {AGENTS.length} agents · one contract</span>
           </div>
         </div>
         <div className="space-y-3">
@@ -183,7 +184,7 @@ export function Welcome() {
         </div>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {CATEGORIES.map((c) => (
-            <a key={c.id} href={`#/flows/${c.scenario}`} className="group flex flex-col rounded-2xl border border-line bg-surface p-4 hover:border-line-strong hover:shadow-card transition-all">
+            <a key={c.id} href={labs ? `#/flows/${c.scenario}` : `#/agents?c=${c.id}`} className="group flex flex-col rounded-2xl border border-line bg-surface p-4 hover:border-line-strong hover:shadow-card transition-all">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-fg-3 truncate">{productOf(c.id).name}</span>
                 <Chip tone={c.timing === "NOW" ? "allow" : c.timing === "NEXT" ? "accent" : "muted"}>{c.timing}</Chip>
@@ -198,7 +199,7 @@ export function Welcome() {
               <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-[12px]">
                 <span className="text-fg-3 truncate">{c.method}</span>
                 <span className="inline-flex items-center gap-1 font-medium text-accent group-hover:gap-1.5 transition-all shrink-0">
-                  Happy flow <ArrowRight className="size-3" />
+                  {labs ? "Happy flow" : "Agents"} <ArrowRight className="size-3" />
                 </span>
               </div>
             </a>

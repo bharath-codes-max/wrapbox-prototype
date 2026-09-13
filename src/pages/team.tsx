@@ -5,7 +5,8 @@ import { personById, type Person } from "../data/people";
 import { DecisionStream } from "../components/stream";
 import { Avatar, Button, Card, CardHead, Chip, Drawer, Logo, PageHeader, Segmented, cn } from "../components/ui";
 import { ago, go } from "../lib/router";
-import { adminPerson, pushEvent, setState, syncDirectory, toast, useStore, type Device } from "../lib/store";
+import { adminPerson, deriveAlerts, pushEvent, resolveAlert, setState, syncDirectory, toast, useStore, useWorkspace, type Device } from "../lib/store";
+import { orgSlug } from "../data/contract";
 
 function deviceHealth(d: Device) {
   if (d.agents.some((a) => a.state === "shadow")) return "shadow";
@@ -19,10 +20,10 @@ export function Team() {
   const events = useStore((s) => s.events);
   const members = useStore((s) => s.members);
   const devices = useStore((s) => s.devices);
-  const alerts = useStore((s) => s.alerts);
+  const alerts = useMemo(() => deriveAlerts(devices), [devices]);
   const groups = useStore((s) => s.groups);
   const allowed = useStore((s) => s.allowed);
-  const workspace = useStore((s) => s.workspace);
+  const ws = useWorkspace();
   const domain = useStore((s) => s.domain);
   const [tab, setTab] = useState<"members" | "devices" | "groups" | "identities">("members");
   const [open, setOpen] = useState<Person | null>(null);
@@ -131,8 +132,8 @@ export function Team() {
                     <Button
                       size="sm"
                       onClick={() => {
-                        setState((s) => ({ alerts: s.alerts.filter((x) => x.id !== a.id) }));
-                        toast(a.action, "Done · recorded in Evidence", "allow");
+                        resolveAlert(a.id);
+                        toast(a.action, a.kind === "shadow" ? `${a.agentName} blocked on ${a.deviceId}` : a.kind === "key" ? `${a.agentName} on ${a.deviceId} · new token valid 30 days` : `${a.agentName} on ${a.deviceId} is protected again`, "allow");
                       }}
                     >
                       {a.action}
@@ -318,7 +319,7 @@ export function Team() {
             <div key={a.id} className="flex items-center gap-3 px-6 py-3.5 border-b border-line last:border-0">
               <Logo name={a.logo} bleed={a.bleed} size={24} rounded="rounded-md" />
               <div className="min-w-0 flex-1">
-                <div className="font-mono text-[12.5px] truncate">{a.id}@wrapbox</div>
+                <div className="font-mono text-[12.5px] truncate">{a.id}@{orgSlug(domain)}</div>
                 <div className="text-[11.5px] text-fg-3">
                   {a.owner} · {a.env} · connected {ago(connected[a.id].at)}
                 </div>
@@ -333,7 +334,7 @@ export function Team() {
       )}
 
       <MemberDrawer p={open} onClose={() => setOpen(null)} />
-      {workspace === "fresh" && <p className="mt-4 text-[11.5px] text-fg-3">Fresh workspace: everything on this page was created by what you did.</p>}
+      {ws.kind === "fresh" && <p className="mt-4 text-[11.5px] text-fg-3">Fresh workspace: everything on this page was created by what you did.</p>}
     </div>
   );
 }

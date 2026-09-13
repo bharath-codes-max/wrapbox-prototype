@@ -47,7 +47,11 @@ export interface Verdict {
 
 const RANK: Record<Decision, number> = { ALLOW: 1, CONSTRAIN: 2, REVIEW: 3, BLOCK: 4 };
 
+const RE_CACHE = new Map<string, RegExp>();
 function globToRe(pattern: string, kind: "path" | "text") {
+  const key = kind + "\0" + pattern;
+  const hit = RE_CACHE.get(key);
+  if (hit) return hit;
   let re = "";
   for (let i = 0; i < pattern.length; i++) {
     const c = pattern[i];
@@ -59,7 +63,9 @@ function globToRe(pattern: string, kind: "path" | "text") {
     } else if (c === "?") re += ".";
     else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
   }
-  return new RegExp(`^${re}$`, kind === "text" ? "i" : "");
+  const out = new RegExp(`^${re}$`, kind === "text" ? "i" : "");
+  RE_CACHE.set(key, out);
+  return out;
 }
 export const globMatch = (pattern: string, value: string, kind: "path" | "text" = "text") => {
   const v = kind === "path" && !value.startsWith("/") && pattern.startsWith("**/") ? "/" + value : value;

@@ -2,8 +2,10 @@ import { AnimatePresence, motion } from "motion/react";
 import { AlertTriangle, Check, Copy as CopyIcon, FilePlus2, FileCode2, FlaskConical, History, Loader2, Lock, Pencil, Plus, Rocket, Trash2, Undo2, Wand2, Wrench, X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AGENTS, CATEGORIES, agentById, type Decision } from "../data/agents";
-import { EFFECTS, PACKS, effectInfo, fmtValue, fromYaml, replay, ruleChips, ruleSig, rulesForPacks, toYaml, type ParseIssue, type ReplayResult, type Rule, type Tier } from "../data/contract";
+import { EFFECTS, PACKS, effectInfo, fmtValue, fromYaml, ruleChips, ruleSig, rulesForPacks, toYaml, type ParseIssue, type Rule, type Tier } from "../data/contract";
+import { personById } from "../data/people";
 import { ACTS } from "../data/scenarios";
+import { replayLog, type ReplayResult } from "../lib/replay";
 import { ActionComposer, TraceView, type Composed } from "../components/composer";
 import { RuleTester } from "../components/rule-tester";
 import { orgSlug as orgSlugOf } from "../data/contract";
@@ -11,10 +13,10 @@ import { getState as storeState } from "../lib/store";
 import { DESCRIBE_EXAMPLES, describeToRule } from "../lib/describe";
 import { draftRule, type DraftResult } from "../lib/draft";
 import { CodeBlock } from "../components/code";
-import { Button, Card, CardHead, Chip, DecisionPill, Drawer, Logo, Modal, PageHeader, Segmented, Toggle, cn } from "../components/ui";
+import { Avatar, Button, Card, CardHead, Chip, DecisionPill, Drawer, Logo, Modal, PageHeader, Segmented, Toggle, cn } from "../components/ui";
 import { evaluate, type Act } from "../lib/engine";
 import { ago } from "../lib/router";
-import { categoryOf, setState, toast, useStore } from "../lib/store";
+import { categoryOf, publishContract, setState, toast, useStore, useWorkspace, type ContractChange } from "../lib/store";
 
 const DECISIONS: Decision[] = ["ALLOW", "REVIEW", "BLOCK"];
 
@@ -809,20 +811,22 @@ function Tester({ rules }: { rules: Rule[] }) {
   );
 }
 
-function ReplayCard({ result, onRun, running }: { result: ReplayResult | null; onRun: () => void; running: boolean }) {
+function ReplayCard({ result, onRun, running, logSize }: { result: ReplayResult | null; onRun: () => void; running: boolean; logSize: number }) {
   return (
     <Card>
       <CardHead
-        title={<span className="flex items-center gap-2"><History className="size-4 text-fg-2" />Replay last 30 days</span>}
-        sub="Your draft vs. what's live, against historical actions."
+        title={<span className="flex items-center gap-2"><History className="size-4 text-fg-2" />Replay recent traffic</span>}
+        sub={logSize ? `Your draft vs. what's live, over the ${logSize.toLocaleString()} decisions in this workspace's log.` : "Your draft vs. what's live, over this workspace's decision log."}
         right={
-          <Button size="sm" onClick={onRun} disabled={running}>
+          <Button size="sm" onClick={onRun} disabled={running || !logSize}>
             {running ? <Loader2 className="size-3.5 animate-spin" /> : null} Replay
           </Button>
         }
       />
       <div className="px-5 pb-5">
-        {!result ? (
+        {!logSize ? (
+          <p className="text-[12.5px] text-fg-3">No decisions in the log yet — there is nothing to replay until agents act.</p>
+        ) : !result ? (
           <p className="text-[12.5px] text-fg-3">Change a rule, then replay to see what would newly block before you publish.</p>
         ) : (
           <div className="space-y-3">
@@ -839,14 +843,14 @@ function ReplayCard({ result, onRun, running }: { result: ReplayResult | null; o
               ))}
             </div>
             <div className="text-[12px] text-fg-3">
-              {result.total.toLocaleString()} historical actions replayed · {result.changed.toLocaleString()} would change
+              {result.total.toLocaleString()} actions from the last {result.days} {result.days === 1 ? "day" : "days"} replayed · {result.changed.toLocaleString()} would change
             </div>
             {result.samples.length > 0 && (
               <ul className="space-y-1">
                 {result.samples.map((s, i) => (
                   <li key={i} className="flex items-center gap-2 text-[12px]">
-                    <span className="font-mono text-fg-2 w-[120px] truncate">{s.rule}</span>
-                    <span className="font-mono tnum w-[90px]">{fmtValue(s.value, s.unit)}</span>
+                    <span className="font-mono text-fg-2 w-[110px] shrink-0 truncate">{s.rule}</span>
+                    <span className="font-mono text-fg-3 flex-1 min-w-0 truncate">{s.action}</span>
                     <DecisionPill d={s.from} size="sm" />
                     <span className="text-fg-3">→</span>
                     <DecisionPill d={s.to} size="sm" />
@@ -857,6 +861,47 @@ function ReplayCard({ result, onRun, running }: { result: ReplayResult | null; o
           </div>
         )}
       </div>
+    </Card>
+  );
+}
+
+/** Every publish, newest first: who changed what, when. */
+function ChangelogCard({ changelog }: { changelog: ContractChange[] }) {
+  const [all, setAll] = useState(false);
+  if (!changelog.length) return null;
+  const items = [...changelog].reverse().slice(0, all ? undefined : 6);
+  return (
+    <Card className="overflow-hidden">
+      <CardHead title="Version history" sub={`${changelog.length} ${changelog.length === 1 ? "publish" : "publishes"} · every change to the contract, by whom`} />
+      <ul className="border-t border-line">
+        {items.map((c) => {
+          const p = personById(c.by);
+          return (
+            <li key={c.version} className="flex items-start gap-3 px-5 py-3 border-b border-line last:border-0">
+              <span className="font-mono text-[11.5px] text-fg-3 w-8 shrink-0 pt-0.5 tnum">v{c.version}</span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[12.5px]">{c.summary}</div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-fg-3">
+                  {p && (
+                    <span className="inline-flex items-center gap-1">
+                      <Avatar p={p} size={14} /> {p.name}
+                    </span>
+                  )}
+                  <span>{ago(c.at)}</span>
+                  {c.added.length > 0 && <span className="font-mono text-allow">+{c.added.length}</span>}
+                  {c.changed.length > 0 && <span className="font-mono text-constrain">~{c.changed.length}</span>}
+                  {c.removed.length > 0 && <span className="font-mono text-block">−{c.removed.length}</span>}
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {changelog.length > 6 && (
+        <button onClick={() => setAll(!all)} className="w-full px-5 py-2.5 text-left text-[12px] text-fg-3 hover:text-fg border-t border-line">
+          {all ? "Show recent only" : `Show all ${changelog.length} versions`}
+        </button>
+      )}
     </Card>
   );
 }
@@ -1010,6 +1055,10 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
   const published = useStore((s) => s.published);
   const version = useStore((s) => s.version);
   const publishedAt = useStore((s) => s.publishedAt);
+  const changelog = useStore((s) => s.changelog);
+  const events = useStore((s) => s.events);
+  const { labs } = useWorkspace();
+  const publisher = changelog.length ? personById(changelog[changelog.length - 1].by) : undefined;
   const [view, setView] = useState<"visual" | "yaml">("visual");
   const [editingYaml, setEditingYaml] = useState(false);
   const [rep, setRep] = useState<ReplayResult | null>(null);
@@ -1059,7 +1108,7 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
     toast(`${add.length} rules added to draft`, "Review them, then publish", "allow");
   };
   const publish = () => {
-    setState((s) => ({ published: s.rules, version: s.version + 1, publishedAt: Date.now() }));
+    publishContract();
     setPub(true);
   };
   const empty = !readOnly && rules.length === 0;
@@ -1072,11 +1121,11 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
         sub={
           readOnly
             ? "These rules decide what your agents may do. You can read them — only admins change them. If something you need is blocked, request an exception."
-            : "Write what agents may do — once, in one vocabulary of effects. Build rules visually or type YAML, test any action against your draft, then publish. Flows, the playground and live traffic all follow the published version."
+            : `Write what agents may do — once, in one vocabulary of effects. Build rules visually or type YAML, test any action against your draft, then publish. ${labs ? "Flows, the playground and live traffic" : "Every connected agent"} follow${labs ? "" : "s"} the published version.`
         }
         right={
           <>
-            <Chip>{version ? `v${version} · published ${ago(publishedAt)}` : "not published yet"}</Chip>
+            <Chip>{version ? `v${version} · published ${ago(publishedAt)}${publisher ? ` by ${publisher.name.split(" ")[0]}` : ""}` : "not published yet"}</Chip>
             {!readOnly && (
               <>
                 {changes > 0 && (
@@ -1128,7 +1177,7 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
               Enforce all rules
             </Button>
           )}
-          <span className="ml-auto text-[12px] text-fg-3">{changes ? `${changes} unpublished change${changes > 1 ? "s" : ""} — flows still use v${version}` : `Draft matches v${version}`}</span>
+          <span className="ml-auto text-[12px] text-fg-3">{changes ? `${changes} unpublished change${changes > 1 ? "s" : ""} — agents still follow v${version}` : `Draft matches v${version}`}</span>
           <div className="xl:hidden">
             <Segmented
               size="sm"
@@ -1228,14 +1277,16 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
                 <ReplayCard
                   result={rep}
                   running={running}
+                  logSize={events.length}
                   onRun={() => {
                     setRunning(true);
                     setTimeout(() => {
-                      setRep(replay(rules, published));
+                      setRep(replayLog(rules, published, events, categoryOf));
                       setRunning(false);
-                    }, 600);
+                    }, 250);
                   }}
                 />
+                <ChangelogCard changelog={changelog} />
               </>
             )}
           </div>
@@ -1249,7 +1300,7 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
         version={version}
         onClose={() => {
           setPub(false);
-          toast(`Contract v${version} is live`, "Flows, the playground and live traffic now follow it.", "allow");
+          toast(`Contract v${version} is live`, labs ? "Flows, the playground and live traffic now follow it." : "Every connected agent now follows it.", "allow");
         }}
       />
     </div>
