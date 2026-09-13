@@ -5,6 +5,9 @@ import { useRoute } from "./lib/router";
 import { WORKSPACES, homePath, startLive, useStore } from "./lib/store";
 import { AgentDetail, AgentsPage } from "./pages/agents";
 import { Fleet, FleetDeviceDetail } from "./pages/fleet";
+import { Docs } from "./pages/docs";
+import { Downloads } from "./pages/downloads";
+import { EnrollWizard } from "./pages/enroll";
 import { Approvals } from "./pages/approvals";
 import { ContractPage } from "./pages/contract";
 import { EmployeeHome } from "./pages/employee";
@@ -43,8 +46,9 @@ export default function App() {
 
   const meta = WORKSPACES[workspace];
   const labsRoute = seg[0] === "playground" || seg[0] === "flows";
-  // The install-once product has no per-agent pages, no workspace picker and no v1 setup wizards.
-  const v1Route = ["start", "onboarding", "agents", "team"].includes(seg[0] ?? "");
+  // The install-once product has no per-agent pages, no workspace picker and no v1 hub / team pages.
+  // Onboarding is kept — in fabric it's the Enrollment wizard, in v1 the existing SetupLayout wizard.
+  const v1Route = ["start", "agents", "team"].includes(seg[0] ?? "");
   useEffect(() => {
     if (!account && !authRoute && !landing) go("/landing");
     else if (account && authRoute) go(homePath());
@@ -74,6 +78,12 @@ export default function App() {
     case "fleet":
       page = seg[1] ? <FleetDeviceDetail key={seg[1]} id={seg[1]} /> : <Fleet />;
       break;
+    case "downloads":
+      page = <Downloads />;
+      break;
+    case "docs":
+      page = <Docs setId={seg[1]} sectionId={seg[2]} />;
+      break;
     case "welcome":
       page = <Welcome />;
       break;
@@ -81,7 +91,7 @@ export default function App() {
       page = <Start />;
       break;
     case "onboarding":
-      page = seg[1] === "employee" ? <EmployeeSetup key="emp" /> : <AdminSetup key="admin" />;
+      page = meta.fabric ? <EnrollWizard key="fabric-enroll" /> : seg[1] === "employee" ? <EmployeeSetup key="emp" /> : <AdminSetup key="admin" />;
       break;
     case "agents":
       page = seg[1] ? <AgentDetail key={seg[1]} id={seg[1]} query={query} /> : <AgentsPage query={query} />;

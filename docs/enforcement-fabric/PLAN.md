@@ -99,16 +99,106 @@ Copy: landing and auth describe the install-once product; no workspace or versio
 - Vault refs ×4, session tokens ×6 (3 active, 2 expired, 1 revoked at the tamper), destinations ×4 (3 tier-0).
 - Contract v27 with the full history; 14 days of decisions, approvals (incl. two open now), receipts.
 
-## 9. Commit order
+## 9. Two software pieces + one application: Downloads and Docs (new brief, items 10–12)
+
+The product is **one Control Plane** (this web app), **one Runtime** (on every device) and **one Gateway** (on the network). Today Runtime and Gateway are implied inside per-agent cards; they become first-class, downloadable and documented — still simulated, but presented like real products with a single source of truth for every command.
+
+### 9.1 Source of truth
+
+New module `src/data/install.ts` exports install artifacts and commands as **data**, so onboarding, `/downloads`, `/docs`, Fleet cards and invite emails all read the same values.
+
+```ts
+INSTALL = {
+  runtime: {
+    version: "2.0.3",                              // from RUNTIME_VERSION in fabric.ts
+    macos:   { pkg: "Wrapbox-Runtime-2.0.3.pkg", sha256: "…", mdm: { jamf, intune, kandji }, shell: "curl -fsSL https://get.wrapbox.dev | sh" },
+    windows: { msi: "WrapboxRuntime-2.0.3.msi",   sha256: "…", intune: "…" },
+    linux:   { apt: "sudo apt install wrapbox-runtime", rpm: "sudo dnf install wrapbox-runtime", repo: "deb https://apt.wrapbox.dev …" },
+    enroll:  (org) => `wrapbox enroll --org ${org}`,
+  },
+  gateway: {
+    version: "2.0.3",
+    image:   "ghcr.io/wrapbox/gateway:2.0.3",
+    sha256:  "…",
+    docker:  (org) => `docker run -d -p 443:443 ghcr.io/wrapbox/gateway:2.0.3 --org ${org}`,
+    helm:    (org) => `helm install wrapbox oci://ghcr.io/wrapbox/charts/gateway --set org=${org}`,
+    url:     "https://mcp.wrapbox.ai",
+  },
+}
+```
+
+All simulated: checksums are stable placeholder hashes, but shown in the same shape a real release would carry. Downloading is a two-step toast ("preparing" → "ready · verify with `shasum -a 256 …`"), same pattern the Evidence export uses today.
+
+### 9.2 `/downloads`
+
+Two product cards, styled from the existing `Card` / `CardHead` / `CopyButton` / `InlineCmd`:
+
+- **Runtime 2.0.3** · fleet uptake (`running on 2 of 3 devices`, derived) · four buttons: **macOS (.pkg)** with an MDM tab strip (Jamf / Intune / Kandji), **Windows (.msi)** with Intune, **Linux (apt)**, **Linux (rpm)**. Each button reveals a small panel with the install command, the enrolment line, and the verify line, all copyable. A "Download" click starts the two-step toast.
+- **Gateway 2.0.3** · one-line Docker deploy and a Helm chart, the `mcp.wrapbox.ai` URL from state, and the network's live status (`gateway live · gw-us-east-1`).
+
+Each card carries a "Read the docs" link to `/docs/runtime` or `/docs/gateway`.
+
+### 9.3 `/docs`
+
+Two doc sets under one page frame: `/docs/runtime` and `/docs/gateway`, with left-hand contents rails. Sections per set:
+
+| Runtime | Gateway |
+|---|---|
+| Overview | Overview |
+| Install (macOS · Windows · Linux · MDM) | Install (Docker · Kubernetes · self-hosted) |
+| Enrollment & heartbeat | Registration & policy bundle sync |
+| How enforcement works: Floor · Ceiling | How enforcement works: Remote · Assured |
+| Policy bundles & propagation | Credential brokering |
+| Adapters & integrity | Receipts & verification |
+| Upgrades & rollback | Upgrades & rollback |
+| Uninstall | Uninstall |
+| Troubleshooting | Troubleshooting |
+| Security & privacy | Security & privacy |
+
+Content is derived prose, not lorem: every command is imported from `install.ts`; every count ("running on N devices", "policy bundle vN") is derived from workspace state so the docs match the live tenant. A prominent **Download** button in each doc header links to `/downloads`.
+
+### 9.4 Onboarding rework
+
+Inside `AdminSetup`, insert a new step **"Install Wrapbox"** between step 1 ("Create the workspace") and step 2 ("Discover agents"):
+
+- Two panels side by side: **Runtime → your devices** and **Gateway → your network**.
+- Runtime panel: two choices — **Push with MDM** (shows the Jamf / Intune / Kandji hand-off, IT sends the profile, devices check in — same check-in animation the current onboarding uses for "Devices reporting") or **Send install link to engineers** (an invite with the download link to `/downloads`).
+- Gateway panel: the Docker one-liner + the `mcp.wrapbox.ai` URL, with a "Deploy" that runs the simulated rollout.
+- Both panels show the real commands (from `install.ts`), a real-format checksum, and finish with the visible state change ("gateway live" / "3 devices checked in").
+
+Reframe step 4 "Connect & roll out" as **"Provision adapters"**: the Runtime is already on the device, so this step writes each agent's adapter — no new software installed per agent.
+
+`EmployeeSetup`'s "Install" step gains a "Download the Runtime for your OS" card that links to `/downloads`, with the same one-liner shown next to it as the fast alternative.
+
+Every hand-off is stated: what IT sends (the MDM profile), what the engineer does (download and run), and where the device appears (Fleet).
+
+### 9.5 Sidebar and links across the app
+
+New nav group **"Deploy"** under Enforce, containing **Downloads** and **Docs**. Full v2 admin nav becomes:
+
+```
+Enforce   · Fleet · Gateway
+Deploy    · Downloads · Docs
+Govern    · Intent contract
+Operate   · Approvals · Evidence
+```
+
+- On Fleet, each device card's runtime line becomes `wrapboxd 2.0.3 · docs · manage`, with links to `/docs/runtime` and `/downloads`.
+- On Fleet, the Gateway card shows `Gateway 2.0.3 · docs · manage`, linking to `/docs/gateway` and `/downloads`.
+- The "Invite your team" flow (Team page and onboarding step 6) explicitly reads: "invited engineers install the Runtime — link to /downloads is included". Copy of the invite link toast now names it.
+- Every install command in onboarding is imported from `install.ts`.
+
+## 10. Commit order (revised — items 10–12 slot in as commits 2 and 6a)
 
 1. Workspace + seed + profiles + Fleet + nav/routes; v1 hidden behind the flag. **(done)**
-2. Fleet actions: kill switch, quarantine, Simulate tamper / stop wrapboxd; engine device pre-checks; evidence device + coverage columns.
-3. Rules in the tester and YAML round-trip; `broker` constrain kind.
-4. Gateway → Broker.
-5. Receipts and Destinations.
-6. Enrollment wizard.
-7. Copy pass (landing, auth, About), employee polish.
-8. Tour.
+2. **`install.ts` + `/downloads` + `/docs` + "Deploy" sidebar group + Fleet links to docs and downloads.** *(next)*
+3. Fleet actions: kill switch, quarantine, Simulate tamper / stop wrapboxd; engine device pre-checks; evidence device + coverage columns.
+4. Rules in the tester and YAML round-trip; `broker` constrain kind.
+5. Gateway → Broker.
+6. Receipts and Destinations.
+6a. Onboarding rework: "Install Wrapbox" admin step + "Provision adapters" reframe + employee "Install" link to `/downloads` + explicit IT hand-off copy.
+7. Copy pass (landing, auth, About), employee polish, invite copy.
+8. Tour (now covers Downloads and Docs as first-class stops).
 9. Design parity pass.
 
 ## 10. Verification before "done"

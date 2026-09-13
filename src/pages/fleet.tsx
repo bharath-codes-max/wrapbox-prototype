@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, ArrowRight, KeyRound, Laptop, Network, OctagonX, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, BookOpen, Download, KeyRound, Laptop, Network, OctagonX, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { agentById } from "../data/agents";
 import { personById } from "../data/people";
@@ -189,7 +189,7 @@ function DeviceCard({ d, gateways, destinations }: { d: FleetDevice; gateways: G
       </a>
       <dl className="mt-4 grid grid-cols-3 gap-2 text-[11.5px]">
         {[
-          ["Runtime", d.runtimeVersion],
+          ["Runtime", `wrapboxd ${d.runtimeVersion}`],
           ["Bundle", `v${d.policyBundleVersion}`],
           ["Heartbeat", fmtHeartbeat(d.heartbeat)],
         ].map(([k, v]) => (
@@ -199,7 +199,16 @@ function DeviceCard({ d, gateways, destinations }: { d: FleetDevice; gateways: G
           </div>
         ))}
       </dl>
-      <div className="mt-4 space-y-1.5">
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+        <a href="#/docs/runtime" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 text-fg-3 hover:text-fg">
+          <BookOpen className="size-3" /> Runtime docs
+        </a>
+        <span className="text-fg-3">·</span>
+        <a href="#/downloads" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 text-fg-3 hover:text-fg">
+          <Download className="size-3" /> Manage
+        </a>
+      </div>
+      <div className="mt-3 space-y-1.5">
         {d.agents.map((a) => (
           <AgentRow key={a.agentId} d={d} a={a} dense />
         ))}
@@ -239,7 +248,7 @@ function GatewayCard({ g }: { g: GatewayNode }) {
       </a>
       <dl className="mt-4 grid grid-cols-3 gap-2 text-[11.5px]">
         {[
-          ["Version", g.version],
+          ["Version", `Gateway ${g.version}`],
           ["Bundle", `v${g.policyBundleVersion}`],
           ["Heartbeat", fmtHeartbeat(g.heartbeat)],
         ].map(([k, v]) => (
@@ -249,6 +258,15 @@ function GatewayCard({ g }: { g: GatewayNode }) {
           </div>
         ))}
       </dl>
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+        <a href="#/docs/gateway" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 text-fg-3 hover:text-fg">
+          <BookOpen className="size-3" /> Gateway docs
+        </a>
+        <span className="text-fg-3">·</span>
+        <a href="#/downloads" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 text-fg-3 hover:text-fg">
+          <Download className="size-3" /> Manage
+        </a>
+      </div>
       <div className="mt-4 space-y-1.5">
         {g.upstreams.map((id) => {
           const a = agentById(id);
@@ -351,6 +369,13 @@ export function FleetDeviceDetail({ id }: { id: string }) {
           </div>
         ))}
       </Card>
+      <div className="mb-5 flex flex-wrap items-center gap-3 text-[12.5px] text-fg-3">
+        <a href="#/docs/runtime" className="inline-flex items-center gap-1.5 font-medium text-accent"><BookOpen className="size-3.5" /> Runtime documentation</a>
+        <span>·</span>
+        <a href="#/downloads" className="inline-flex items-center gap-1.5 font-medium text-accent"><Download className="size-3.5" /> Downloads &amp; MDM profiles</a>
+        <span>·</span>
+        <a href="#/docs/runtime/troubleshooting" className="hover:text-fg">Troubleshooting</a>
+      </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <div className="space-y-5 min-w-0">

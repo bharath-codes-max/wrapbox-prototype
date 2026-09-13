@@ -1,11 +1,13 @@
 import { AnimatePresence, motion } from "motion/react";
 import {
+  BookOpen,
   Building2,
   Bot,
   Check,
   ChevronsUpDown,
   CircleCheck,
   CirclePlay,
+  Download,
   FileCheck2,
   FlaskConical,
   Hand,
@@ -61,13 +63,16 @@ function useNav(role: Role): { section?: string; items: NavItem[] }[] {
   if (fabric)
     return role === "admin"
       ? [
+          { items: [{ path: "/onboarding/admin", label: "Get started", icon: Rocket, badge: onboarded.admin ? undefined : "Setup", tone: "accent" }] },
           { section: "Enforce", items: [{ path: "/", label: "Fleet", icon: Laptop }, { path: "/gateway", label: "Gateway", icon: Network }] },
+          { section: "Deploy", items: [{ path: "/downloads", label: "Downloads", icon: Download }, { path: "/docs", label: "Docs", icon: BookOpen }] },
           { section: "Govern", items: [{ path: "/contract", label: "Intent contract", icon: FileCheck2, badge: ruleCount || undefined }] },
           { section: "Operate", items: [{ path: "/approvals", label: "Approvals", icon: Hand, badge: pending || undefined, tone: "review" }, { path: "/evidence", label: "Evidence", icon: ListTree }] },
         ]
       : [
           { items: [{ path: "/", label: "My device", icon: Laptop }] },
           { section: "My work", items: [{ path: "/contract", label: "Rules for me", icon: FileCheck2 }, { path: "/approvals", label: "My approvals", icon: Hand, badge: myPending || undefined, tone: "review" }, { path: "/evidence", label: "My activity", icon: ListTree }] },
+          { section: "Deploy", items: [{ path: "/downloads", label: "Install the Runtime", icon: Download }, { path: "/docs/runtime", label: "Docs", icon: BookOpen }] },
           { section: "Admin only", items: [{ path: "/gateway", label: "Gateway", icon: Network, adminOnly: true }] },
         ];
   const groups: { section?: string; items: NavItem[] }[] = role === "admin" ? [
@@ -288,6 +293,10 @@ const TITLES: [string, string][] = [
 const FABRIC_TITLES: [string, string][] = [
   ["/", "Fleet"],
   ["/gateway", "Gateway"],
+  ["/downloads", "Downloads"],
+  ["/docs", "Docs"],
+  ["/docs/runtime", "Runtime docs"],
+  ["/docs/gateway", "Gateway docs"],
   ["/contract", "Intent contract"],
   ["/approvals", "Approvals"],
   ["/evidence", "Evidence"],
