@@ -2,7 +2,7 @@ import { ArrowRight, BookOpen, Container, Download, Package } from "lucide-react
 import type { ReactNode } from "react";
 import { CodeBlock, InlineCmd } from "../components/code";
 import { Button, Card, Chip, PageHeader, cn } from "../components/ui";
-import { GATEWAY, MDM_ORDER, OS_META, RUNTIME, comingLabel, orgFor, osAvailable } from "../data/install";
+import { GATEWAY, MDM_ORDER, OS_META, RUNTIME, orgFor } from "../data/install";
 import { go } from "../lib/router";
 import { useStore } from "../lib/store";
 
@@ -65,6 +65,11 @@ const RUNTIME_DOCS: Section[] = [
         </P>
         <P>On a developer box the same package installs from the shell:</P>
         <InlineCmd cmd={`${RUNTIME.macos.shell} && ${RUNTIME.enroll(org)}`} />
+        <H3>Windows</H3>
+        <P>
+          Deploy <M>{RUNTIME.windows.msi.name}</M> as a Line-of-business app in Intune with a System install context. The Runtime runs as a Windows Service under LOCAL SYSTEM, attributes network flows with Windows Filtering Platform filters, and confines launched agents to {OS_META.windows.coverage} with NTFS ACEs on the working tree. No kernel driver is installed: after the 2024 endpoint-security changes Microsoft is moving security vendors out of the kernel, so the Runtime uses user-mode primitives only.
+        </P>
+        <InlineCmd cmd={RUNTIME.windows.shell} />
         <H3>Linux</H3>
         <P>On Debian- or Ubuntu-based fleets, add the apt repository once — the same key signs every release — then install:</P>
         <InlineCmd cmd={RUNTIME.linux.apt} />
@@ -72,14 +77,6 @@ const RUNTIME_DOCS: Section[] = [
         <InlineCmd cmd={RUNTIME.linux.systemd} />
         <P>Every install path finishes with the same command, which binds the machine to your tenant and downloads the current policy bundle:</P>
         <InlineCmd cmd={RUNTIME.enroll(org)} />
-        <H3 muted>
-          Windows <span className="ml-1.5 align-middle rounded-full bg-surface-3 px-2 py-0.5 text-[11px] font-medium text-fg-3">{comingLabel("windows")}</span>
-        </H3>
-        <P>{OS_META.windows.note} There is nothing to install or run on Windows today, and Windows devices do not appear on Fleet.</P>
-        <P>
-          When it ships, the Runtime will be distributed as <M>{RUNTIME.windows.plannedArtifact}</M>, deployed as a {RUNTIME.windows.plannedDeployment.toLowerCase().replace(/\.$/, "")}. The Floor will be {OS_META.windows.coverage}: agents run in a dedicated local account with no route off the machine except through the Runtime's own egress proxy, and NTFS ACEs fence the working tree. No kernel driver is planned — after the 2024 endpoint-security changes Microsoft is moving security vendors out of the kernel, so Wrapbox will adopt the user-mode Windows Endpoint Security Platform API when it becomes generally available.
-        </P>
-        <Callout>Ceiling coverage on Windows works the same way it does elsewhere: adapters are files, and the agents that expose hook interfaces on macOS expose them on Windows too. What is missing today is the Floor — the OS-level fence — which is why the platform is not offered at all rather than offered partially.</Callout>
       </>
     ),
   },
@@ -91,7 +88,7 @@ const RUNTIME_DOCS: Section[] = [
         <P>Enrolment is the moment a device becomes a Fleet member. It runs on first start after install, or when you rerun <M>{RUNTIME.enroll(org)}</M> after an unenroll.</P>
         <H3>What happens, in order</H3>
         <ol className="my-3 space-y-1.5 list-decimal pl-5 text-fg-2">
-          <li>The Runtime generates a P-256 keypair in the platform keystore — the Secure Enclave on macOS, the OS keyring on Linux — and never exports the private key.</li>
+          <li>The Runtime generates a P-256 keypair in the platform keystore — the Secure Enclave on macOS, the TPM on Windows, the OS keyring on Linux — and never exports the private key.</li>
           <li>It registers the public half with the Control Plane along with the device's platform posture (OS version, arch, MDM identifier if present). The Control Plane returns a device id and a bundle URL.</li>
           <li>It downloads the current policy bundle (v{bundleVersion} at your tenant right now), verifies the signature against the release key, and caches it on disk.</li>
           <li>It sends its first heartbeat. The device appears on Fleet with state <B>enrolling</B>, then <B>healthy</B> once the first heartbeat is acknowledged.</li>
@@ -188,7 +185,7 @@ const RUNTIME_DOCS: Section[] = [
           <li><B>No heartbeat.</B> Check the daemon is running (<M>launchctl list | grep wrapbox</M> on macOS, <M>{RUNTIME.linux.systemd}</M> on Linux). If the process is up but the heartbeat is stuck, the outbound network is the usual cause — the Control Plane URL must be reachable from the device.</li>
           <li><B>Adapter rewritten every heartbeat.</B> Something else is writing the same file. MDM configuration profiles that manage the same settings key are the usual cause; the Runtime always wins the last write, but the alternation shows as a stream of <B>tampered → re-provisioned</B> events. Have IT remove the conflicting profile.</li>
           <li><B>Full Disk Access denied.</B> On macOS this is a PPPC grant. If the MDM did not deploy it, add the Wrapbox PPPC payload before the package.</li>
-          <li><B>An endpoint security tool flagged the shim.</B> The shim is signed. Add an exclusion for the Wrapbox install path in your EDR, then run <M>wrapbox doctor</M> again.</li>
+          <li><B>An endpoint security tool flagged the shim.</B> The shim is signed with an EV certificate. Add an exclusion for the Wrapbox install path in your EDR — on Windows this is an ASR exclusion — then run <M>wrapbox doctor</M> again.</li>
         </ul>
         <P>If none of the above helps, run <M>wrapbox bundle-report</M> — it packages the daemon log, the current policy bundle id and the last 200 evidence records into a signed tarball you can share with Wrapbox support without leaking the workspace state.</P>
       </>
@@ -388,7 +385,7 @@ const DOC_SETS: Record<"runtime" | "gateway", DocSet> = {
 const M = ({ children }: { children: ReactNode }) => <code className="font-mono text-[12px] bg-surface-2 rounded px-1 py-0.5 text-fg">{children}</code>;
 const B = ({ children }: { children: ReactNode }) => <span className="font-semibold text-fg">{children}</span>;
 const P = ({ children }: { children: ReactNode }) => <p className="my-3 text-[13.5px] leading-relaxed text-fg-2">{children}</p>;
-const H3 = ({ children, muted }: { children: ReactNode; muted?: boolean }) => <h3 className={cn("mt-6 mb-2 text-[15px] font-semibold", muted ? "text-fg-2" : "text-fg")}>{children}</h3>;
+const H3 = ({ children }: { children: ReactNode }) => <h3 className="mt-6 mb-2 text-[15px] font-semibold text-fg">{children}</h3>;
 function Callout({ children, tone = "muted" }: { children: ReactNode; tone?: "muted" | "review" }) {
   return (
     <div className={cn("my-4 rounded-xl border px-4 py-3 text-[12.5px] leading-relaxed", tone === "review" ? "border-review/30 bg-review-soft/40 text-fg" : "border-line bg-surface-2 text-fg-2")}>

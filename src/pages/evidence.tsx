@@ -7,6 +7,13 @@ import { Avatar, Button, Card, DecisionPill, Drawer, Logo, PageHeader, Segmented
 import { clock } from "../lib/router";
 import { EMPLOYEE, getState, toast, useStore, useWorkspace, type Evt } from "../lib/store";
 
+/** The device a decision came from: the Runtime records its id on every action it observes. */
+function useDeviceOf(e: Evt | null) {
+  const fleet = useStore((s) => s.fleet);
+  const id = e?.act?.ctx?.["device.id"];
+  return typeof id === "string" ? fleet.find((d) => d.id === id) : undefined;
+}
+
 export function EvidenceDrawer({ e, onClose }: { e: Evt | null; onClose: () => void }) {
   return (
     <Drawer open={!!e} onClose={onClose} title={e ? <span className="flex items-center gap-2"><DecisionPill d={e.decision} size="sm" /> Decision {e.id}</span> : ""}>
@@ -18,10 +25,14 @@ export function EvidenceDrawer({ e, onClose }: { e: Evt | null; onClose: () => v
 function EvidenceBody({ e }: { e: Evt }) {
   const a = agentById(e.agentId);
   const p = personById(e.human);
+  const device = useDeviceOf(e);
   const approvers = (e.approvers ?? []).map((id) => personById(id)).filter(Boolean);
   const chain: { label: string; value: React.ReactNode; tone?: string }[] = [
     { label: "Human", value: p ? <span className="flex items-center gap-2"><Avatar p={p} size={20} />{p.name} <span className="text-fg-3">· {p.role}</span></span> : e.human },
     { label: "Agent", value: <span className="flex items-center gap-2"><Logo name={a.logo} bleed={a.bleed} size={20} rounded="rounded" />{a.name}</span> },
+    ...(device
+      ? [{ label: "Device", value: <span className="flex items-center gap-2"><Logo name={device.osLogo} size={20} rounded="rounded" /><span className="font-mono text-[12px]">{device.hostname}</span> <span className="text-fg-3">· {device.os}</span></span> }]
+      : []),
     { label: "Action", value: <span className="font-mono text-[12px]">{e.action}</span> },
     { label: "Effect", value: <span className="font-mono text-[12px]">{e.effect}</span> },
     { label: "Policy", value: <span className="font-mono text-[12px]">rule {e.rule} · {e.reason}</span> },
@@ -61,6 +72,8 @@ function EvidenceBody({ e }: { e: Evt }) {
             org: getState().domain.replace(/\..*$/, ""),
             human: e.human,
             subject_agent: e.agentId,
+            // Which machine the action came from. Part of the signed record, not just the UI.
+            ...(device ? { device: { id: device.id, hostname: device.hostname, os: device.os } } : {}),
             action: e.action,
             effect: e.effect,
             rule: e.rule,
@@ -115,6 +128,9 @@ export function Evidence({ query }: { query?: URLSearchParams }) {
     [all, d, agent, q, mine],
   );
   const agentsInLog = useMemo(() => Array.from(new Set(all.map((e) => e.agentId))), [all]);
+  const fleet = useStore((s) => s.fleet);
+  // The column only appears where devices report — workspaces without a Runtime have nothing to show.
+  const showDevice = fleet.length > 0;
   return (
     <div className="mx-auto max-w-[1240px] px-4 lg:px-8 py-8">
       <PageHeader
@@ -176,6 +192,7 @@ export function Evidence({ query }: { query?: URLSearchParams }) {
                 <th className="font-medium px-4 py-2 w-[80px]">Time</th>
                 <th className="font-medium px-2 py-2 w-[90px]">Decision</th>
                 <th className="font-medium px-3 py-3">Agent · action</th>
+                {showDevice && <th className="font-medium px-3 py-3">Device</th>}
                 <th className="font-medium px-3 py-3">{mine ? "Why" : "Rule"}</th>
                 {!mine && <th className="font-medium px-3 py-3">Human</th>}
                 <th className="font-medium px-4 py-2 text-right">Latency</th>
@@ -198,6 +215,15 @@ export function Evidence({ query }: { query?: URLSearchParams }) {
                         </div>
                       </div>
                     </td>
+                    {showDevice && (
+                      <td className="px-3 py-3.5 font-mono text-[11.5px] text-fg-3">
+                        {(() => {
+                          const id = e.act?.ctx?.["device.id"];
+                          const d = typeof id === "string" ? fleet.find((x) => x.id === id) : undefined;
+                          return d ? <span title={`${d.hostname} · ${d.os}`}>{d.hostname.split(".")[0]}</span> : <span className="text-fg-3/60">—</span>;
+                        })()}
+                      </td>
+                    )}
                     <td className={cn("px-3 py-3.5 text-[12px]", mine ? "text-fg-2" : "font-mono text-fg-3")}>{mine ? e.reason : e.rule}</td>
                     {!mine && <td className="px-3 py-3.5">{p && <span className="flex items-center gap-2 text-[12.5px]"><Avatar p={p} size={20} />{p.name}</span>}</td>}
                     <td className="px-5 py-3.5 text-right font-mono text-[11.5px] text-fg-3 tnum">{e.latency} ms</td>

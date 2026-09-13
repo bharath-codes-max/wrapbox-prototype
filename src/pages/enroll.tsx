@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ArrowRight, BookOpen, Check, CheckCircle2, Container, Copy as CopyIcon, Download, Info, Loader2, Package, Rocket, ShieldCheck, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { agentById } from "../data/agents";
-import { AVAILABLE_OS, GATEWAY, MDM_ORDER, OS_META, OS_ORDER, RUNTIME, comingLabel, orgFor, osAvailable, runtimeInstall, type MdmVendor, type Os } from "../data/install";
+import { GATEWAY, MDM_ORDER, OS_META, OS_ORDER, RUNTIME, orgFor, runtimeInstall, type MdmVendor, type Os } from "../data/install";
 import { profileOf } from "../data/profiles";
 import { personById } from "../data/people";
 import { CodeBlock, InlineCmd } from "../components/code";
@@ -196,6 +196,7 @@ function Step1({ org, fleet, gateways, onNext, onBack }: { org: string; fleet: a
   const [gwState, setGwState] = useState<"idle" | "deploying" | "live">(gateways.length ? "live" : "idle");
   const [linkOs, setLinkOs] = useState<Os>("macos");
   const macDevices = fleet.filter((d) => /mac/i.test(d.os)).length;
+  const winDevices = fleet.filter((d) => /win/i.test(d.os)).length;
   const linuxDevices = fleet.filter((d) => /ubuntu|linux|debian|rhel|fedora/i.test(d.os)).length;
 
   const pushMdm = () => { setRolling("pushing"); setTimeout(() => setRolling("done"), 1600); };
@@ -246,11 +247,10 @@ function Step1({ org, fleet, gateways, onNext, onBack }: { org: string; fleet: a
                 <div className="rounded-xl border border-line bg-surface-2 px-4 py-3.5">
                   <div className="text-[12px] font-medium mb-1.5">What IT sends</div>
                   <ul className="space-y-1 text-[12px] text-fg-2">
-                    <li>· <span className="font-mono">{RUNTIME.macos.pkg.name}</span> (macOS) · <span className="font-mono">wrapbox-runtime</span> apt / rpm (Linux)</li>
+                    <li>· <span className="font-mono">{RUNTIME.macos.pkg.name}</span> (macOS) · <span className="font-mono">{RUNTIME.windows.msi.name}</span> (Windows) · <span className="font-mono">wrapbox-runtime</span> apt / rpm (Linux)</li>
                     <li>· <span className="font-mono">wrapbox-runtime-macos.mobileconfig</span> with the System Extension, PPPC and Content Filter payloads</li>
-                    <li>· One MDM smart group covering every macOS and Linux machine that needs Wrapbox</li>
+                    <li>· One MDM smart group covering every laptop and server that needs Wrapbox</li>
                   </ul>
-                  <div className="mt-2 pt-2 border-t border-line text-[11.5px] text-fg-3">{OS_META.windows.label} devices are not included — the {OS_META.windows.label} Runtime is {comingLabel("windows").toLowerCase()}.</div>
                 </div>
                 <div>
                   <div className="text-[12px] font-medium mb-1.5">MDM steps · {mdm === "jamf" ? "Jamf Pro" : mdm === "intune" ? "Microsoft Intune" : "Kandji"}</div>
@@ -269,9 +269,10 @@ function Step1({ org, fleet, gateways, onNext, onBack }: { org: string; fleet: a
                       {rolling === "pushing" && <div className="animate-pulse">· devices checking in…</div>}
                       {rolling === "done" && (
                         <>
-                          <div className="text-[#3fd49b]">✓ {macDevices} macOS · {linuxDevices} Linux devices enrolled</div>
+                          <div className="text-[#3fd49b]">
+                            ✓ {[[macDevices, "macOS"], [winDevices, "Windows"], [linuxDevices, "Linux"]].filter(([n]) => (n as number) > 0).map(([n, l]) => `${n} ${l}`).join(" · ")} {fleet.length === 1 ? "device" : "devices"} enrolled
+                          </div>
                           <div className="text-[#3fd49b]">✓ First heartbeat received · policy bundle v{fleet[0]?.policyBundleVersion ?? 27} cached</div>
-                          <div className="text-[#5f6a88]">· {OS_META.windows.label} not scanned · Runtime {comingLabel("windows").toLowerCase()}</div>
                         </>
                       )}
                     </>
@@ -362,49 +363,18 @@ function Step1({ org, fleet, gateways, onNext, onBack }: { org: string; fleet: a
   );
 }
 
-/** The OS picker used wherever an engineer-facing command is shown. Roadmap platforms are selectable
- *  so their note can be read, but never offer a command. */
+/** The OS picker used wherever an engineer-facing command is shown. */
 function OsPicker({ value, onChange }: { value: Os; onChange: (v: Os) => void }) {
-  return (
-    <Segmented
-      size="sm"
-      value={value}
-      onChange={onChange}
-      options={OS_ORDER.map((id) => ({
-        value: id,
-        disabled: !osAvailable(id),
-        title: osAvailable(id) ? undefined : OS_META[id].note,
-        onDisabledClick: () => onChange(id),
-        label: osAvailable(id) ? (
-          OS_META[id].label
-        ) : (
-          <>
-            {OS_META[id].label}
-            <span className="rounded-full bg-surface-3 px-1.5 py-px text-[10px] font-medium text-fg-3">{comingLabel(id)}</span>
-          </>
-        ),
-      }))}
-    />
-  );
+  return <Segmented size="sm" value={value} onChange={onChange} options={OS_ORDER.map((id) => ({ value: id, label: OS_META[id].label }))} />;
 }
 
-/** The install line for one OS, or the roadmap note where there is nothing to run. */
+/** The install line for one OS, straight from the shared install table. */
 function OsCommand({ os, org }: { os: Os; org: string }) {
   const install = runtimeInstall(os, org);
-  if (!install)
-    return (
-      <div className="rounded-xl border border-line bg-surface-2 px-4 py-3.5">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-[12px] font-medium text-fg-2">{OS_META[os].label}</span>
-          <Chip>{comingLabel(os)}</Chip>
-        </div>
-        <p className="text-[12px] text-fg-3">{OS_META[os].note}</p>
-      </div>
-    );
   return (
     <div>
       <div className="text-[12px] font-medium mb-1.5">{OS_META[os].label} · one line</div>
-      <InlineCmd cmd={install.oneLiner ?? install.install} />
+      <InlineCmd cmd={install.oneLiner} />
     </div>
   );
 }
@@ -414,7 +384,6 @@ function Step2({ fleet, onNext, onBack }: { fleet: any[]; onNext: () => void; on
   const discovered = fleet.flatMap((d) => d.agents);
   const withProfile = discovered.filter((a) => profileOf(a.agentId));
   const unknown = discovered.length - withProfile.length;
-  const coming = OS_ORDER.filter((id) => !osAvailable(id));
   return (
     <>
       <StepHead n={3} title="Discover agents" sub={`The Runtime scans each device against its agent profiles — binaries, signing IDs, IDE extensions, MCP config files. Anything unmatched shows up flagged. Your fleet has ${discovered.length} agents discovered across ${fleet.length} devices.`} />
@@ -448,15 +417,6 @@ function Step2({ fleet, onNext, onBack }: { fleet: any[]; onNext: () => void; on
                   );
                 })}
               </div>
-            </div>
-          ))}
-          {coming.map((id) => (
-            <div key={id} className="flex flex-wrap items-center gap-3 px-6 py-3.5 bg-surface-2/50">
-              <Logo name={id === "macos" ? "apple" : id === "linux" ? "ubuntu" : "windows"} size={20} rounded="rounded-md" className="opacity-45 grayscale" />
-              <span className="text-[12.5px] text-fg-3">
-                {OS_META[id].label} devices — Runtime {comingLabel(id).toLowerCase()}. Not scanned yet.
-              </span>
-              <Chip className="ml-auto">{comingLabel(id)}</Chip>
             </div>
           ))}
         </div>
@@ -573,16 +533,7 @@ function Step5({ org, onNext, onBack }: { org: string; onNext: () => void; onBac
           <ol className="mt-2 space-y-1.5">
             <li>1. Download the Runtime for your OS: <a href="#/downloads" className="text-accent underline underline-offset-2">app.wrapbox.ai/downloads</a></li>
             <li>
-              2.{" "}
-              {install ? (
-                <>
-                  {OS_META[emailOs].label}: <code className="font-mono text-[11.5px] bg-surface-3 px-1 py-0.5 rounded">{install.installOnly}</code>
-                </>
-              ) : (
-                <span className="text-fg-3">
-                  {OS_META[emailOs].label} Runtime — {comingLabel(emailOs).toLowerCase()}. Nothing to install yet; we'll email you when it ships.
-                </span>
-              )}
+              2. {OS_META[emailOs].label}: <code className="font-mono text-[11.5px] bg-surface-3 px-1 py-0.5 rounded">{install.installOnly}</code>
             </li>
             <li>3. Enrol: <code className="font-mono text-[11.5px] bg-surface-3 px-1 py-0.5 rounded">{RUNTIME.enroll(org)}</code></li>
           </ol>
@@ -610,7 +561,7 @@ function Step6({ since, onFinish, onBack }: { since: number; onFinish: () => voi
       <StepHead n={7} title="Go live" sub="One Control Plane, one Runtime on every device, one Gateway on your network. Every action from here on is decided by one policy and lands on Evidence." />
       <Card className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-line overflow-hidden mb-4">
         {[
-          ["Devices enrolled", String(fleet.length), `${AVAILABLE_OS.map((o) => OS_META[o].label).join(" and ")} today`],
+          ["Devices enrolled", String(fleet.length), "across every platform"],
           ["Gateway", gwLive ? "live" : "not yet", gwLive ? gateways[0].region : "deploy on step 2"],
           ["Decisions so far", String(fresh.length), fresh.length ? "since setup started" : "nothing has run yet"],
           ["Waiting for a human", String(waiting.length), waiting.length ? "open Approvals" : "nothing asked yet"],

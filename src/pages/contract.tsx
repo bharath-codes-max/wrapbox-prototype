@@ -1,8 +1,8 @@
 import { AnimatePresence, motion } from "motion/react";
-import { AlertTriangle, Check, Copy as CopyIcon, FilePlus2, FileCode2, FlaskConical, History, Loader2, Lock, Pencil, Plus, Rocket, Trash2, Undo2, Wand2, Wrench, X } from "lucide-react";
+import { AlertTriangle, Check, Copy as CopyIcon, FileCode2, FlaskConical, History, Loader2, Lock, Pencil, Plus, Rocket, Trash2, Undo2, Wand2, Wrench, X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AGENTS, CATEGORIES, agentById, type Decision } from "../data/agents";
-import { EFFECTS, PACKS, effectInfo, fmtValue, fromYaml, ruleChips, ruleSig, rulesForPacks, toYaml, type ParseIssue, type Rule, type Tier } from "../data/contract";
+import { EFFECTS, effectInfo, fmtValue, fromYaml, ruleChips, ruleSig, toYaml, type ParseIssue, type Rule, type Tier } from "../data/contract";
 import { personById } from "../data/people";
 import { ACTS } from "../data/scenarios";
 import { replayLog, type ReplayResult } from "../lib/replay";
@@ -987,46 +987,6 @@ function PublishModal({ open, onClose, version }: { open: boolean; onClose: () =
   );
 }
 
-function PacksModal({ open, onClose, have, onAdd }: { open: boolean; onClose: () => void; have: string[]; onAdd: (ids: string[]) => void }) {
-  const [sel, setSel] = useState<string[]>([]);
-  useEffect(() => {
-    if (open) setSel(PACKS.filter((p) => p.rec && !p.rules.every((r) => have.includes(r))).map((p) => p.id));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-  return (
-    <Modal open={open} onClose={onClose} width={640}>
-      <div className="p-6">
-        <div className="text-[15px] font-semibold">Add policy packs</div>
-        <p className="mt-1 text-[12.5px] text-fg-3">Each pack adds a few plain rules to your draft. Edit or delete any of them afterwards.</p>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 max-h-[420px] overflow-y-auto scroll-thin">
-          {PACKS.map((p) => {
-            const already = p.rules.every((r) => have.includes(r));
-            const on = sel.includes(p.id);
-            return (
-              <button key={p.id} disabled={already} onClick={() => setSel((x) => (on ? x.filter((y) => y !== p.id) : [...x, p.id]))} className={cn("rounded-xl border p-3 text-left transition-colors disabled:opacity-50", on ? "border-fg" : "border-line hover:border-line-strong")}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[13px] font-semibold">{p.name}</span>
-                  {already ? <Chip>added</Chip> : <span className={cn("grid size-4.5 place-items-center rounded border", on ? "bg-ink border-ink text-ink-fg" : "border-line-strong")}>{on && <Check className="size-3" strokeWidth={3} />}</span>}
-                </div>
-                <p className="mt-1 text-[12px] text-fg-2">{p.ex}</p>
-                <div className="mt-1 font-mono text-[10.5px] text-fg-3">{p.rules.join(" · ")}</div>
-              </button>
-            );
-          })}
-        </div>
-        <div className="mt-4 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" disabled={!sel.length} onClick={() => onAdd(sel)}>
-            Add {sel.length} pack{sel.length === 1 ? "" : "s"}
-          </Button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
 /* ================= Page ================= */
 const STARTER = `version: 1
 org: wrapbox
@@ -1065,7 +1025,6 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
   const [running, setRunning] = useState(false);
   const [pub, setPub] = useState(false);
   const [builder, setBuilder] = useState<{ open: boolean; rule: Rule | null; mode?: BuildMode }>({ open: false, rule: null });
-  const [packsOpen, setPacksOpen] = useState(false);
   const readOnly = role === "employee";
 
   const suggest = query.get("suggest");
@@ -1100,12 +1059,6 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
     setState((s) => ({ rules: s.rules.some((x) => x.id === r.id) ? s.rules.map((x) => (x.id === r.id ? r : x)) : [...s.rules, r] }));
     setBuilder({ open: false, rule: null });
     toast(`Rule “${r.id}” saved to draft`, `Publish v${version + 1} to enforce it`, "allow");
-  };
-  const addPacks = (ids: string[]) => {
-    const add = rulesForPacks(ids).filter((r) => !rules.some((x) => x.id === r.id));
-    setState((s) => ({ rules: [...s.rules, ...add] }));
-    setPacksOpen(false);
-    toast(`${add.length} rules added to draft`, "Review them, then publish", "allow");
   };
   const publish = () => {
     publishContract();
@@ -1156,9 +1109,6 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
           <Button onClick={() => setBuilder({ open: true, rule: null, mode: "build" })}>
             <Plus className="size-3.5" /> Build a rule
           </Button>
-          <Button onClick={() => setPacksOpen(true)}>
-            <FilePlus2 className="size-3.5" /> Add policy pack
-          </Button>
           <Button
             onClick={() => {
               setEditingYaml(true);
@@ -1197,11 +1147,8 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
           <div className="max-w-[640px]">
             <div className="eyebrow">Empty contract</div>
             <h2 className="mt-2 text-[22px] font-semibold">Right now every agent action is allowed.</h2>
-            <p className="mt-2 text-[13.5px] text-fg-2 leading-relaxed">Start from policy packs, build your first rule, or type YAML. Nothing is enforced until you publish — run a flow first if you want to see what happens without rules.</p>
+            <p className="mt-2 text-[13.5px] text-fg-2 leading-relaxed">Describe a rule in plain English, build one field by field, or type YAML. Nothing is enforced until you publish.</p>
             <div className="mt-5 flex flex-wrap gap-2">
-              <Button variant="primary" onClick={() => setPacksOpen(true)}>
-                <FilePlus2 className="size-3.5" /> Start from policy packs
-              </Button>
               <Button variant="primary" onClick={() => setBuilder({ open: true, rule: null, mode: "describe" })}>
                 <Wand2 className="size-3.5" /> Describe a rule
               </Button>
@@ -1294,7 +1241,6 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
       )}
 
       <RuleBuilder open={builder.open} initial={builder.rule} startMode={builder.mode ?? "build"} existingIds={rules.map((r) => r.id)} onClose={() => setBuilder({ open: false, rule: null })} onSave={saveRule} />
-      <PacksModal open={packsOpen} onClose={() => setPacksOpen(false)} have={rules.map((r) => r.id)} onAdd={addPacks} />
       <PublishModal
         open={pub}
         version={version}

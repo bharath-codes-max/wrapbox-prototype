@@ -29,48 +29,25 @@ const sha = (seed: string) => {
 export type Os = "macos" | "windows" | "linux";
 export type MdmVendor = "jamf" | "intune" | "kandji";
 
-/* ================= platform status =================
-   The one place that decides whether a platform is shipping or on the roadmap. Every surface —
-   Downloads, Docs, the enrollment wizard, Fleet — reads these flags, so flipping a status to
-   "available" turns that platform on everywhere with no other edit. */
-export type OsStatus = "available" | "coming";
-
+/* ================= platforms =================
+   The Runtime ships on all three desktop and server platforms. Every surface — Downloads, Docs, the
+   enrollment wizard, the invite email — reads this table rather than naming platforms itself. */
 export interface OsMeta {
   id: Os;
   label: string;
-  status: OsStatus;
-  /** Shipping target, shown wherever a roadmap platform appears. */
-  eta?: string;
-  /** The artifact the platform will ship as. */
+  /** The artifact the platform ships as. */
   artifact: string;
   /** How the Floor is enforced on this platform. */
   coverage: string;
-  /** One honest line about why it isn't here yet. Shown on every roadmap surface. */
-  note?: string;
 }
 
 export const OS_META: Record<Os, OsMeta> = {
-  macos: { id: "macos", label: "macOS", status: "available", artifact: ".pkg", coverage: "Seatbelt confinement and a Network Extension content filter" },
-  linux: { id: "linux", label: "Linux", status: "available", artifact: "apt / rpm", coverage: "bubblewrap and seccomp, with eBPF attribution" },
-  windows: {
-    id: "windows",
-    label: "Windows",
-    status: "coming",
-    eta: "~month 15",
-    artifact: ".msi",
-    coverage: "an isolated account fenced by Windows Filtering Platform rules",
-    note: "The Windows Runtime is on the roadmap and not yet available. Windows devices are not scanned and do not appear on Fleet.",
-  },
+  macos: { id: "macos", label: "macOS", artifact: ".pkg", coverage: "Seatbelt confinement and a Network Extension content filter" },
+  linux: { id: "linux", label: "Linux", artifact: "apt / rpm", coverage: "bubblewrap and seccomp, with eBPF attribution" },
+  windows: { id: "windows", label: "Windows", artifact: ".msi", coverage: "an isolated account fenced by Windows Filtering Platform rules" },
 };
 
 export const OS_ORDER: Os[] = ["macos", "linux", "windows"];
-export const osAvailable = (os: Os) => OS_META[os].status === "available";
-export const AVAILABLE_OS = OS_ORDER.filter(osAvailable);
-/** "Coming ~month 15" — the badge text used wherever a roadmap platform is listed. */
-export const comingLabel = (os: Os) => {
-  const m = OS_META[os];
-  return m.eta ? `Coming ${m.eta}` : "Coming soon";
-};
 
 export interface Artifact {
   name: string;
@@ -131,12 +108,22 @@ export const RUNTIME = {
       },
     },
   },
-  /** Roadmap only. No artifact is built and no command is runnable — see OS_META.windows.
-   *  This is the shape the Windows Runtime is planned to ship in, for the docs to describe. */
   windows: {
-    plannedArtifact: `WrapboxRuntime-${RELEASE_VERSION}.msi`,
-    plannedApproach: "A Windows Service under LOCAL SYSTEM, with agents confined to an isolated local account fenced by machine-wide Windows Filtering Platform rules. No kernel driver.",
-    plannedDeployment: "Line-of-business app in Intune, System install context.",
+    msi: artifact(`WrapboxRuntime-${RELEASE_VERSION}.msi`, "22.1 MB"),
+    /** Silent install for MDM and for an elevated shell. */
+    shell: `msiexec /i WrapboxRuntime-${RELEASE_VERSION}.msi /quiet`,
+    verify: (a: Artifact) => `Get-FileHash -Algorithm SHA256 ${a.name}`,
+    /** A Windows Service under LOCAL SYSTEM. Agents run in an isolated local account fenced by
+     *  machine-wide WFP rules, with NTFS ACEs on the working tree. No kernel driver. */
+    intune: {
+      vendor: "Microsoft Intune",
+      steps: [
+        'In Intune, add a Windows app of type "Line-of-business app" and upload WrapboxRuntime.msi.',
+        "Set the install context to System and the install command to msiexec /i WrapboxRuntime.msi /quiet.",
+        "Assign to the target device group. Intune installs on the next device check-in.",
+        "The Runtime enrols on first heartbeat and appears on Fleet.",
+      ],
+    },
   },
   linux: {
     apt: `sudo apt update && sudo apt install wrapbox-runtime`,
@@ -183,28 +170,25 @@ export const GATEWAY = {
 /** Everything an admin needs to hand off to IT for a Jamf / Intune / Kandji rollout, in one place. */
 export const MDM_ORDER: MdmVendor[] = ["jamf", "intune", "kandji"];
 
-/** The Runtime's install for a given OS. Returns null for a platform that has not shipped —
- *  callers show the roadmap note from OS_META instead of a command. */
+/** The Runtime's install for a given OS: what to run, what to verify, and the enrolment line.
+ *  `installOnly` is what an engineer runs to get the Runtime onto the machine; enrolment is its own step. */
 export function runtimeInstall(os: Os, org: string) {
-  if (!osAvailable(os)) return null;
   const enroll = RUNTIME.enroll(org);
   switch (os) {
     case "macos":
-      // `installOnly` is what an engineer runs to get the Runtime on the machine; enrolment is its own step.
       return { artifact: RUNTIME.macos.pkg, install: `sudo installer -pkg ${RUNTIME.macos.pkg.name} -target /`, installOnly: RUNTIME.macos.shell, oneLiner: `${RUNTIME.macos.shell} && ${enroll}`, verify: RUNTIME.macos.verify(RUNTIME.macos.pkg), enroll };
     case "linux":
       return { artifact: RUNTIME.linux.tarball, install: RUNTIME.linux.apt, installOnly: RUNTIME.linux.apt, oneLiner: `${RUNTIME.linux.apt} && ${enroll}`, verify: RUNTIME.linux.verify(RUNTIME.linux.tarball), enroll };
-    default:
-      return null;
+    case "windows":
+      return { artifact: RUNTIME.windows.msi, install: RUNTIME.windows.shell, installOnly: RUNTIME.windows.shell, oneLiner: `${RUNTIME.windows.shell} && ${enroll}`, verify: RUNTIME.windows.verify(RUNTIME.windows.msi), enroll };
   }
 }
 
-/** Guess the viewer's OS for the default tab. Never lands on a platform that hasn't shipped. */
+/** Guess the viewer's OS for the default tab. */
 export function guessOs(): Os {
   if (typeof navigator === "undefined") return "macos";
   const p = navigator.platform + " " + navigator.userAgent;
-  const guess: Os = /Win/.test(p) ? "windows" : /Linux|X11/.test(p) && !/Android/.test(p) ? "linux" : "macos";
-  return osAvailable(guess) ? guess : "macos";
+  return /Win/.test(p) ? "windows" : /Linux|X11/.test(p) && !/Android/.test(p) ? "linux" : "macos";
 }
 
 export const orgFor = (domain: string, company?: string) => orgSlug(domain, company);

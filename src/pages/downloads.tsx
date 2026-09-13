@@ -2,7 +2,7 @@ import { Apple, ArrowRight, BookOpen, CheckCircle2, Container, Download, Layers,
 import { useMemo, useState } from "react";
 import { CodeBlock, InlineCmd } from "../components/code";
 import { Button, Card, CardHead, Chip, CopyButton, Logo, PageHeader, Segmented, cn } from "../components/ui";
-import { GATEWAY, MDM_ORDER, OS_META, OS_ORDER, RUNTIME, comingLabel, guessOs, orgFor, osAvailable, type MdmVendor, type Os } from "../data/install";
+import { GATEWAY, MDM_ORDER, OS_META, OS_ORDER, RUNTIME, guessOs, orgFor, type MdmVendor, type Os } from "../data/install";
 import { go } from "../lib/router";
 import { toast, useStore } from "../lib/store";
 
@@ -78,30 +78,12 @@ function RuntimeCard({ org, onDevices, totalDevices }: { org: string; onDevices:
         <a href="#/docs/runtime" className="ml-auto inline-flex items-center gap-1 font-medium text-accent"><BookOpen className="size-3.5" /> Runtime docs</a>
       </div>
       <div className="px-6 pt-5 pb-2">
-        <Segmented
-          size="sm"
-          value={os}
-          onChange={setOs}
-          options={OS_ORDER.map((id) => ({
-            value: id,
-            disabled: !osAvailable(id),
-            title: osAvailable(id) ? undefined : OS_META[id].note,
-            onDisabledClick: () => setOs(id),
-            label: osAvailable(id) ? (
-              OS_META[id].label
-            ) : (
-              <>
-                {OS_META[id].label}
-                <span className="rounded-full bg-surface-3 px-1.5 py-px text-[10px] font-medium text-fg-3">{comingLabel(id)}</span>
-              </>
-            ),
-          }))}
-        />
+        <Segmented size="sm" value={os} onChange={setOs} options={OS_ORDER.map((id) => ({ value: id, label: OS_META[id].label }))} />
       </div>
       <div className="px-6 pb-6 space-y-5 flex-1">
         {os === "macos" && <MacosPanel org={org} />}
         {os === "linux" && <LinuxPanel org={org} />}
-        {!osAvailable(os) && <ComingPanel os={os} />}
+        {os === "windows" && <WindowsPanel org={org} />}
       </div>
     </Card>
   );
@@ -184,15 +166,14 @@ function GatewayCard({ org, live, name }: { org: string; live: boolean; name?: s
   );
 }
 
-/** macOS ✓ · Linux ✓ · Windows ⋯ coming — derived from the platform flags, not written out. */
+/** The platforms the Runtime ships on, read from the platform table rather than written out. */
 export function PlatformSupport({ className }: { className?: string }) {
   return (
-    <span className={cn("inline-flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12px]", className)}>
+    <span className={cn("inline-flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12px] text-fg-2", className)}>
       {OS_ORDER.map((id) => (
-        <span key={id} className={cn("inline-flex items-center gap-1", osAvailable(id) ? "text-fg-2" : "text-fg-3")} title={osAvailable(id) ? undefined : OS_META[id].note}>
-          {osAvailable(id) ? <CheckCircle2 className="size-3 text-allow" /> : <span aria-hidden className="text-fg-3">⋯</span>}
+        <span key={id} className="inline-flex items-center gap-1" title={`${OS_META[id].label} · ${OS_META[id].artifact}`}>
+          <CheckCircle2 className="size-3 text-allow" />
           {OS_META[id].label}
-          {!osAvailable(id) && <span className="text-fg-3">· {comingLabel(id).toLowerCase()}</span>}
         </span>
       ))}
     </span>
@@ -280,43 +261,39 @@ function MacosPanel({ org }: { org: string }) {
   );
 }
 
-/** A platform on the roadmap: what it will be, when, and nothing to run today. */
-function ComingPanel({ os }: { os: Os }) {
-  const m = OS_META[os];
+function WindowsPanel({ org }: { org: string }) {
+  const a = RUNTIME.windows.msi;
+  const m = RUNTIME.windows.intune;
   return (
-    <div className="rounded-xl border border-line bg-surface-2 p-5">
-      <div className="flex flex-wrap items-center gap-2.5">
-        <Logo name={OS_LOGO[os]} size={28} rounded="rounded-lg" className="opacity-55 grayscale" />
-        <div className="min-w-0 flex-1">
-          <div className="text-[14px] font-semibold text-fg-2">{m.label} Runtime</div>
-          <div className="text-[11.5px] text-fg-3">Planned artifact · {m.artifact}</div>
-        </div>
-        <Chip>{comingLabel(os)}</Chip>
+    <>
+      <ArtifactRow title="Windows installer" name={a.name} sha={a.sha256} size={a.size} action={() => beginDownload(a.name, RUNTIME.windows.verify(a))} />
+      <div>
+        <div className="eyebrow mb-1.5">How IT deploys it via {m.vendor}</div>
+        <ol className="space-y-1.5 text-[12.5px] text-fg-2">
+          {m.steps.map((s, i) => (
+            <li key={i} className="flex gap-3">
+              <span className="grid size-5 place-items-center rounded-full bg-surface-3 text-[10.5px] font-semibold shrink-0 tnum">{i + 1}</span>
+              <span>{s}</span>
+            </li>
+          ))}
+        </ol>
       </div>
-      <p className="mt-3 text-[12.5px] text-fg-2 leading-relaxed">{m.note}</p>
-      <dl className="mt-3 space-y-1.5 text-[12px]">
-        <div className="flex gap-3">
-          <dt className="w-[92px] shrink-0 text-fg-3">Enforcement</dt>
-          <dd className="text-fg-2">{m.coverage}</dd>
+      <div>
+        <div className="eyebrow mb-1.5">Silent install</div>
+        <InlineCmd cmd={RUNTIME.windows.shell} />
+        <div className="mt-1.5">
+          <InlineCmd cmd={RUNTIME.enroll(org)} />
         </div>
-        <div className="flex gap-3">
-          <dt className="w-[92px] shrink-0 text-fg-3">Deployment</dt>
-          <dd className="text-fg-2">{RUNTIME.windows.plannedDeployment}</dd>
-        </div>
-        <div className="flex gap-3">
-          <dt className="w-[92px] shrink-0 text-fg-3">Target</dt>
-          <dd className="text-fg-2">{m.eta}</dd>
-        </div>
-      </dl>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button size="sm" disabled>
-          <Download className="size-3.5" /> Not available yet
-        </Button>
-        <a href="#/docs/runtime/install" className="text-[12.5px] text-fg-3 hover:text-fg inline-flex items-center gap-1">
-          <BookOpen className="size-3.5" /> What's planned
-        </a>
       </div>
-    </div>
+      <div>
+        <div className="eyebrow mb-1.5">Verify the artifact</div>
+        <InlineCmd cmd={RUNTIME.windows.verify(a)} />
+      </div>
+      <div className="rounded-xl border border-line bg-surface-2 px-4 py-3 text-[12px] text-fg-2">
+        <div className="font-medium mb-0.5">How it enforces</div>
+        <div className="text-fg-3">The Runtime is a Windows Service under LOCAL SYSTEM. Agents run in {OS_META.windows.coverage}, with NTFS ACEs on the working tree. No kernel driver is installed.</div>
+      </div>
+    </>
   );
 }
 
