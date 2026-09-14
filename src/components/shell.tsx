@@ -2,7 +2,6 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowRight,
   BookOpen,
-  Building2,
   Bot,
   Check,
   ChevronsUpDown,
@@ -341,8 +340,8 @@ const ENVS: { id: "all" | Env; label: string; dot: string; note: string }[] = [
   { id: "development", label: "Development", dot: "bg-[#9db4ff]", note: "laptops and sandboxes" },
 ];
 
-const WS_ICON: Record<WorkspaceId, typeof Bot> = { v2: Rocket, fabric: ShieldCheck, prod: Building2, demo: FlaskConical, fresh: Plus };
-const WS_SHORT: Record<WorkspaceId, string> = { v2: "v2", fabric: "fabric", prod: "production", demo: "demo", fresh: "fresh" };
+const WS_ICON: Record<WorkspaceId, typeof Bot> = { v2: Rocket, fabric: ShieldCheck, fresh: Plus };
+const WS_SHORT: Record<WorkspaceId, string> = { v2: "v2", fabric: "fabric", fresh: "fresh" };
 
 function WorkspaceMenu() {
   const [open, setOpen] = useState(false);
@@ -687,9 +686,6 @@ export function Shell({ current, children, focus }: { current: string; children:
         <div className="fresh-bar flex items-center justify-center gap-2.5 h-9 text-[12px]">
           <span className="prism-swatch size-1.5 rounded-full" />
           Fresh workspace — every number, decision and person here comes from what you do.
-          <button onClick={() => switchWorkspace("demo")} className="ml-1 underline underline-offset-2 font-medium">
-            Back to demo
-          </button>
         </div>
       )}
       <div className="flex flex-1 min-h-0">

@@ -2,7 +2,6 @@ import { useSyncExternalStore } from "react";
 import { AGENTS, METHODS, agentById, type Assurance, type Decision } from "../data/agents";
 import { INITIAL_RULES, ruleSig, type Rule } from "../data/contract";
 import { PEOPLE, personById, type Person } from "../data/people";
-import { REFERENCE_TEMPLATES, referenceState } from "../data/reference";
 import { fabricState, fabricTemplates } from "../data/fabric";
 import type { AdapterKind, LaunchMode } from "../data/profiles";
 import { SCENARIOS, actOf, type Gate, type Scenario } from "../data/scenarios";
@@ -13,7 +12,7 @@ import { TEMPLATES, approvalFrom, approversFor, categoryOf, gateFromAct, mkEvt, 
 export { TEMPLATES, approvalFrom, categoryOf, gateFromAct, genericSignals, spaceOf } from "./traffic";
 
 export type Role = "admin" | "employee";
-export type WorkspaceId = "v2" | "fabric" | "prod" | "demo" | "fresh";
+export type WorkspaceId = "v2" | "fabric" | "fresh";
 export const EMPLOYEE = PEOPLE.dev;
 export const ADMIN = PEOPLE.priya;
 export const NONE: string[] = [];
@@ -35,11 +34,9 @@ export interface WorkspaceMeta {
 export const WORKSPACES: Record<WorkspaceId, WorkspaceMeta> = {
   v2: { id: "v2", label: "Wrapbox v2", kind: "fresh", labs: false, fabric: true, sims: false, tick: 0, blurb: "The real product. Empty until devices enroll and rules are created — data comes from the live Control Plane." },
   fabric: { id: "fabric", label: "Enforcement Fabric — v2", kind: "reference", labs: false, fabric: true, sims: true, tick: 12_000, blurb: "Installed once per device. Every agent on it is discovered, provisioned, confined and credential-brokered — nothing installed per agent." },
-  prod: { id: "prod", label: "Production", kind: "reference", labs: false, fabric: false, sims: false, tick: 16_000, blurb: "A company three months into Wrapbox — the reference for how the product should look and behave." },
-  demo: { id: "demo", label: "Demo", kind: "sandbox", labs: true, fabric: false, sims: false, tick: 2_400, blurb: "Scripted scenarios, a playground and test traffic for explaining and trying every decision path." },
   fresh: { id: "fresh", label: "Fresh workspace", kind: "fresh", labs: true, fabric: false, sims: false, tick: 2_400, blurb: "Completely empty. Start from zero and watch every page fill in." },
 };
-export const WORKSPACE_ORDER: WorkspaceId[] = ["v2", "fabric", "prod", "demo", "fresh"];
+export const WORKSPACE_ORDER: WorkspaceId[] = ["v2", "fabric", "fresh"];
 /** The product ships one workspace. The earlier ones stay reachable for regression only, behind ?workspaces=all. */
 export const ALL_WORKSPACES = typeof location !== "undefined" && new URLSearchParams(location.search).has("workspaces");
 export const VISIBLE_WORKSPACES: WorkspaceId[] = ALL_WORKSPACES ? WORKSPACE_ORDER : ["v2"];
@@ -327,66 +324,6 @@ const DEMO_DEVICES: Device[] = [
   { id: "anjali-win", ownerId: "anjali.v", os: "Windows 11", osLogo: "windows", mdm: "Intune", cli: "—", seen: now - 60 * 60_000, agents: [] },
 ];
 
-function demoState(): State {
-  const connected: State["connected"] = {};
-  for (const a of AGENTS)
-    if (a.connected) {
-      const m = recommended(a.category);
-      connected[a.id] = { method: m.id, assurance: m.assurance, at: now - 1000 * 60 * 60 * 24 * (3 + (a.id.length % 9)) };
-    }
-  const r0 = rng(42);
-  const ctx = { rules: INITIAL_RULES, kill: false, members: DEMO_MEMBERS, allowed: DEMO_ALLOWED, admin: ADMIN.id };
-  const events = Array.from({ length: 64 }, (_, i) => mkEvt(pick(TEMPLATES, connected, r0)!, now - i * 38_000 - Math.floor(r0() * 20_000), "seed", ctx, r0));
-  const mk = (s: Scenario, g: Gate, agentId: string, ago: number, approvedBy: string[] = []) => {
-    const v = evaluate(actOf(g), INITIAL_RULES, categoryOf(agentId));
-    return approvalFrom({ gate: g, agentId, human: s.human, intent: s.prompt, approvers: approversFor(v.approvers, s.human.id, DEMO_GROUPS, ADMIN), quorum: v.quorum, scenarioId: s.id, createdAt: now - ago, approvedBy });
-  };
-  return {
-    workspace: "demo",
-    company: "Wrapbox",
-    domain: "wrapbox.ai",
-    region: "us",
-    idp: "Okta",
-    role: "admin",
-    theme: "light",
-    connected,
-    events,
-    approvals: [
-      mk(SCENARIOS.cli, SCENARIOS.cli.gates[1], "claude-code", 2 * 60_000),
-      mk(SCENARIOS.custom, SCENARIOS.custom.gates[0], "langgraph", 4 * 60_000, ["meera.i"]),
-      mk(SCENARIOS.browser, SCENARIOS.browser.gates[0], "browser-use", 7 * 60_000),
-      mk(SCENARIOS.saas, SCENARIOS.saas.gates[0], "agentforce", 11 * 60_000),
-    ],
-    killSwitch: false,
-    live: true,
-    rules: INITIAL_RULES,
-    published: INITIAL_RULES,
-    version: 14,
-    publishedAt: now - 2 * 60 * 60_000,
-    changelog: [],
-    toasts: [],
-    tour: null,
-    palette: false,
-    requests: [
-      { id: "rq-1", kind: "agent", person: PEOPLE.dev, agentId: "gemini-cli", reason: "Trying Gemini CLI for test generation on the claims service.", status: "pending", at: now - 50 * 60_000 },
-      { id: "rq-2", kind: "exception", person: PEOPLE.arjun, agentId: "codex-cli", action: "shell git push origin main", rule: "git.main", reason: "Hotfix for the checkout outage — CI is green, need it on main in 20 minutes.", status: "pending", at: now - 18 * 60_000 },
-      { id: "rq-3", kind: "agent", person: PEOPLE.sara, agentId: "zapier", reason: "Automate refund follow-up emails.", status: "pending", at: now - 3 * 60 * 60_000 },
-    ],
-    allowed: DEMO_ALLOWED,
-    baseline: { decisions: 18_442, blocked: 684, rewritten: 535 },
-    passkey: null,
-    onboarded: read("wbx-onboarded", { admin: false, employee: false }),
-    groups: DEMO_GROUPS,
-    members: DEMO_MEMBERS,
-    devices: DEMO_DEVICES,
-    envFilter: "all",
-    fleet: [],
-    gateways: [],
-    vault: [],
-    sessions: [],
-    destinations: [],
-  };
-}
 
 function v2State(): State {
   return {
@@ -469,7 +406,7 @@ function loadFresh(): State {
 /* ================= the store ================= */
 /** Workspaces are built on first use: the reference tenant carries two weeks of decisions and is only paid for when opened. */
 const spaces: Partial<Record<WorkspaceId, State>> = {};
-const BUILD: Record<WorkspaceId, () => State> = { v2: v2State, fabric: () => fabricState(), prod: () => referenceState(), demo: demoState, fresh: loadFresh };
+const BUILD: Record<WorkspaceId, () => State> = { v2: v2State, fabric: () => fabricState(), fresh: loadFresh };
 export function space(id: WorkspaceId): State {
   return (spaces[id] ??= BUILD[id]());
 }
@@ -608,7 +545,7 @@ export function setTheme(theme: "light" | "dark") {
 
 export function markOnboarded(role: Role) {
   const onboarded = { ...state.onboarded, [role]: true };
-  if (state.workspace === "demo") write("wbx-onboarded", onboarded);
+  write("wbx-onboarded", onboarded);
   setState({ onboarded });
 }
 
@@ -709,7 +646,7 @@ let timer: number | undefined;
 let lastTick = 0;
 export function tickTraffic(n = 1) {
   const s = getState();
-  const templates = s.workspace === "v2" ? [] : s.workspace === "fabric" ? fabricTemplates(s) : s.workspace === "prod" ? REFERENCE_TEMPLATES : TEMPLATES;
+  const templates = s.workspace === "v2" ? [] : s.workspace === "fabric" ? fabricTemplates(s) : TEMPLATES;
   const ctx = { rules: s.published, kill: s.killSwitch, members: s.members, allowed: s.allowed, admin: adminPerson(s).id, attributeAsIs: WORKSPACES[s.workspace].fabric };
   const evts: Evt[] = [];
   const aps: Approval[] = [];
@@ -728,7 +665,7 @@ export function tickTraffic(n = 1) {
   setState((st) => ({
     events: [...evts, ...st.events].slice(0, RETENTION),
     approvals: [...aps, ...st.approvals],
-    baseline: st.workspace === "demo" ? { ...st.baseline, decisions: st.baseline.decisions + Math.floor(Math.random() * 3) } : st.baseline,
+    baseline: st.baseline,
   }));
   return evts.length;
 }

@@ -1,11 +1,10 @@
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, Building2, Check, FlaskConical, Plus, UserRound } from "lucide-react";
+import { ArrowRight, Check, Plus, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AGENTS, agentById, type Decision } from "../data/agents";
 import { Button, Card, DecisionPill, Logo, cn } from "../components/ui";
 import { go } from "../lib/router";
-import { WORKSPACES, setState, switchWorkspace, useStore, workspaceHasData, workspaceSummary } from "../lib/store";
-import { REFERENCE_LOG_DAYS } from "../data/reference";
+import { WORKSPACES, setState, switchWorkspace, useStore, workspaceHasData } from "../lib/store";
 
 const TICKER: { agent: string; action: string; d: Decision; why: string }[] = [
   { agent: "claude-code", action: "Read .env.production", d: "BLOCK", why: "secrets are never read autonomously" },
@@ -61,8 +60,6 @@ export function Start() {
   const workspace = useStore((s) => s.workspace);
   const s = useStore((x) => x);
   const freshHasData = workspaceHasData("fresh");
-  const demo = workspaceSummary("demo");
-  const prod = workspaceSummary("prod");
   const meta = WORKSPACES[workspace];
   const p50 = useMemo(() => {
     const xs = s.events.map((e) => e.latency).sort((a, b) => a - b);
@@ -86,12 +83,6 @@ export function Start() {
     setState({ role });
     go(role === "admin" ? "/onboarding/admin" : "/onboarding/employee");
   };
-  const open = (id: "prod" | "demo") => {
-    switchWorkspace(id);
-    setState({ role: "admin" });
-    go("/");
-  };
-
   return (
     <div className="mx-auto max-w-[1180px] px-4 lg:px-8 py-8">
       <section
@@ -124,9 +115,6 @@ export function Start() {
               <button onClick={() => startFresh("admin")} className="inline-flex items-center gap-2 h-11 rounded-full bg-[#1b0f33] px-5 text-[14px] font-semibold text-white shadow-[0_10px_24px_-10px_rgba(27,15,51,0.8)] hover:bg-[#2a1850] transition-colors">
                 <Plus className="size-4" /> Build from zero
               </button>
-              <button onClick={() => open("prod")} className="inline-flex items-center gap-2 h-11 rounded-full bg-[#1b0f33]/20 ring-1 ring-white/55 backdrop-blur-md px-5 text-[14px] font-semibold text-white hover:bg-[#1b0f33]/30 transition-colors">
-                Explore a live company <ArrowRight className="size-4" />
-              </button>
             </div>
           </div>
           <div className="parallax-mouse rounded-2xl bg-[#160a2e]/40 ring-1 ring-white/25 p-4 backdrop-blur-xl shadow-[0_20px_50px_-20px_rgba(10,4,30,0.7)]" style={{ ["--depth" as string]: 14 }}>
@@ -142,25 +130,6 @@ export function Start() {
       </section>
 
       <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <PathCard
-          icon={<Building2 className="size-4.5" />}
-          tag={`${prod.company} · production`}
-          title="See it fully deployed"
-          body={`${prod.members} people, ${prod.agents} connected agents and a contract at v${prod.version}. ${prod.decisions.toLocaleString("en-US")} decisions in the last ${REFERENCE_LOG_DAYS} days, ${prod.approvals} approvals waiting, ${prod.devices} laptops reporting.`}
-          cta="Open the workspace"
-          active={workspace === "prod"}
-          primary
-          onClick={() => open("prod")}
-        />
-        <PathCard
-          icon={<FlaskConical className="size-4.5" />}
-          tag={`${demo.company} · demo`}
-          title="Try every decision path"
-          body={`Scripted scenarios for each agent platform, a playground for any action, and test traffic — ${demo.agents} agents connected, contract v${demo.version}. Poke anything.`}
-          cta="Open the demo"
-          active={workspace === "demo"}
-          onClick={() => open("demo")}
-        />
         <PathCard
           icon={<Plus className="size-4.5" />}
           tag={freshHasData ? "Fresh workspace · in progress" : "Fresh workspace · empty"}
