@@ -158,8 +158,20 @@ export async function cmdCheck(args: string[]): Promise<never> {
     }
 
     // 4) fresh cache: the one shared matcher decides.
+    //
+    // Normalise the tool input first. Different agent tools name the same thing
+    // differently — Read/Edit/Write send `file_path`, Grep/Glob send `path`,
+    // NotebookEdit sends `notebook_path`. A rule written against `tool_input.path`
+    // must catch a secret file no matter which tool touches it, so we synthesise
+    // a canonical `path` (without discarding the original fields). Without this,
+    // "block .env" silently misses every Read — the exact bug this fixes.
+    const normalizedInput: Record<string, unknown> = { ...toolInput };
+    if (typeof normalizedInput.path !== "string") {
+      const alt = normalizedInput.file_path ?? normalizedInput.notebook_path;
+      if (typeof alt === "string") normalizedInput.path = alt;
+    }
     const rules = policy.applyProjectFilter(cached.rules, project);
-    const decision = policy.evaluate({ tool_name: toolName, tool_input: toolInput, project_id: project }, rules);
+    const decision = policy.evaluate({ tool_name: toolName, tool_input: normalizedInput, project_id: project }, rules);
     const matched = decision.matched_rule_id ? cached.rules.find((r) => r.id === decision.matched_rule_id) : undefined;
     const reason = matched ? `Wrapbox: ${matched.name}` : `Wrapbox: ${decision.reason}`;
     const map: Record<string, PermissionDecision> = { allow: "allow", block: "deny", review: "ask" };
