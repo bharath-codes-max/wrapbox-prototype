@@ -103,7 +103,7 @@ function Nav() {
         <a href="#/landing" onClick={(e) => (e.preventDefault(), window.scrollTo({ top: 0, behavior: "smooth" }))} aria-label="Wrapbox home">
           <WrapboxLockup size={19} />
         </a>
-        <nav className="hidden md:flex items-center gap-6 text-[14px] text-fg-2">
+        <nav className="flex items-center gap-6 text-[14px] text-fg-2">
           {[
             ["Product", "product"],
             ["How it works", "decide"],
@@ -116,14 +116,6 @@ function Nav() {
             </button>
           ))}
         </nav>
-        {/* App entry points are deliberately not linked from the public landing
-            page yet (no public login flow to send visitors into). The app is
-            still reachable directly at /login for internal testing. */}
-        <div className="ml-auto flex items-center gap-2">
-          <span className="inline-flex h-9 items-center rounded-full bg-surface-2 px-4 text-[13.5px] font-medium text-fg-3">
-            Coming soon
-          </span>
-        </div>
       </Container>
     </header>
   );
@@ -228,7 +220,6 @@ function Hero() {
               <button onClick={() => scrollTo("decide")} className="inline-flex h-11 items-center gap-2 rounded-full border border-line bg-surface px-5 text-[14.5px] font-medium text-fg hover:border-line-strong">
                 See how it works
               </button>
-              <span className="text-[13px] text-fg-3">Sign-up opens soon</span>
             </div>
           </motion.div>
         </motion.div>
@@ -748,9 +739,6 @@ function Pricing() {
                     {price ? (annual ? " · billed yearly" : " · billed monthly") : ""}
                   </div>
                   <p className={cn("mt-4 text-[13.5px] leading-relaxed", p.popular ? "text-white/80" : "text-fg-2")}>{p.blurb}</p>
-                  <div className={cn("mt-5 inline-flex h-10 items-center justify-center gap-1.5 rounded-full text-[13.5px] font-medium", p.popular ? "bg-white/15 text-white/70" : "bg-surface-2 text-fg-3")}>
-                    {p.name === "Enterprise" ? "Talk to us — soon" : "Coming soon"}
-                  </div>
                   <ul className={cn("mt-6 space-y-2.5 border-t pt-5 text-[13px]", p.popular ? "border-white/15 text-white/85" : "border-line text-fg-2")}>
                     {p.features.map((f, k) => (
                       <li key={f} className="flex gap-2">
@@ -831,12 +819,7 @@ function FinalCta() {
               <h2 className="text-[40px] sm:text-[56px] font-medium leading-[1.02] tracking-[-0.045em] [text-shadow:0_2px_24px_rgba(90,20,40,0.25)]">
                 Put your agents on a <span className="text-[#1b0f33] [text-shadow:none]">permit</span> today.
               </h2>
-              <p className="mt-4 text-[17px] font-medium text-white/90">Connect your first agent in minutes. Watch every action get a decision, a reason and a signature.</p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <span className="inline-flex h-11 items-center gap-2 rounded-full bg-[#1b0f33]/20 ring-1 ring-white/55 backdrop-blur-md px-5 text-[14.5px] font-semibold text-white">
-                  Sign-up opens soon
-                </span>
-              </div>
+              <p className="mt-4 text-[17px] font-medium text-white/90">Every risky action gets a decision, a reason and a signature — before it runs.</p>
             </div>
           </Backdrop>
         </motion.div>
@@ -903,7 +886,7 @@ export function Landing() {
 
       <FeatureRow
         id="product"
-        head={<SectionHead eyebrow="Intent contract" title="Write the rules once. Every agent follows them." body="One contract covers every agent vendor. Write it in plain YAML or the rule builder, replay it against past traffic, and publish — hooks, gateways and SDKs pick it up in seconds." cta="See the contract" onCta={() => go("/signup")} />}
+        head={<SectionHead eyebrow="Intent contract" title="Write the rules once. Every agent follows them." body="One contract covers every agent vendor. Write it in plain YAML or the rule builder, replay it against past traffic, and publish — hooks, gateways and SDKs pick it up in seconds." />}
       >
         <ParallaxShot src={shotContract} align="left">
           <YamlTyper />
