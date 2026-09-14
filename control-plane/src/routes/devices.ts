@@ -1,16 +1,16 @@
 /**
  * Device registration and management.
- * POST /v1/devices/enroll  — a new machine registers itself
- * POST /v1/devices/heartbeat — daemon pings every 60s
+ * POST /v1/devices/enroll  — a new machine registers itself (requires an enrollment token)
+ * POST /v1/devices/heartbeat — daemon pings every 60s (optional state report body)
  * GET  /v1/devices         — admin lists all devices in the org
  */
 
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createPublicKey, randomBytes } from "node:crypto";
 import { client } from "../db/index.js";
-import { resolveAdmin } from "../auth.js";
+import { resolveAdmin, resolveDevice } from "../auth.js";
 
 function hashKey(key: string): string {
   return createHash("sha256").update(key).digest("hex");
@@ -18,11 +18,30 @@ function hashKey(key: string): string {
 
 const EnrollBody = z.object({
   org_id: z.string(),
+  enroll_token: z.string().min(1),
   hostname: z.string().min(1),
   os: z.string().min(1),
   arch: z.string().optional(),
   owner_email: z.string().email().optional(),
+  public_key: z.string().min(1),
 });
+
+const HeartbeatBody = z.object({
+  daemon_version: z.string().optional(),
+  ruleset_pulled_at: z.string().optional(),
+  chain_head_seq: z.number().int().optional(),
+});
+
+/** Accept only an SPKI PEM that parses as an EC P-256 public key. */
+function validateP256PublicKey(pem: string): boolean {
+  try {
+    const key = createPublicKey(pem);
+    return key.type === "public" && key.asymmetricKeyType === "ec" &&
+      key.asymmetricKeyDetails?.namedCurve === "prime256v1";
+  } catch {
+    return false;
+  }
+}
 
 export async function devicesRoutes(app: FastifyInstance) {
   // Enroll a new device — returns the API key (shown once, never stored in plain text)
@@ -31,40 +50,67 @@ export async function devicesRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: "Invalid body", details: parsed.error.flatten() });
 
     const d = parsed.data;
+    if (!validateP256PublicKey(d.public_key)) {
+      return reply.code(400).send({ error: "public_key must be an EC P-256 public key in SPKI PEM format" });
+    }
+
+    // Enrollment token: exists (by hash), not expired, not used, org matches.
+    // One generic 401 for every failure mode — never help an attacker distinguish.
+    const tokenHash = hashKey(d.enroll_token);
+    const invalidToken = () => reply.code(401).send({ error: "Invalid or expired enrollment token" });
+
+    const { rows: tokenRows } = await client().execute({
+      sql: "SELECT org_id, expires_at, used_at FROM enroll_tokens WHERE token_hash = ?",
+      args: [tokenHash],
+    });
+    if (tokenRows.length === 0) return invalidToken();
+    const t = tokenRows[0];
+    if (t.used_at != null) return invalidToken();
+    if (String(t.org_id) !== d.org_id) return invalidToken();
+    if (new Date(String(t.expires_at)).getTime() <= Date.now()) return invalidToken();
+
+    // Mark used atomically — a concurrent enroll with the same token loses here.
+    const used = await client().execute({
+      sql: "UPDATE enroll_tokens SET used_at = datetime('now') WHERE token_hash = ? AND used_at IS NULL",
+      args: [tokenHash],
+    });
+    if (used.rowsAffected === 0) return invalidToken();
+
     const id = nanoid();
     const apiKey = `wbx_${randomBytes(32).toString("hex")}`;
     const keyHash = hashKey(apiKey);
+    const keyId = `dk_${hashKey(d.public_key).slice(0, 16)}`;
 
     await client().execute({
-      sql: `INSERT INTO devices (id, org_id, hostname, os, arch, owner_email, api_key_hash, state, last_heartbeat)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'healthy', datetime('now'))`,
-      args: [id, d.org_id, d.hostname, d.os, d.arch ?? null, d.owner_email ?? null, keyHash],
+      sql: `INSERT INTO devices (id, org_id, hostname, os, arch, owner_email, api_key_hash, public_key, key_id, state, last_heartbeat)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'healthy', datetime('now'))`,
+      args: [id, d.org_id, d.hostname, d.os, d.arch ?? null, d.owner_email ?? null, keyHash, d.public_key, keyId],
     });
 
     return reply.code(201).send({
       id,
       api_key: apiKey,
+      key_id: keyId,
       message: "Save this API key — it will not be shown again.",
     });
   });
 
-  // Heartbeat
+  // Heartbeat — optional body reports daemon state
   app.post("/v1/devices/heartbeat", async (req, reply) => {
-    const authHeader = req.headers.authorization;
-    const rawKey = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    if (!rawKey) return reply.code(401).send({ error: "Missing API key" });
+    const device = await resolveDevice(req);
+    if (!device) return reply.code(401).send({ error: "Invalid or missing API key" });
 
-    const keyHash = hashKey(rawKey);
-    const { rows } = await client().execute({
-      sql: "SELECT id, org_id, state FROM devices WHERE api_key_hash = ?",
-      args: [keyHash],
-    });
-    if (rows.length === 0) return reply.code(401).send({ error: "Unknown device" });
+    const parsed = HeartbeatBody.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid body", details: parsed.error.flatten() });
+    const b = parsed.data;
 
-    const device = rows[0];
     await client().execute({
-      sql: "UPDATE devices SET last_heartbeat = datetime('now'), state = 'healthy' WHERE id = ?",
-      args: [device.id],
+      sql: `UPDATE devices SET last_heartbeat = datetime('now'), state = 'healthy',
+              daemon_version = COALESCE(?, daemon_version),
+              ruleset_pulled_at = COALESCE(?, ruleset_pulled_at),
+              chain_head_seq = COALESCE(?, chain_head_seq)
+            WHERE id = ?`,
+      args: [b.daemon_version ?? null, b.ruleset_pulled_at ?? null, b.chain_head_seq ?? null, device.id],
     });
 
     return reply.send({ status: "ok", device_id: device.id });
@@ -78,7 +124,7 @@ export async function devicesRoutes(app: FastifyInstance) {
     if (!org_id) return reply.code(400).send({ error: "org_id required" });
 
     const { rows } = await client().execute({
-      sql: "SELECT id, hostname, os, arch, owner_email, state, last_heartbeat, created_at FROM devices WHERE org_id = ? ORDER BY created_at DESC",
+      sql: "SELECT id, hostname, os, arch, owner_email, state, last_heartbeat, key_id, daemon_version, ruleset_pulled_at, chain_head_seq, created_at FROM devices WHERE org_id = ? ORDER BY created_at DESC",
       args: [org_id],
     });
 

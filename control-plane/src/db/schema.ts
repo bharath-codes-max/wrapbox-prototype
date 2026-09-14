@@ -83,4 +83,36 @@ export const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_devices_org ON devices(org_id)`,
   `CREATE INDEX IF NOT EXISTS idx_rules_org ON rules(org_id, active)`,
   `CREATE INDEX IF NOT EXISTS idx_agents_device ON agents(device_id)`,
+
+  // 012+: device signing keys + daemon state reported via heartbeat
+  `ALTER TABLE devices ADD COLUMN public_key TEXT`,
+  `ALTER TABLE devices ADD COLUMN key_id TEXT`,
+  `ALTER TABLE devices ADD COLUMN daemon_version TEXT`,
+  `ALTER TABLE devices ADD COLUMN ruleset_pulled_at TEXT`,
+  `ALTER TABLE devices ADD COLUMN chain_head_seq INTEGER`,
+
+  // Single-use enrollment tokens (stored hashed, never in plain text)
+  `CREATE TABLE IF NOT EXISTS enroll_tokens (
+    token_hash TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL REFERENCES orgs(id),
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+
+  // Signed receipts — the tamper-evident evidence chain
+  `CREATE TABLE IF NOT EXISTS receipts (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL,
+    device_id TEXT NOT NULL REFERENCES devices(id),
+    seq INTEGER NOT NULL,
+    ts TEXT NOT NULL,
+    body_json TEXT NOT NULL,
+    sig TEXT NOT NULL,
+    prev TEXT NOT NULL,
+    verified INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_receipts_device_seq ON receipts(device_id, seq)`,
 ];

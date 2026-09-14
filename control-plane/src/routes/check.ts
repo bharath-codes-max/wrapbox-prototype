@@ -8,7 +8,7 @@ import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { client } from "../db/index.js";
-import { evaluate, type Rule } from "../engine/evaluate.js";
+import { evaluate, type Rule } from "@wrapbox/policy-core";
 import { resolveDevice } from "../auth.js";
 
 const CheckBody = z.object({
@@ -28,18 +28,18 @@ export async function checkRoute(app: FastifyInstance) {
       return reply.code(401).send({ error: "Invalid or missing API key" });
     }
 
-    // Update heartbeat
-    await client().execute({
-      sql: "UPDATE devices SET last_heartbeat = datetime('now'), state = 'healthy' WHERE id = ?",
-      args: [device.id],
-    });
-
     // Parse body
     const parsed = CheckBody.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "Invalid request body", details: parsed.error.flatten() });
     }
     const call = parsed.data;
+
+    // Update heartbeat — only after the request proved well-formed
+    await client().execute({
+      sql: "UPDATE devices SET last_heartbeat = datetime('now'), state = 'healthy' WHERE id = ?",
+      args: [device.id],
+    });
 
     // Load active rules for this org, optionally filtered by project
     const { rows } = await client().execute({

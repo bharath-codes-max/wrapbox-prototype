@@ -12,6 +12,7 @@
     "start": "node dist/cli.js"
   },
   "dependencies": {
+    "@wrapbox/policy-core": "file:../packages/policy-core",
     "nanoid": "^5.1.0"
   },
   "devDependencies": {

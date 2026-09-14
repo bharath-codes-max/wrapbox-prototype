@@ -32,17 +32,17 @@ export interface Decision {
 
 // --- Condition matching ---
 
-type Op = "equals" | "contains" | "not_contains" | "starts_with" | "regex" | "lt" | "gt" | "lte" | "gte";
+export type Op = "equals" | "contains" | "not_contains" | "starts_with" | "regex" | "lt" | "gt" | "lte" | "gte";
 
-interface SingleCondition {
+export interface SingleCondition {
   field: string;
   op: Op;
   value: string;
 }
 
-type Condition = SingleCondition | SingleCondition[];
+export type Condition = SingleCondition | SingleCondition[];
 
-function readField(call: ToolCall, path: string): unknown {
+export function readField(call: ToolCall, path: string): unknown {
   const parts = path.split(".");
   let current: unknown = {
     tool_name: call.tool_name,
@@ -85,7 +85,7 @@ function matchesSingle(call: ToolCall, cond: SingleCondition): boolean {
   }
 }
 
-function matchesCondition(call: ToolCall, condition: Condition): boolean {
+export function matchesCondition(call: ToolCall, condition: Condition): boolean {
   if (Array.isArray(condition)) {
     // AND: all must match
     return condition.every((c) => matchesSingle(call, c));
@@ -93,7 +93,7 @@ function matchesCondition(call: ToolCall, condition: Condition): boolean {
   return matchesSingle(call, condition);
 }
 
-function parseCondition(raw: string | null): Condition | null {
+export function parseCondition(raw: string | null): Condition | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
@@ -139,4 +139,15 @@ export function evaluate(call: ToolCall, rules: Array<Rule & { condition_json?: 
     reason: "No matching rule — blocked by default (fail closed)",
     matched_rule_id: null,
   };
+}
+
+/**
+ * Keep rules that are org-wide (no project) or scoped to the given project.
+ * Mirrors the control-plane SQL: (project_id IS NULL OR project_id = ?).
+ */
+export function applyProjectFilter<T extends { project_id?: string | null }>(
+  rules: T[],
+  project_id?: string | null
+): T[] {
+  return rules.filter((r) => r.project_id == null || r.project_id === project_id);
 }

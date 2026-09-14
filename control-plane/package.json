@@ -10,6 +10,7 @@
     "db:migrate": "tsx src/db/migrate.ts"
   },
   "dependencies": {
+    "@wrapbox/policy-core": "file:../packages/policy-core",
     "fastify": "^5.2.0",
     "@libsql/client": "^0.14.0",
     "zod": "^3.24.0",

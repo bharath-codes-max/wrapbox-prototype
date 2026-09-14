@@ -10,6 +10,7 @@ import { checkRoute } from "./routes/check.js";
 import { rulesRoutes } from "./routes/rules.js";
 import { devicesRoutes } from "./routes/devices.js";
 import { evidenceRoutes } from "./routes/evidence.js";
+import { enrollTokensRoutes } from "./routes/enroll-tokens.js";
 
 const PORT = Number(process.env.PORT) || 4100;
 
@@ -24,6 +25,7 @@ await checkRoute(app);
 await rulesRoutes(app);
 await devicesRoutes(app);
 await evidenceRoutes(app);
+await enrollTokensRoutes(app);
 
 // Initialize DB (runs migrations)
 await initDb();

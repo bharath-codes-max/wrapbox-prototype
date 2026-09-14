@@ -1,74 +1,83 @@
 /**
- * wrapboxd configuration.
- * Reads from ~/.wrapbox/config.json or environment variables.
+ * wrapboxd configuration and on-disk state layout.
+ *
+ * Everything lives under WRAPBOX_HOME (default ~/.wrapbox). The env override
+ * exists for testing and multi-instance runs; the PRODUCTION layout
+ * (/Library/Application Support/Wrapbox, root:wheel 0600, no env overrides)
+ * is documented in docs, not implemented here.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
+export const HOME_DIR = process.env.WRAPBOX_HOME || path.join(os.homedir(), ".wrapbox");
+
+/** Ruleset freshness window (hours). Older caches put enforcement in degraded mode. */
+export const FRESH_HOURS = 24;
+
+export const PATHS = {
+  home: HOME_DIR,
+  configFile: path.join(HOME_DIR, "config.json"),
+  keysDir: path.join(HOME_DIR, "keys"),
+  deviceKey: path.join(HOME_DIR, "keys", "device.key"),
+  devicePub: path.join(HOME_DIR, "keys", "device.pub"),
+  cacheDir: path.join(HOME_DIR, "cache"),
+  rulesCache: path.join(HOME_DIR, "cache", "rules.json"),
+  stateFile: path.join(HOME_DIR, "state.json"),
+  spoolFile: path.join(HOME_DIR, "receipts.jsonl"),
+  sentFile: path.join(HOME_DIR, "receipts.sent"),
+  profilesDir: path.join(HOME_DIR, "profiles"),
+} as const;
+
 export interface Config {
-  /** Control Plane URL */
+  /** Control Plane URL — pinned at enroll. After enrollment, env WRAPBOX_SERVER
+   *  is IGNORED (trust pinning: a compromised shell env must not be able to
+   *  redirect the device to a rogue control plane). */
   server: string;
-  /** Device API key (from enrollment) */
-  apiKey: string;
-  /** How often to pull rules (seconds) */
+  org_id: string;
+  device_id: string;
+  api_key: string;
+  key_id: string;
+  /** How often the daemon pulls rules (seconds) */
   pullInterval: number;
-  /** How often to heartbeat (seconds) */
+  /** How often the daemon heartbeats (seconds) */
   heartbeatInterval: number;
-  /** Local cache directory */
-  cacheDir: string;
 }
 
-const CONFIG_DIR = path.join(os.homedir(), ".wrapbox");
-const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
-
-const DEFAULTS: Partial<Config> = {
-  server: "http://localhost:4100",
-  pullInterval: 60,
-  heartbeatInterval: 60,
-  cacheDir: path.join(CONFIG_DIR, "cache"),
-};
-
-export function loadConfig(): Config {
-  let fileConfig: Partial<Config> = {};
-
-  if (fs.existsSync(CONFIG_FILE)) {
-    try {
-      fileConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
-    } catch {
-      console.error(`⚠ Could not parse ${CONFIG_FILE}, using defaults`);
-    }
+/** Returns null when the device is not enrolled. Callers decide what
+ *  fail-closed means for their path — no process.exit here. */
+export function loadConfig(): Config | null {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(PATHS.configFile, "utf-8");
+  } catch {
+    return null;
   }
-
-  const config: Config = {
-    server: process.env.WRAPBOX_SERVER || fileConfig.server || DEFAULTS.server!,
-    apiKey: process.env.WRAPBOX_API_KEY || fileConfig.apiKey || "",
-    pullInterval: Number(process.env.WRAPBOX_PULL_INTERVAL) || fileConfig.pullInterval || DEFAULTS.pullInterval!,
-    heartbeatInterval: Number(process.env.WRAPBOX_HEARTBEAT_INTERVAL) || fileConfig.heartbeatInterval || DEFAULTS.heartbeatInterval!,
-    cacheDir: fileConfig.cacheDir || DEFAULTS.cacheDir!,
+  let parsed: Partial<Config>;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed.server || !parsed.device_id || !parsed.api_key || !parsed.key_id) return null;
+  return {
+    server: parsed.server,
+    org_id: parsed.org_id ?? "",
+    device_id: parsed.device_id,
+    api_key: parsed.api_key,
+    key_id: parsed.key_id,
+    pullInterval: parsed.pullInterval ?? 60,
+    heartbeatInterval: parsed.heartbeatInterval ?? 30,
   };
-
-  if (!config.apiKey) {
-    console.error("✖ No API key. Run: wrapboxd enroll --server <url> --org <org_id>");
-    process.exit(1);
-  }
-
-  // Ensure cache dir exists
-  fs.mkdirSync(config.cacheDir, { recursive: true });
-
-  return config;
 }
 
-export function saveConfig(partial: Partial<Config>) {
-  fs.mkdirSync(CONFIG_DIR, { recursive: true });
+export function saveConfig(cfg: Config): void {
+  fs.mkdirSync(HOME_DIR, { recursive: true });
+  fs.writeFileSync(PATHS.configFile, JSON.stringify(cfg, null, 2) + "\n", { mode: 0o600 });
+  fs.chmodSync(PATHS.configFile, 0o600); // writeFileSync mode is ignored if the file already exists
+}
 
-  let existing: Partial<Config> = {};
-  if (fs.existsSync(CONFIG_FILE)) {
-    try { existing = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8")); } catch {}
-  }
-
-  const merged = { ...existing, ...partial };
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(merged, null, 2));
-  console.log(`✔ Config saved to ${CONFIG_FILE}`);
+export function configExists(): boolean {
+  return fs.existsSync(PATHS.configFile);
 }

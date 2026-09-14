@@ -81,7 +81,7 @@ export async function rulesRoutes(app: FastifyInstance) {
 
     const updates = parsed.data;
     const sets: string[] = [];
-    const args: unknown[] = [];
+    const args: (string | number | null)[] = [];
 
     if (updates.name !== undefined) { sets.push("name = ?"); args.push(updates.name); }
     if (updates.description !== undefined) { sets.push("description = ?"); args.push(updates.description); }
