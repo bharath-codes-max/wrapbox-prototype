@@ -158,6 +158,10 @@ export function Overview() {
   const connected = useStore((s) => s.connected);
   const kill = useStore((s) => s.killSwitch);
   const live = useStore((s) => s.live);
+  // v2 is the live Control-Plane-backed workspace. The CP is read-only (cp-api.ts issues GET only) and has no
+  // kill-switch or approval concept, so controls that would write to a device must be inert and honestly labelled
+  // here; fabric/fresh drive the local evaluator, where those controls genuinely do what the copy says.
+  const cpBacked = workspace === "v2";
   const [filter, setFilter] = useState<"all" | Decision>("all");
   const [open, setOpen] = useState<Evt | null>(null);
   const account = useAccount();
@@ -330,22 +334,35 @@ export function Overview() {
               </span>
               <div className="flex-1 min-w-0">
                 <div className="text-[14px] font-semibold">Org kill switch</div>
-                <div className="text-[12.5px] text-fg-3 mt-0.5">{kill ? "Every agent action is being denied right now." : "Instantly deny every agent action, across every vendor."}</div>
+                <div className="text-[12.5px] text-fg-3 mt-0.5">
+                  {cpBacked
+                    ? "Not available on this Control Plane yet — this build only reads from it. Nothing here reaches your enrolled devices."
+                    : kill
+                      ? "Every action this workspace evaluates is denied right now."
+                      : "Simulated: deny every agent action in this workspace."}
+                </div>
               </div>
-              <Toggle
-                on={kill}
-                tone="block"
-                label="Kill switch"
-                onChange={(v) => {
-                  setState({ killSwitch: v });
-                  toast(v ? "Kill switch engaged" : "Kill switch released", v ? "All connected agents now receive BLOCK." : `Decisions follow contract v${getState().version} again.`, v ? "block" : "allow");
-                }}
-              />
+              {cpBacked ? (
+                // No write path to the CP in v2 — render the control inert rather than imply an org-wide stop it cannot perform.
+                <span className="pointer-events-none opacity-40">
+                  <Toggle on={false} tone="block" label="Kill switch — not available on this Control Plane" onChange={() => {}} />
+                </span>
+              ) : (
+                <Toggle
+                  on={kill}
+                  tone="block"
+                  label="Kill switch"
+                  onChange={(v) => {
+                    setState({ killSwitch: v });
+                    toast(v ? "Simulated kill switch engaged" : "Kill switch released", v ? "Decisions in this workspace now return BLOCK." : "Decisions follow the published contract again.", v ? "block" : "allow");
+                  }}
+                />
+              )}
             </div>
           </Card>
 
           <Card className="overflow-hidden">
-            <CardHead title="Waiting for a human" sub="Signed approvals, bound to exact arguments" right={<Button size="sm" variant="ghost" onClick={() => go("/approvals")}>All <ArrowRight className="size-3" /></Button>} />
+            <CardHead title="Waiting for a human" sub={cpBacked ? "Review rules stop the agent and ask its operator. Signed, quorum-bound approvals are not on this Control Plane yet." : "Signed approvals, bound to exact arguments"} right={<Button size="sm" variant="ghost" onClick={() => go("/approvals")}>All <ArrowRight className="size-3" /></Button>} />
             <div className="border-t border-line">
               {pending.slice(0, 4).map((a) => {
                 const ag = agentById(a.agentId);
@@ -366,7 +383,7 @@ export function Overview() {
                   </a>
                 );
               })}
-              {!pending.length && <div className="px-5 py-6 text-[12.5px] text-fg-3">{ws.labs ? "Nothing waiting. Run a happy flow to create one." : "Nothing waiting. REVIEW decisions land here the moment an agent hits one."}</div>}
+              {!pending.length && <div className="px-5 py-6 text-[12.5px] text-fg-3">{cpBacked ? "Nothing waiting. Review decisions are answered at the agent's own terminal today — they do not queue here yet." : ws.labs ? "Nothing waiting. Run a happy flow to create one." : "Nothing waiting. REVIEW decisions land here the moment an agent hits one."}</div>}
             </div>
           </Card>
 

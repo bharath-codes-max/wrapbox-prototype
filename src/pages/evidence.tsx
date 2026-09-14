@@ -27,8 +27,21 @@ function EvidenceBody({ e }: { e: Evt }) {
   const p = personById(e.human);
   const device = useDeviceOf(e);
   const approvers = (e.approvers ?? []).map((id) => personById(id)).filter(Boolean);
+  // A receipt-derived (live) event carries the enforcement point and the raw
+  // effect the runtime recorded. tamper/violation both collapse to a BLOCK
+  // decision but are NOT policy denials, so the Outcome/Permit rows describe the
+  // real effect rather than "Effect never executed". Both fall back to the
+  // decision-based text when the field is absent (simulated workspaces).
+  const enforcement = typeof e.act?.ctx?.enforcement === "string" ? (e.act.ctx.enforcement as string) : "";
+  const receiptEffect = typeof e.act?.ctx?.receiptEffect === "string" ? (e.act.ctx.receiptEffect as string) : undefined;
+  const live = e.source === "live";
   const chain: { label: string; value: React.ReactNode; tone?: string }[] = [
-    { label: "Human", value: p ? <span className="flex items-center gap-2"><Avatar p={p} size={20} />{p.name} <span className="text-fg-3">· {p.role}</span></span> : e.human },
+    // Receipts carry no human identity, so the Human link only appears when a
+    // person is actually attributed (simulated workspaces) — never as a blank row
+    // implying an identity the record does not hold.
+    ...(p || e.human
+      ? [{ label: "Human", value: p ? <span className="flex items-center gap-2"><Avatar p={p} size={20} />{p.name} <span className="text-fg-3">· {p.role}</span></span> : e.human }]
+      : []),
     { label: "Agent", value: <span className="flex items-center gap-2"><Logo name={a.logo} bleed={a.bleed} size={20} rounded="rounded" />{a.name}</span> },
     ...(device
       ? [{ label: "Device", value: <span className="flex items-center gap-2"><Logo name={device.osLogo} size={20} rounded="rounded" /><span className="font-mono text-[12px]">{device.hostname}</span> <span className="text-fg-3">· {device.os}</span></span> }]
@@ -40,13 +53,28 @@ function EvidenceBody({ e }: { e: Evt }) {
     ...(e.decision === "REVIEW" || approvers.length
       ? [{ label: "Approver", value: approvers.length ? approvers.map((x) => x!.name).join(" + ") : <span className="text-review">waiting for a human</span> }]
       : []),
-    { label: "Decision", value: <span className="flex items-center gap-2"><DecisionPill d={e.decision} size="sm" /><span className="font-mono text-[12px] text-fg-3">{e.latency > 0 ? `${e.latency} ms · ` : ""}{e.env}</span>{e.observed && <span className="text-[11.5px] text-review">observe mode: would {e.observed}</span>}</span> },
+    // A live receipt carries no environment (the runtime never records one), so
+    // show the real enforcement point instead of an invented "production".
+    { label: "Decision", value: <span className="flex items-center gap-2"><DecisionPill d={e.decision} size="sm" /><span className="font-mono text-[12px] text-fg-3">{e.latency > 0 ? `${e.latency} ms · ` : ""}{live ? `${enforcement ? `enforced by ${enforcement}` : "enforcement not reported"} · environment not reported` : e.env}</span>{e.observed && <span className="text-[11.5px] text-review">observe mode: would {e.observed}</span>}</span> },
     // Only describe a permit that exists. An allow with no permit means none was
     // minted — saying "auto-minted, 60s" would invent a control that never ran.
-    { label: "Permit", value: e.permit ? <span className="font-mono text-[12px] text-accent">{e.permit} · verified · used once</span> : <span className="text-fg-3">{e.decision === "BLOCK" ? "none — denied before execution" : e.decision === "REVIEW" ? "pending approval" : "none minted for this decision"}</span> },
+    // tamper/violation are not policy decisions, so no permit is minted for them.
+    { label: "Permit", value:
+      receiptEffect === "tamper" ? <span className="text-fg-3">none — this is a tamper record, not a policy decision</span>
+      : receiptEffect === "violation" ? <span className="text-fg-3">none — no permit is minted for a sandbox denial</span>
+      : e.permit ? <span className="font-mono text-[12px] text-accent">{e.permit} · verified · used once</span>
+      : <span className="text-fg-3">{e.decision === "BLOCK" ? "none — denied before execution" : e.decision === "REVIEW" ? "pending approval" : "none minted for this decision"}</span> },
     // Wrapbox observes its own decision, not the outcome of the action it let
-    // through: "Executed once" would assert a completion nothing reported.
-    { label: "Outcome", value: e.decision === "BLOCK" ? <span className="text-block font-medium">Effect never executed</span> : e.decision === "REVIEW" ? <span className="text-review font-medium">Paused</span> : e.decision === "CONSTRAIN" ? <span className="text-constrain font-medium">Safer variant allowed to proceed</span> : <span className="text-allow font-medium">Allowed to proceed</span> },
+    // through: "Executed once" would assert a completion nothing reported. A
+    // tamper receipt did NOT block anything; a kernel violation was denied by the
+    // sandbox after the fact — neither is "Effect never executed".
+    { label: "Outcome", value:
+      receiptEffect === "tamper" ? <span className="text-review font-medium">Enforcement config was modified and restored — this action was not blocked</span>
+      : receiptEffect === "violation" ? <span className="text-block font-medium">Denied by the kernel sandbox — recorded from the system log after the fact</span>
+      : e.decision === "BLOCK" ? <span className="text-block font-medium">{receiptEffect === "block" ? "Refused before the tool ran" : "Effect never executed"}</span>
+      : e.decision === "REVIEW" ? <span className="text-review font-medium">Paused</span>
+      : e.decision === "CONSTRAIN" ? <span className="text-constrain font-medium">Safer variant allowed to proceed</span>
+      : <span className="text-allow font-medium">Allowed to proceed</span> },
   ];
   return (
     <div className="p-5 space-y-5">
@@ -66,7 +94,11 @@ function EvidenceBody({ e }: { e: Evt }) {
         </ol>
       </div>
       <div>
-        <div className="eyebrow mb-2">Immutable record</div>
+        {/* "Immutable record" is only earned when the signer's chain fields are
+            present. For a live receipt that carries `prev`, this is a real
+            hash-chained record; otherwise it is a plain decision record. Nothing
+            in a hash/signature position is ever synthesized. */}
+        <div className="eyebrow mb-2">{e.prev ? "Signed receipt — hash-chained on the device" : "Decision record"}</div>
         <CodeBlock
           file={`evidence/${e.id}.json`}
           lang="json"
@@ -83,14 +115,23 @@ function EvidenceBody({ e }: { e: Evt }) {
             rule: e.rule,
             decision: e.decision,
             reason: e.reason,
-            latency_ms: e.latency,
-            environment: e.env,
+            latency_ms: e.latency > 0 ? e.latency : null,
+            // The receipt carries no environment; report the real enforcement
+            // point instead of stamping "production" on it.
+            environment: live ? null : e.env,
+            enforced_by: enforcement || null,
             observe_mode_would: e.observed ?? null,
             permit_id: e.permit ?? null,
             approved_by: e.approvers ?? [],
             rewritten_to: e.rewritten ?? null,
             contract_version: getState().version,
-            prev_hash: "sha256:" + (parseInt(e.id.slice(2), 16) * 2654435761).toString(16).slice(0, 12) + "…",
+            // Chain fields exactly as the signer returned them — omitted entirely
+            // when this event is not a signed receipt (never fabricated).
+            ...(typeof e.seq === "number" ? { seq: e.seq } : {}),
+            ...(e.prev ? { prev_hash: e.prev } : {}),
+            ...(e.sig ? { signature: e.sig } : {}),
+            ...(e.keyId ? { signing_key_id: e.keyId } : {}),
+            ...(e.verified !== undefined ? { signature_verified: e.verified } : {}),
           })}
         />
       </div>
@@ -98,21 +139,44 @@ function EvidenceBody({ e }: { e: Evt }) {
   );
 }
 
-/** Export jobs: queued now, delivered a moment later — the same two-step feedback a real SIEM push gives. */
-function exportTo(target: "splunk" | "datadog" | "pack", n: number) {
-  const label = target === "splunk" ? "Splunk" : target === "datadog" ? "Datadog" : "Evidence pack";
-  toast(
-    target === "pack" ? "Evidence pack requested" : `${label} export started`,
-    target === "pack" ? `${n} decisions · SOC 2 CC6 / CC7 · last 30 days` : `${n} decisions queued · ${target === "splunk" ? "HEC index wrapbox_decisions" : "logs pipeline wrapbox-decisions"}`,
-  );
-  setTimeout(() => toast(target === "pack" ? "Evidence pack ready" : `Exported to ${label}`, target === "pack" ? "wrapbox-evidence-30d.pdf · signed" : `${n} decisions delivered · 0 failed`, "allow"), 1500);
+/**
+ * SIEM pushes (Splunk/Datadog) are simulated integrations to systems the user
+ * cannot see — the two-step queued/delivered feedback mirrors a real push.
+ * The evidence pack is different: it is a local artifact built from decisions
+ * already in the store, so we generate the real file and hand it to the user
+ * rather than announce a signed PDF this build does not produce or sign.
+ */
+function exportTo(target: "splunk" | "datadog" | "pack", rows: Evt[]) {
+  const n = rows.length;
+  if (target === "pack") {
+    const blob = new Blob([JSON.stringify(rows, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `wrapbox-evidence-${n}-decisions.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast("Evidence pack downloaded", `${n} ${n === 1 ? "decision" : "decisions"} · JSON · unsigned`, "allow");
+    return;
+  }
+  const label = target === "splunk" ? "Splunk" : "Datadog";
+  toast(`${label} export started`, `${n} decisions queued · ${target === "splunk" ? "HEC index wrapbox_decisions" : "logs pipeline wrapbox-decisions"}`);
+  setTimeout(() => toast(`Exported to ${label}`, `${n} decisions delivered · 0 failed`, "allow"), 1500);
 }
 
 export function Evidence({ query }: { query?: URLSearchParams }) {
   const role = useStore((s) => s.role);
   const allRaw = useStore((s) => s.events);
   const envFilter = useStore((s) => s.envFilter);
-  const all = useMemo(() => (envFilter === "all" ? allRaw : allRaw.filter((e) => e.env === envFilter)), [allRaw, envFilter]);
+  // v2 is the live Control-Plane-backed workspace: its receipts carry no human,
+  // approver, permit or environment. Copy that is true of simulated workspaces
+  // is scoped away from live data rather than asserted over it.
+  const cpBacked = useStore((s) => s.workspace) === "v2";
+  // A live receipt reports no environment, so it must never be filed under a
+  // specific env bucket — it appears only under "All environments".
+  const all = useMemo(() => (envFilter === "all" ? allRaw : allRaw.filter((e) => e.source !== "live" && e.env === envFilter)), [allRaw, envFilter]);
   const [d, setD] = useState<"all" | Decision>("all");
   const [agent, setAgent] = useState(query?.get("agent") || "all");
   const [q, setQ] = useState("");
@@ -143,18 +207,20 @@ export function Evidence({ query }: { query?: URLSearchParams }) {
         sub={
           mine
             ? "Everything your agents tried, what Wrapbox decided, and why. Only you and your admins can see this."
-            : "Every decision with the chain that produced it: human → agent → tool → resource → policy → approver → permit → outcome."
+            : cpBacked
+              ? "Every decision with the chain that produced it: device → agent → tool → resource → policy → outcome — each one a signed, hash-chained receipt from the endpoint. Approver and permit appear on the decisions that had them."
+              : "Every decision with the chain that produced it: human → agent → tool → resource → policy → approver → permit → outcome."
         }
         right={
           !mine && (
             <>
-              <Button size="sm" onClick={() => exportTo("splunk", all.length)}>
+              <Button size="sm" onClick={() => exportTo("splunk", all)}>
                 <Logo name="splunk" size={16} rounded="rounded" /> Export to Splunk
               </Button>
-              <Button size="sm" onClick={() => exportTo("datadog", all.length)}>
+              <Button size="sm" onClick={() => exportTo("datadog", all)}>
                 <Logo name="datadog" size={16} rounded="rounded" /> Datadog
               </Button>
-              <Button size="sm" onClick={() => exportTo("pack", all.length)}>
+              <Button size="sm" onClick={() => exportTo("pack", all)}>
                 <Download className="size-3.5" /> Evidence pack
               </Button>
             </>

@@ -21,10 +21,20 @@ interface Kpi {
   href?: string;
 }
 
+/** Coverage for display. Floor is OS kernel confinement, which a process has only when the Runtime
+ *  launched it under the sandbox (`launchMode === "wrapbox"`). On the live Control Plane an agent's
+ *  launch mode comes from a filesystem scan, so every agent is "unknown" — the scan proves it is
+ *  installed, never that it ran under confinement — and there is no Floor to claim. The scripted
+ *  reference stamps its own coverage and is left untouched. */
+function coverageDisplay(d: FleetDevice, a: DiscoveredAgent, kind: Parameters<typeof coverageFor>[2], gateways: GatewayNode[], destinations: Destination[], cpBacked: boolean): CoverageClass[] {
+  const cov = coverageFor(d, a, kind, gateways, destinations);
+  return cpBacked && a.launchMode !== "wrapbox" ? cov.filter((c) => c !== "Floor") : cov;
+}
+
 /** Every coverage class any agent on the device has for any action kind, in strength order. */
-function deviceCoverage(d: FleetDevice, gateways: GatewayNode[], destinations: Destination[]) {
+function deviceCoverage(d: FleetDevice, gateways: GatewayNode[], destinations: Destination[], cpBacked: boolean) {
   const set = new Set<CoverageClass>();
-  for (const a of d.agents) for (const k of KINDS) coverageFor(d, a, k.id, gateways, destinations).forEach((c) => set.add(c));
+  for (const a of d.agents) for (const k of KINDS) coverageDisplay(d, a, k.id, gateways, destinations, cpBacked).forEach((c) => set.add(c));
   return (["Floor", "Ceiling", "Remote", "Assured"] as CoverageClass[]).filter((c) => set.has(c));
 }
 
@@ -39,6 +49,10 @@ export function Fleet() {
   const version = useStore((s) => s.version);
   const company = useStore((s) => s.company);
   const members = useStore((s) => s.members);
+  // The live Control-Plane workspace is read-only inventory: discovery proves an agent is installed,
+  // never that it is governed. Simulated workspaces (fabric reference) provision and confine for real,
+  // so many coverage/attribution claims that are false in v2 are true there — gate on this, not delete.
+  const cpBacked = useStore((s) => s.workspace) === "v2";
   const admin = role === "admin";
   const me = admin ? adminPerson({ members } as never) : EMPLOYEE;
   const devices = devicesFor(fleet, me.id, admin);
@@ -87,14 +101,16 @@ export function Fleet() {
 
   return (
     <div className="mx-auto max-w-[1320px] px-4 lg:px-8 py-8">
-      {admin && <FabricHero devices={devices} gateways={gateways} discovered={discovered.length} version={version} today={today.length} blocked={blocked} />}
+      {admin && <FabricHero devices={devices} gateways={gateways} discovered={discovered.length} governed={discovered.length - unknown} version={version} today={today.length} blocked={blocked} />}
       <PageHeader
         eyebrow={admin ? `${company} · Runtime and Gateway` : `${me.name} · ${me.role}`}
         title={admin ? "Fleet" : "My device"}
         sub={
           admin
             ? `${devices.length} enrolled ${devices.length === 1 ? "device" : "devices"} and ${gateways.length} ${gateways.length === 1 ? "gateway" : "gateways"} enforce contract v${version}. Every agent on them was discovered by the Runtime — nothing is installed per agent.`
-            : `The Runtime on your laptop discovered your agents and wrote their adapters. Contract v${version} applies to all of them; you will only notice it when an action touches secrets, main, customer data or production.`
+            : cpBacked
+              ? `The Runtime on your laptop discovered these agents — a scan of what is installed, not proof that any of them is governed. Only agents launched through a Wrapbox shim, or running with the governor hooks in place, are evaluated against ${version ? `contract v${version}` : "your contract (nothing published yet)"}; the rest run exactly as they did before.`
+              : `The Runtime on your laptop discovered your agents and wrote their adapters. Contract v${version} applies to all of them; you will only notice it when an action touches secrets, main, customer data or production.`
         }
         right={
           admin ? (
@@ -152,7 +168,21 @@ export function Fleet() {
 }
 
 /** The shape of the product in one card: three enforcement points, every number from state. */
-function FabricHero({ devices, gateways, discovered, version, today, blocked }: { devices: FleetDevice[]; gateways: GatewayNode[]; discovered: number; version: number; today: number; blocked: number }) {
+function FabricHero({ devices, gateways, discovered, governed, version, today, blocked }: { devices: FleetDevice[]; gateways: GatewayNode[]; discovered: number; governed: number; version: number; today: number; blocked: number }) {
+  const rest = discovered - governed;
+  // Governance is not discovery: an agent counts as governed only when it is wrapped or carries a
+  // Wrapbox hook. On the live Control Plane every discovered agent is "unknown" (scan only), so
+  // governed === 0 and this paragraph says so — the same `unknown`/`governed` count the KPI row uses.
+  const cover =
+    discovered === 0
+      ? "No agents discovered yet — enroll a device and the Runtime will inventory what is installed on it."
+      : `${discovered} ${discovered === 1 ? "agent was" : "agents were"} discovered across ${devices.length} ${devices.length === 1 ? "device" : "devices"} by one Runtime per machine.` +
+        (governed === 0
+          ? ` None are governed yet — nothing was provisioned for them, and their actions are not seen until \`wrapboxd wrap\` covers them.`
+          : rest === 0
+            ? ` All ${governed} ${governed === 1 ? "is" : "are"} governed — wrapped or carrying a Wrapbox hook, so every tool call is decided before it runs.`
+            : ` ${governed} ${governed === 1 ? "is" : "are"} governed — wrapped or carrying a Wrapbox hook, so every tool call is decided before it runs. The other ${rest} ${rest === 1 ? "is" : "are"} inventory only, not seen until \`wrapboxd wrap\` covers ${rest === 1 ? "it" : "them"}.`) +
+        ` Today ${today.toLocaleString("en-US")} ${today === 1 ? "action" : "actions"} from governed agents ${today === 1 ? "was" : "were"} decided and ${blocked} refused.`;
   const platforms = useMemo(() => {
     const seen = new Map<string, { logo: string; label: string; n: number }>();
     for (const d of devices) {
@@ -176,11 +206,9 @@ function FabricHero({ devices, gateways, discovered, version, today, blocked }: 
             Enforcement Fabric
           </div>
           <h2 className="mt-3 text-[26px] lg:text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] [text-shadow:0_2px_20px_rgba(90,20,40,0.2)]">
-            Installed once. Every agent governed.
+            {governed === 0 ? "Installed once per device. Wrap an agent to govern it." : governed === discovered ? "Installed once. Every agent governed." : `${governed} of ${discovered} agents governed.`}
           </h2>
-          <p className="mt-2 max-w-[56ch] text-[13.5px] leading-relaxed text-white/90">
-            {discovered} agents were discovered and provisioned across {devices.length} devices — no per-agent setup on any of them. Today {today.toLocaleString("en-US")} actions were checked and {blocked} stopped before they ran.
-          </p>
+          <p className="mt-2 max-w-[56ch] text-[13.5px] leading-relaxed text-white/90">{cover}</p>
           <div className="mt-4 flex flex-wrap items-center gap-2.5">
             {platforms.map((p) => (
               <span key={p.label} className="inline-flex items-center gap-1.5 rounded-full bg-white/15 ring-1 ring-white/25 pl-1 pr-2.5 py-1 text-[11.5px] font-medium">
@@ -231,8 +259,9 @@ function AgentRow({ d, a, dense }: { d: FleetDevice; a: DiscoveredAgent; dense?:
 }
 
 function DeviceCard({ d, gateways, destinations }: { d: FleetDevice; gateways: GatewayNode[]; destinations: Destination[] }) {
+  const cpBacked = useStore((s) => s.workspace) === "v2";
   const owner = personById(d.ownerId);
-  const cov = deviceCoverage(d, gateways, destinations);
+  const cov = deviceCoverage(d, gateways, destinations, cpBacked);
   const gaps = d.agents.map((a) => gapFor(d, a)).filter(Boolean);
   return (
     <Card className={cn("p-5 flex flex-col transition-all hover:shadow-card hover:border-line-strong", d.state === "quarantined" && "border-block/40")}>
@@ -376,6 +405,7 @@ export function FleetDeviceDetail({ id }: { id: string }) {
   const destinations = useStore((s) => s.destinations);
   const events = useStore((s) => s.events);
   const role = useStore((s) => s.role);
+  const cpBacked = useStore((s) => s.workspace) === "v2";
   const [open, setOpen] = useState<Evt | null>(null);
   const d = fleet.find((x) => x.id === id);
   const mine = useMemo(() => events.filter((e) => e.act?.ctx?.["device.id"] === id), [events, id]);
@@ -482,7 +512,7 @@ export function FleetDeviceDetail({ id }: { id: string }) {
             </div>
           </Card>
           <Card className="overflow-hidden">
-            <CardHead title="Coverage by action kind" sub="What guarantee each kind of action is under, per agent. A gap is stated, never hidden." />
+            <CardHead title="Coverage by action kind" sub={cpBacked ? "What each kind of action is actually covered by, per agent. Floor appears only for an agent the Runtime launched under confinement — an agent started outside Wrapbox shows the gap." : "What guarantee each kind of action is under, per agent. A gap is stated, never hidden."} />
             <div className="overflow-x-auto border-t border-line">
               <table className="w-full min-w-[720px] text-left text-[12px]">
                 <thead>
@@ -505,7 +535,7 @@ export function FleetDeviceDetail({ id }: { id: string }) {
                         <div className="font-mono text-[10.5px] text-fg-3">{k.id}</div>
                       </td>
                       {d.agents.map((a) => {
-                        const cov = coverageFor(d, a, k.id, gateways, destinations);
+                        const cov = coverageDisplay(d, a, k.id, gateways, destinations, cpBacked);
                         return (
                           <td key={a.agentId} className="px-3 py-2.5">
                             <div className="flex flex-wrap gap-1">
@@ -542,7 +572,7 @@ export function FleetDeviceDetail({ id }: { id: string }) {
             </Card>
           )}
           <Card className="overflow-hidden">
-            <CardHead title="Decisions from this device" sub="Attributed by the Runtime to the process and the person logged in." />
+            <CardHead title="Decisions from this device" sub={cpBacked ? "Signed by this device's Runtime and attributed to the agent process and session — receipts carry no user identity." : "Attributed by the Runtime to the process and the person logged in."} />
             <div className="border-t border-line">{mine.length ? <DecisionStream events={mine} limit={12} compact onPick={setOpen} /> : <div className="px-5 py-8 text-[12.5px] text-fg-3">No decisions yet.</div>}</div>
           </Card>
         </div>

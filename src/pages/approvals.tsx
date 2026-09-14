@@ -27,6 +27,9 @@ export function Approvals() {
   const all = useStore((s) => s.approvals);
   const eventCount = useStore((s) => s.events.length);
   const { labs } = useWorkspace();
+  // v2 is read-only against the live Control Plane, which has no approval queue or Slack routing. The
+  // simulated workspaces genuinely run both, so the empty-state copy is gated on this.
+  const cpBacked = useStore((s) => s.workspace) === "v2";
   const mine = role === "employee";
   const list = mine ? all.filter((a) => a.approvers.some((p) => p.id === EMPLOYEE.id)) : all;
   const hidden = all.length - list.length;
@@ -68,14 +71,27 @@ export function Approvals() {
             ))}
             {!pending.length && (
               <div className="px-5 py-8 text-[12.5px] text-fg-3">
-                All clear. REVIEW decisions land here and in Slack the moment an agent hits one.
-                {labs && (
+                {cpBacked ? (
                   <>
-                    {" "}
-                    <a href="#/playground" className="underline underline-offset-2 text-fg">
-                      Try one in the playground
+                    No approval queue or Slack routing is running on this Control Plane yet. A REVIEW decision returns{" "}
+                    <span className="font-mono">ask</span> to the agent's own client, which prompts the operator locally, and the signed receipt lands in{" "}
+                    <a href="#/evidence" className="underline underline-offset-2 text-fg">
+                      Evidence
                     </a>
-                    .
+                    . Routing REVIEW requests to this queue and to Slack is not implemented yet.
+                  </>
+                ) : (
+                  <>
+                    All clear. REVIEW decisions land here and in Slack the moment an agent hits one.
+                    {labs && (
+                      <>
+                        {" "}
+                        <a href="#/playground" className="underline underline-offset-2 text-fg">
+                          Try one in the playground
+                        </a>
+                        .
+                      </>
+                    )}
                   </>
                 )}
               </div>

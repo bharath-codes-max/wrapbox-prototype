@@ -53,13 +53,28 @@ export interface Evt {
   rule: string;
   reason: string;
   latency: number;
-  env: Env;
+  /** The environment the action ran in. Optional: a live Control Plane receipt
+   *  carries no environment, so cp-map leaves it unset rather than inventing one.
+   *  Seeded/simulated events always set it. Absent renders as "not reported". */
+  env?: Env;
   permit?: string;
   approvers?: string[];
   rewritten?: string;
   /** The normalized action the evaluator saw — what a replay re-decides. */
   act?: Act;
   source: "live" | "flow" | "seed" | "playground";
+  /**
+   * Chain fields exactly as the device signer emitted them (live receipts only).
+   * Absent for simulated events — the mapper (cp-map.ts evtFromReceipt) populates
+   * these from the receipt so Evidence renders the real chain instead of a
+   * synthesized hash. Nothing may be shown in a hash/signature position that the
+   * signer did not return.
+   */
+  seq?: number;
+  prev?: string;
+  sig?: string;
+  keyId?: string;
+  verified?: boolean;
 }
 
 export interface Approval {
@@ -167,6 +182,11 @@ export interface FleetDevice {
   enrolledAt: number;
   runtimeVersion: string;
   policyBundleVersion: number;
+  /** When this device last pulled the ruleset into its local cache (ms epoch).
+   *  0/undefined means it has never pulled, so no rule is actually enforced on
+   *  it yet — the CP-backed posture pill depends on this. cp-map's deviceFromCp
+   *  maps CpDeviceRow.ruleset_pulled_at into it; simulated workspaces leave it unset. */
+  rulesetPulledAt?: number;
   heartbeat: number;
   state: DeviceState;
   killSwitch: boolean;

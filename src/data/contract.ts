@@ -98,6 +98,16 @@ export interface Rule {
   scope: "all" | "coding" | "business";
   mode?: "enforce" | "observe";
   custom?: boolean;
+  /** Set for rules synced from a live Control Plane. The browser policy engine
+   *  cannot reproduce the CP matcher (a structured condition evaluated on the
+   *  device), so a cpOnly rule is enforced on the Control Plane and is NOT decided
+   *  by the local tester. `condition` is the raw CP condition (condition_json) and
+   *  `priority` is the CP evaluation order (higher wins first). Carried so the
+   *  Contract screen can render the real condition/order instead of a synthesized
+   *  `effect` glob. */
+  cpOnly?: boolean;
+  condition?: string;
+  priority?: number;
 }
 
 const CODING: CategoryId[] = ["ide", "cli", "cloud"];

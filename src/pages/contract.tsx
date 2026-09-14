@@ -77,6 +77,14 @@ function TierEditor({ tiers, unit, onChange, readOnly }: { tiers: Tier[]; unit?:
 }
 
 function RuleRow({ rule, onChange, onEdit, onDelete, readOnly, dirty }: { rule: Rule; onChange: (r: Rule) => void; onEdit: () => void; onDelete: () => void; readOnly?: boolean; dirty?: boolean }) {
+  // Rules synced from the live Control Plane match by their own condition_json, not by our
+  // effect vocabulary — cp-map flattens them to a placeholder `policy.*` effect and keeps the
+  // real condition in `why`. Rendering `effect: policy.*` as a match expression would be a
+  // fabricated claim, so drop it and show what the rule actually matches on.
+  const cpRule = rule.when.effect.length === 1 && rule.when.effect[0] === "policy.*";
+  const chips: [string, string][] = cpRule
+    ? [["matches", rule.why.includes("advanced condition:") ? "Control Plane condition (below)" : "every tool call"], ...ruleChips(rule).filter(([k]) => k !== "effect")]
+    : ruleChips(rule);
   return (
     <div className={cn("group px-6 py-5 border-b border-line last:border-0", dirty && "bg-surface-2/70")}>
       <div className="flex flex-wrap items-start gap-3">
@@ -90,7 +98,7 @@ function RuleRow({ rule, onChange, onEdit, onDelete, readOnly, dirty }: { rule: 
           {rule.why && <div className="mt-0.5 text-[12px] text-fg-3">{rule.why}</div>}
           <div className="mt-2 flex flex-wrap gap-1.5">
             <span className="rounded bg-surface-2 border border-line px-1.5 py-px font-mono text-[10.5px] text-fg font-semibold">{rule.id}</span>
-            {ruleChips(rule).map(([k, v]) => (
+            {chips.map(([k, v]) => (
               <span key={k} className="rounded bg-surface-2 border border-line px-1.5 py-px font-mono text-[10.5px] text-fg-2 max-w-[320px] truncate">
                 {k}: {v}
               </span>
@@ -1009,6 +1017,21 @@ rules:
     approvers: oncall-sre
 `;
 
+/**
+ * The YAML pane in v2 is a read-only projection of the live Control Plane ruleset, not the
+ * file the runtime pulls. toYaml() only knows the in-browser simulator — default ALLOW and our
+ * effect vocabulary — while the Control Plane the v2 fleet actually runs is fail-closed (no match
+ * → BLOCK) and matches on each rule's own condition. We can't change toYaml() from this file, so
+ * correct the rendered text here rather than assert a security posture the devices don't enforce.
+ */
+function cpRenderedYaml(src: string): string {
+  return src
+    .replace(/^# One contract for every agent in the org$/m, "# Read-only view of the live Control Plane ruleset — this build reads it, it does not author it.")
+    .replace(/^default: ALLOW$/m, "default: BLOCK   # fail-closed — an action matching no rule is blocked")
+    .replace(/^(\s*)effect: \["policy\.\*"\]$/gm, '$1effect: "*"   # every tool call — the Control Plane evaluates the rule condition, not this effect')
+    .replace("# empty — every action is allowed by default", "# empty — with no rules, enrolled devices block every intermediated action (fail-closed)");
+}
+
 export function ContractPage({ query }: { query: URLSearchParams }) {
   const role = useStore((s) => s.role);
   const rules = useStore((s) => s.rules);
@@ -1018,6 +1041,12 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
   const changelog = useStore((s) => s.changelog);
   const events = useStore((s) => s.events);
   const { labs } = useWorkspace();
+  // v2 is the live Control-Plane-backed product. The CP client (cp-api.ts) is GET-only — there is
+  // no write path — and cp-sync overwrites `rules`/`published` from the CP every 5 s, so nothing
+  // authored here can reach a device or even survive locally. Authoring is therefore read-only in
+  // v2 and this page renders the CP ruleset. The simulated workspaces (fabric/fresh) keep the full
+  // author → publish → simulated-fleet flow, where those claims are true.
+  const cpBacked = useStore((s) => s.workspace) === "v2";
   const publisher = changelog.length ? personById(changelog[changelog.length - 1].by) : undefined;
   const [view, setView] = useState<"visual" | "yaml">("visual");
   const [editingYaml, setEditingYaml] = useState(false);
@@ -1030,7 +1059,8 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
   const suggest = query.get("suggest");
   const from = query.get("from");
   useEffect(() => {
-    if (readOnly) return;
+    // No authoring in v2: the CP is read-only, so a ?suggest / ?from deep link must not open the builder.
+    if (readOnly || cpBacked) return;
     let act: Act | undefined;
     if (suggest && ACTS[suggest]) act = ACTS[suggest];
     if (from) {
@@ -1041,14 +1071,15 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
       }
     }
     if (act) setBuilder({ open: true, rule: ruleFromAct(act) });
-  }, [suggest, from, readOnly]);
+  }, [suggest, from, readOnly, cpBacked]);
 
   const pubMap = useMemo(() => new Map(published.map((r) => [r.id, ruleSig(r)])), [published]);
   const dirtyIds = rules.filter((r) => pubMap.get(r.id) !== ruleSig(r)).map((r) => r.id);
   const removed = published.filter((p) => !rules.some((r) => r.id === p.id)).length;
   const changes = dirtyIds.length + removed;
   const shown = readOnly ? published.filter((r) => r.scope !== "business") : rules;
-  const yaml = toYaml(readOnly ? shown : rules, changes ? version + 1 : version, orgSlugOf(storeState().domain, storeState().company));
+  const rawYaml = toYaml(readOnly ? shown : rules, changes ? version + 1 : version, orgSlugOf(storeState().domain, storeState().company));
+  const yaml = cpBacked ? cpRenderedYaml(rawYaml) : rawYaml;
 
   const update = (r: Rule) => setState((s) => ({ rules: s.rules.map((x) => (x.id === r.id ? r : x)) }));
   const remove = (id: string) => {
@@ -1061,6 +1092,8 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
     toast(`Rule “${r.id}” saved to draft`, `Publish v${version + 1} to enforce it`, "allow");
   };
   const publish = () => {
+    // No write path to the Control Plane in v2 — publishing is disabled and unreachable there.
+    if (cpBacked) return;
     publishContract();
     setPub(true);
   };
@@ -1069,17 +1102,19 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
   return (
     <div className="mx-auto max-w-[1320px] px-4 lg:px-8 py-8">
       <PageHeader
-        eyebrow={readOnly ? "Managed by your admin" : "wrapbox.yaml"}
+        eyebrow={readOnly ? "Managed by your admin" : cpBacked ? "Live Control Plane · read-only" : "wrapbox.yaml"}
         title={readOnly ? "Rules for me" : "Intent contract"}
         sub={
           readOnly
             ? "These rules decide what your agents may do. You can read them — only admins change them. If something you need is blocked, request an exception."
-            : `Write what agents may do — once, in one vocabulary of effects. Build rules visually or type YAML, test any action against your draft, then publish. ${labs ? "Flows, the playground and live traffic" : "Every connected agent"} follow${labs ? "" : "s"} the published version.`
+            : cpBacked
+              ? "The ruleset the Control Plane holds for your org, rendered read-only. This build reads it — it has no write path, so rules are created and changed on the Control Plane, not here. Enrolled devices enforce the ruleset they last pulled; an action matching no rule is blocked (fail closed)."
+              : `Write what agents may do — once, in one vocabulary of effects. Build rules visually or type YAML, test any action against your draft, then publish. ${labs ? "Flows, the playground and live traffic" : "Every connected agent"} follow${labs ? "" : "s"} the published version.`
         }
         right={
           <>
-            <Chip>{version ? `v${version} · published ${ago(publishedAt)}${publisher ? ` by ${publisher.name.split(" ")[0]}` : ""}` : "not published yet"}</Chip>
-            {!readOnly && (
+            {!cpBacked && <Chip>{version ? `v${version} · published ${ago(publishedAt)}${publisher ? ` by ${publisher.name.split(" ")[0]}` : ""}` : "not published yet"}</Chip>}
+            {!readOnly && !cpBacked && (
               <>
                 {changes > 0 && (
                   <Button variant="ghost" size="sm" onClick={() => setState((s) => ({ rules: s.published }))}>
@@ -1092,6 +1127,11 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
                 </Button>
               </>
             )}
+            {!readOnly && cpBacked && (
+              <Chip>
+                <Lock className="size-3" /> read-only · Control Plane
+              </Chip>
+            )}
             {readOnly && (
               <Chip>
                 <Lock className="size-3" /> read-only
@@ -1101,7 +1141,24 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
         }
       />
 
-      {!readOnly && (
+      {!readOnly && cpBacked && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-[12px] text-fg-3">Rules are authored on the Control Plane. This build only reads them — it has no write path, so there is nothing to draft or publish here.</span>
+          <div className="ml-auto xl:hidden">
+            <Segmented
+              size="sm"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: "visual", label: "Visual" },
+                { value: "yaml", label: "YAML" },
+              ]}
+            />
+          </div>
+        </div>
+      )}
+
+      {!readOnly && !cpBacked && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <Button variant="primary" onClick={() => setBuilder({ open: true, rule: null, mode: "describe" })}>
             <Wand2 className="size-3.5" /> Describe a rule
@@ -1145,22 +1202,34 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
       {empty ? (
         <Card className="p-8">
           <div className="max-w-[640px]">
-            <div className="eyebrow">Empty contract</div>
-            <h2 className="mt-2 text-[22px] font-semibold">Right now every agent action is allowed.</h2>
-            <p className="mt-2 text-[13.5px] text-fg-2 leading-relaxed">Describe a rule in plain English, build one field by field, or type YAML. Nothing is enforced until you publish.</p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Button variant="primary" onClick={() => setBuilder({ open: true, rule: null, mode: "describe" })}>
-                <Wand2 className="size-3.5" /> Describe a rule
-              </Button>
-              <Button onClick={() => setBuilder({ open: true, rule: null, mode: "build" })}>
-                <Plus className="size-3.5" /> Build a rule
-              </Button>
-              <Button onClick={() => setEditingYaml(true)}>
-                <Pencil className="size-3.5" /> Write YAML
-              </Button>
-            </div>
+            {cpBacked ? (
+              <>
+                <div className="eyebrow">No rules on the Control Plane</div>
+                <h2 className="mt-2 text-[22px] font-semibold">No rules published to the Control Plane yet.</h2>
+                <p className="mt-2 text-[13.5px] text-fg-2 leading-relaxed">
+                  This does not mean agents are unrestricted. Every enrolled device enforces the ruleset it last pulled, and the endpoint runtime blocks any action no rule matches (fail closed) — with no rules, an enrolled device denies tool calls rather than allowing them, and denies outright when its cached policy is missing or stale. Machines with no Wrapbox runtime installed are not intermediated at all. This build reads the ruleset from the Control Plane; it has no write path to author rules here.
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="eyebrow">Empty contract</div>
+                <h2 className="mt-2 text-[22px] font-semibold">Right now every agent action is allowed.</h2>
+                <p className="mt-2 text-[13.5px] text-fg-2 leading-relaxed">Describe a rule in plain English, build one field by field, or type YAML. Nothing is enforced until you publish.</p>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <Button variant="primary" onClick={() => setBuilder({ open: true, rule: null, mode: "describe" })}>
+                    <Wand2 className="size-3.5" /> Describe a rule
+                  </Button>
+                  <Button onClick={() => setBuilder({ open: true, rule: null, mode: "build" })}>
+                    <Plus className="size-3.5" /> Build a rule
+                  </Button>
+                  <Button onClick={() => setEditingYaml(true)}>
+                    <Pencil className="size-3.5" /> Write YAML
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
-          {editingYaml && (
+          {!cpBacked && editingYaml && (
             <div className="mt-6">
               <YamlEditor
                 initial={STARTER}
@@ -1178,12 +1247,16 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
           <div className={cn("space-y-5 min-w-0", view === "yaml" && "hidden xl:block")}>
             <Card className="overflow-hidden">
-              <CardHead title={`${shown.length} rules`} sub={readOnly ? "Coding-agent and org-wide rules that apply to you" : "Most restrictive matching rule wins · default ALLOW"} right={<span className="font-mono text-[11px] text-fg-3">default: ALLOW</span>} />
+              <CardHead
+                title={`${shown.length} rules`}
+                sub={readOnly ? "Coding-agent and org-wide rules that apply to you" : cpBacked ? "Highest-priority matching rule wins · default BLOCK (fail closed)" : "Most restrictive matching rule wins · default ALLOW"}
+                right={<span className="font-mono text-[11px] text-fg-3">{cpBacked ? "default: BLOCK" : "default: ALLOW"}</span>}
+              />
               <div className="border-t border-line">
                 <AnimatePresence initial={false}>
                   {shown.map((r) => (
                     <motion.div key={r.id} layout="position" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                      <RuleRow rule={r} onChange={update} onEdit={() => setBuilder({ open: true, rule: r })} onDelete={() => remove(r.id)} readOnly={readOnly} dirty={!readOnly && dirtyIds.includes(r.id)} />
+                      <RuleRow rule={r} onChange={update} onEdit={() => setBuilder({ open: true, rule: r })} onDelete={() => remove(r.id)} readOnly={readOnly || cpBacked} dirty={!readOnly && !cpBacked && dirtyIds.includes(r.id)} />
                     </motion.div>
                   ))}
                 </AnimatePresence>
@@ -1191,7 +1264,7 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
             </Card>
           </div>
           <div className={cn("space-y-5 min-w-0", view === "visual" && "hidden xl:block")}>
-            {editingYaml && !readOnly ? (
+            {editingYaml && !readOnly && !cpBacked ? (
               <YamlEditor
                 initial={toYaml(rules, version + 1, orgSlugOf(storeState().domain, storeState().company))}
                 onCancel={() => setEditingYaml(false)}
@@ -1204,13 +1277,13 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
             ) : (
               <CodeBlock
                 file="wrapbox.yaml"
-                note={readOnly ? "read-only" : changes ? "draft" : "live"}
+                note={readOnly ? "read-only" : cpBacked ? "rendered view" : changes ? "draft" : "live"}
                 lang="yaml"
                 code={yaml}
                 numbers
                 maxH={readOnly ? 640 : 400}
                 right={
-                  !readOnly && (
+                  !readOnly && !cpBacked && (
                     <button onClick={() => setEditingYaml(true)} className="inline-flex items-center gap-1 rounded-md px-2 h-6 text-[11.5px] text-[#8a95b3] hover:text-white">
                       <Pencil className="size-3" /> Edit
                     </button>
@@ -1218,7 +1291,18 @@ export function ContractPage({ query }: { query: URLSearchParams }) {
                 }
               />
             )}
-            {!readOnly && (
+            {!readOnly && cpBacked && (
+              <Card>
+                <CardHead
+                  title={<span className="flex items-center gap-2"><FlaskConical className="size-4 text-fg-2" />Testing & replay run on the Control Plane</span>}
+                  sub="Not available in this build against a live Control Plane."
+                />
+                <div className="px-5 pb-5 text-[12.5px] text-fg-3 leading-relaxed">
+                  Rules synced from the Control Plane match on conditions the endpoint runtime evaluates on the device, not in this browser — so a draft tester or a pre-publish replay here would fall through to ALLOW and misstate what your fleet enforces (which is fail-closed: an action matching no rule is blocked). Author, test and replay run against the Control Plane and its enrolled devices, not this read-only console.
+                </div>
+              </Card>
+            )}
+            {!readOnly && !cpBacked && (
               <>
                 <Tester rules={rules} />
                 <ReplayCard

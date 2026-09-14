@@ -559,6 +559,9 @@ const PROBES: Record<CategoryId, { display: string; act: Act }[]> = {
 
 function ConnectWizard({ agent, onRun, runLabel }: { agent: Agent; onRun: () => void; runLabel: string }) {
   const conn = useStore((s) => s.connected[agent.id]);
+  // v2 is the live Control-Plane-backed workspace: no per-agent token is issued from the browser and
+  // rule conditions are evaluated on the device, not here. The simulated workspaces script both flows.
+  const cpBacked = useStore((s) => s.workspace) === "v2";
   const version = useStore((s) => s.version);
   const published = useStore((s) => s.published.length);
   const domain = useStore((s) => s.domain);
@@ -636,18 +639,33 @@ function ConnectWizard({ agent, onRun, runLabel }: { agent: Agent; onRun: () => 
             <div className="rounded-xl border border-line p-4">
               <div className="flex items-center gap-2 text-[12.5px] font-medium">
                 <KeyRound className="size-3.5 text-accent" /> {agent.category === "cloud" && agent.adapter === "cloud" ? "COPILOT_MCP_WRAPBOX_TOKEN" : "WRAPBOX_TOKEN"}
-                <span className="ml-auto text-[11.5px] text-fg-3 font-normal">scoped to {agent.id} · rotates every 30 days</span>
+                <span className="ml-auto text-[11.5px] text-fg-3 font-normal">{cpBacked ? "read from the device's Wrapbox runtime — not issued from this screen" : `scoped to ${agent.id} · rotates every 30 days`}</span>
               </div>
-              <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-surface-2 border border-line px-3 h-9">
-                <code className="flex-1 font-mono text-[12px] truncate">{reveal ? token : masked}</code>
-                <button onClick={() => setReveal(!reveal)} className="text-fg-3 hover:text-fg" aria-label="Reveal token">
-                  {reveal ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                </button>
-                <CopyButton text={token} />
-              </div>
-              <p className="mt-2.5 text-[11.5px] text-fg-3">
-                Agent token for this workspace. Wrapbox listens on: <span className="font-mono">{agent.hookEvents.join(" · ")}</span> · docs <span className="font-mono">{agent.docs}</span>
-              </p>
+              {cpBacked ? (
+                // Live CP path: the Control Plane never returns an agent token to the browser, so we show
+                // the env-var the agent reads at runtime — no reveal, no copy, no invented rotation interval.
+                <>
+                  <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-surface-2 border border-line px-3 h-9">
+                    <code className="flex-1 font-mono text-[12px] truncate">$WRAPBOX_TOKEN</code>
+                  </div>
+                  <p className="mt-2.5 text-[11.5px] text-fg-3">
+                    The Control Plane issues a device credential during <span className="font-mono">wrapbox enroll</span>, from a single-use enrollment token; it is stored hashed and never displayed. The agent reads it from the environment. Wrapbox listens on: <span className="font-mono">{agent.hookEvents.join(" · ")}</span> · docs <span className="font-mono">{agent.docs}</span>
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-surface-2 border border-line px-3 h-9">
+                    <code className="flex-1 font-mono text-[12px] truncate">{reveal ? token : masked}</code>
+                    <button onClick={() => setReveal(!reveal)} className="text-fg-3 hover:text-fg" aria-label="Reveal token">
+                      {reveal ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                    </button>
+                    <CopyButton text={token} />
+                  </div>
+                  <p className="mt-2.5 text-[11.5px] text-fg-3">
+                    Agent token for this workspace. Wrapbox listens on: <span className="font-mono">{agent.hookEvents.join(" · ")}</span> · docs <span className="font-mono">{agent.docs}</span>
+                  </p>
+                </>
+              )}
             </div>
           </div>
         </WizardStep>
@@ -659,7 +677,11 @@ function ConnectWizard({ agent, onRun, runLabel }: { agent: Agent; onRun: () => 
               {verifying ? <Loader2 className="size-3.5 animate-spin" /> : <Plug className="size-3.5" />}
               {verifying ? "Talking to the agent…" : done ? "Re-run verification" : "Send test events"}
             </Button>
-            <span className="text-[12px] text-fg-3">Wrapbox fires test actions through the adapter and evaluates each one against contract v{version}.</span>
+            <span className="text-[12px] text-fg-3">
+              {cpBacked
+                ? `Evaluates sample actions locally, in this browser, against the rules loaded from contract v${version}. It does not contact the agent or the device — and in this release Control Plane rule conditions are not evaluated here, so these results will not match what the runtime enforces. See Evidence for real decisions.`
+                : `Wrapbox fires test actions through the adapter and evaluates each one against contract v${version}.`}
+            </span>
           </div>
           <div className="rounded-xl bg-code border border-code-line p-4 font-mono text-[12px] leading-[1.8] min-h-[120px]">
             {!log.length && <div className="text-[#5f6a88]">{conn ? `Last verified ${ago(conn.at)} · ${ASSURANCE[conn.assurance].label}` : "Waiting for the first test event…"}</div>}

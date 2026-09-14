@@ -58,6 +58,10 @@ export function deviceFromCp(row: CpDeviceRow, agents: DiscoveredAgent[] = []): 
     state: stateOf(row.state),
     killSwitch: false,
     keyId: row.key_id ?? "",
+    // When this device last pulled the ruleset. The top-bar "enforcing" pill
+    // counts only devices that have actually pulled — a device that never
+    // pulled is enrolled, not enforcing.
+    rulesetPulledAt: toMs(row.ruleset_pulled_at),
     agents,
   };
 }
@@ -113,14 +117,27 @@ export function evtFromReceipt(row: CpReceiptRow): Evt {
     rule: r.rule_id ?? "—",
     reason: r.reason ?? "",
     latency: 0,
-    env: "production",
+    // No env: a receipt carries no environment (see runtime receipts.ts). Leaving
+    // it unset keeps Evidence honest ("environment not reported") and stops live
+    // events from being mis-bucketed under Production in the env filter.
     source: "live",
+    // The signer's real chain fields, carried verbatim so Evidence can render a
+    // genuine signed receipt (hash chain, signature, key id, server-verified
+    // flag) instead of a fabricated one. Omitted when the receipt lacks them.
+    ...(typeof r.seq === "number" ? { seq: r.seq } : {}),
+    ...(r.prev ? { prev: r.prev } : {}),
+    ...(r.sig ? { sig: r.sig } : {}),
+    ...(r.key_id ? { keyId: r.key_id } : {}),
+    ...(typeof row.verified === "boolean" ? { verified: row.verified } : {}),
     act: {
       effect: r.tool_name ?? "",
       ...(path ? { path } : {}),
       ctx: {
         "device.id": r.device_id ?? row.device_id,
         enforcement: r.enforcement ?? "",
+        // The raw effect before DECISION_MAP collapses tamper/violation into
+        // BLOCK — Evidence uses it to describe what actually happened.
+        receiptEffect: effectRaw,
       },
     },
   };
@@ -131,17 +148,22 @@ export function evtFromReceipt(row: CpReceiptRow): Evt {
 export function ruleFromCp(row: CpRuleRow): Rule {
   const effect = (row.effect ?? "block").toLowerCase();
   const decision: Decision = effect === "allow" ? "ALLOW" : effect === "review" ? "REVIEW" : "BLOCK";
-  // The CP rule condition is retained inside `why` so the Contract screen can
-  // render it as advanced-condition text instead of silently dropping it —
-  // and `custom: true` keeps the Builder from trying to represent it.
-  const conditionSummary = row.condition_json ? ` — advanced condition: ${row.condition_json}` : "";
   return {
     id: row.id,
     title: row.name ?? row.id,
-    why: (row.description ?? "").trim() + conditionSummary,
-    when: { effect: ["policy.*"] },
+    why: (row.description ?? "").trim(),
+    // Emit no synthetic matcher. The CP rule is a structured condition evaluated on
+    // the device, not a browser `effect` glob; the old `effect: ["policy.*"]` named
+    // a namespace no action carries and made the local tester silently fall through.
+    // An empty matcher never fabricates a browser verdict. The real condition and
+    // evaluation order travel on `condition`/`priority`, and `cpOnly` marks the rule
+    // as Control-Plane-evaluated so surfaces can say so instead of guessing.
+    when: { effect: [] },
     decision,
     scope: "all",
     custom: true,
+    cpOnly: true,
+    ...(row.condition_json ? { condition: row.condition_json } : {}),
+    ...(typeof row.priority === "number" ? { priority: row.priority } : {}),
   };
 }

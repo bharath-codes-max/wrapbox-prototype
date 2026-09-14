@@ -84,10 +84,17 @@ const UPSTREAMS: Upstream[] = [
 function ToolTable({ tools, agentId }: { tools: Upstream["tools"]; agentId: string }) {
   const published = useStore((s) => s.published);
   useStore((s) => s.killSwitch);
+  // In v2 the published rules are Control-Plane rules whose conditions are opaque to the
+  // browser matcher (when: policy.*), so every representative call falls through to the
+  // browser default (ALLOW). That is the inverse of what the CP does — it decides at call
+  // time and fails closed on no match — so we must not render a decision the runtime never
+  // made. In the simulated workspaces the local engine genuinely decides these calls.
+  const cpBacked = useStore((s) => s.workspace) === "v2";
   const decide = (act: Act) => {
     const v = evaluateNow(act, agentId);
     const rule = published.find((r) => r.id === v.rule);
-    return { v, tiers: !!rule?.tiers };
+    const cpUnevaluable = cpBacked && (v.rule === "default" || rule?.custom === true);
+    return { v, tiers: !!rule?.tiers, cpUnevaluable };
   };
   return (
     <div className="overflow-x-auto rounded-xl border border-line">
@@ -97,12 +104,12 @@ function ToolTable({ tools, agentId }: { tools: Upstream["tools"]; agentId: stri
             <th className="font-medium px-4 py-2.5">Tool</th>
             <th className="font-medium px-4 py-2.5">Normalized effect</th>
             <th className="font-medium px-4 py-2.5">Risk</th>
-            <th className="font-medium px-4 py-2.5">Default decision</th>
+            <th className="font-medium px-4 py-2.5">Decision</th>
           </tr>
         </thead>
         <tbody>
           {tools.map((t, i) => {
-            const { v, tiers } = decide(t.act);
+            const { v, tiers, cpUnevaluable } = decide(t.act);
             return (
               <motion.tr key={t.name} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.08 }} className="border-b border-line last:border-0">
                 <td className="px-4 py-2.5 font-mono">{t.name}</td>
@@ -111,7 +118,12 @@ function ToolTable({ tools, agentId }: { tools: Upstream["tools"]; agentId: stri
                   <Chip tone={t.risk === "high" ? "block" : t.risk === "medium" ? "review" : "muted"}>{t.risk}</Chip>
                 </td>
                 <td className="px-4 py-2.5">
-                  {tiers ? (
+                  {cpUnevaluable ? (
+                    <span className="flex max-w-[280px] flex-col items-start gap-1">
+                      <Chip>Not evaluated here</Chip>
+                      <span className="text-[11px] text-fg-3">Decided by the Control Plane at call time. Calls that match no active rule are blocked (fail closed).</span>
+                    </span>
+                  ) : tiers ? (
                     <span className="font-mono text-[11.5px] text-fg">rule {v.rule} (tiers)</span>
                   ) : (
                     <span className="inline-flex items-center gap-2">
@@ -257,6 +269,11 @@ export function Gateway() {
   const connected = useStore((s) => s.connected);
   const events = useStore((s) => s.events);
   const { labs, fabric } = useWorkspace();
+  // v2 is the live Control-Plane-backed workspace. The hosted MCP gateway and credential
+  // broker are genuinely simulated in the `fabric` reference workspace but are not built in
+  // v2 (this dashboard only reads from the CP), so gateway-enforcement copy must not claim
+  // them there. Both workspaces have fabric: true, so gate on the workspace id itself.
+  const cpBacked = useStore((s) => s.workspace) === "v2";
   const dayStart = new Date().setHours(0, 0, 0, 0);
   const callsOf = (u: Upstream) => events.filter((e) => e.agentId === u.agentId && e.ts >= dayStart).length;
   const [open, setOpen] = useState(false);
@@ -264,9 +281,9 @@ export function Gateway() {
   return (
     <div className="mx-auto max-w-[1280px] px-4 lg:px-8 py-8">
       <PageHeader
-        eyebrow={fabric ? "Installed once per network · gateway-enforced" : "MCP tools & servers · gateway-enforced"}
+        eyebrow={fabric ? (cpBacked ? "MCP gateway · planned" : "Installed once per network · gateway-enforced") : "MCP tools & servers · gateway-enforced"}
         title={fabric ? "Gateway" : "MCP gateway"}
-        sub={fabric ? "One front door for every MCP server and API your agents reach. Clients use the Wrapbox URL instead of the real one; approved calls are forwarded with a brokered credential, everything else never reaches the upstream." : "Wrap any MCP server — including your payment gateways — behind one policy. Clients use the Wrapbox URL instead of the real one; approved calls are forwarded, everything else never reaches the upstream."}
+        sub={fabric ? (cpBacked ? "Planned: one front door for every MCP server and API your agents reach. Not built in this release — no MCP server is proxied today and no credential is brokered. The network control that exists in this build is the local proxy on 127.0.0.1:4180, which covers processes launched through wrapboxd." : "One front door for every MCP server and API your agents reach. Clients use the Wrapbox URL instead of the real one; approved calls are forwarded with a brokered credential, everything else never reaches the upstream.") : "Wrap any MCP server — including your payment gateways — behind one policy. Clients use the Wrapbox URL instead of the real one; approved calls are forwarded, everything else never reaches the upstream."}
         right={
           <Button variant="primary" onClick={() => setOpen(true)}>
             <Plus className="size-3.5" /> Wrap a server

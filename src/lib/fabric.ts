@@ -30,7 +30,7 @@ export const LAUNCH: Record<LaunchMode, { label: string; plain: string; tone: "a
 
 /** Coverage classes are the existing assurance levels, read per action kind. */
 export const COVERAGE: Record<Assurance, { cls: CoverageClass | "Gap"; plain: string }> = {
-  "endpoint-enforced": { cls: "Floor", plain: "OS confinement below the agent: file, process and network fence. Cannot be bypassed by an unprivileged process." },
+  "endpoint-enforced": { cls: "Floor", plain: "OS confinement (macOS Seatbelt) around a process the Runtime launched or attributes by ancestry — files, processes and network fenced below it, and a child it spawns cannot escape. An agent started outside Wrapbox is not inside it." },
   "hook-enforced": { cls: "Ceiling", plain: "The agent's own pre-tool hook, written by the Runtime. Sees tool and arguments; returns the reason to the model." },
   "gateway-enforced": { cls: "Remote", plain: "The Gateway sees the full request and brokers the credential. The agent never holds the real key." },
   "resource-verified": { cls: "Assured", plain: "The destination verifies the signed receipt and refuses anything without one. Survives a compromised device." },
@@ -99,7 +99,12 @@ export function coverageFor(device: FleetDevice, agent: DiscoveredAgent, kind: K
   const out: CoverageClass[] = [];
   const p = profileOf(agent.agentId);
   const floorKinds: Kind[] = ["fs.read", "fs.write", "exec", "net.connect", "model.request", "scm.push"];
-  if (device.state === "healthy" && floorKinds.includes(kind)) out.push("Floor");
+  // Floor = Seatbelt confinement, real only for a process the Runtime launched or manages. A binary the
+  // fleet merely discovered on disk (launchMode "unknown" — every live Control-Plane agent, since cp-map
+  // maps them all that way) is ungoverned until started through a shim, so device health alone must not
+  // paint a Floor over it. A tampered adapter (native-unmanaged) still keeps its Floor, per docs.
+  const runtimeLaunched = !!p && agent.launchMode !== "unknown";
+  if (device.state === "healthy" && runtimeLaunched && floorKinds.includes(kind)) out.push("Floor");
   if (p && hooked(agent) && p.covers.includes(kind)) out.push("Ceiling");
   const gw = gateways.find((g) => g.state === "healthy");
   if (gw && ((kind === "mcp.tool_call" && gw.upstreams.length) || ((kind === "http.request" || kind === "payment") && gw.brokered.length))) out.push("Remote");

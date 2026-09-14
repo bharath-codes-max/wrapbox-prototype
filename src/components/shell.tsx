@@ -356,7 +356,9 @@ function WorkspaceMenu() {
   const connectedCount = useStore((s) => Object.keys(s.connected).length);
   const counts = useMemo(() => {
     const m: Record<string, number> = { all: events.length, production: 0, staging: 0, development: 0 };
-    for (const e of events) m[e.env] = (m[e.env] ?? 0) + 1;
+    // Evt.env is optional now — live CP events carry no environment, so they
+    // count toward no bucket and the picker below collapses the empty ones.
+    for (const e of events) if (e.env) m[e.env] = (m[e.env] ?? 0) + 1;
     return m;
   }, [events]);
   useEffect(() => {
@@ -468,8 +470,20 @@ function Topbar({ onMenu }: { onMenu: () => void }) {
   const live = useStore((s) => s.live);
   const events = useStore((s) => s.events.length);
   const ruleCount = useStore((s) => s.published.length);
+  const fleet = useStore((s) => s.fleet);
+  const workspace = useStore((s) => s.workspace);
   const { labs, fabric } = useWorkspace();
   const nav = useNavStyle();
+  // v2 is the only live Control-Plane-backed workspace. There `ruleCount` is a
+  // row count in the CP rules table — it proves a rule exists, never that any
+  // device pulled it or is enforcing it — and the CP's default posture is
+  // fail-closed BLOCK. fabric/fresh are the simulated prototype, where the local
+  // engine genuinely enforces the rules and defaults to ALLOW when none match,
+  // so the older "Enforcing / allowing everything" copy is true there.
+  const cpBacked = workspace === "v2";
+  // Enforcement is real only on a device that has actually pulled the ruleset
+  // and is still reporting; an unmapped/absent pull timestamp counts as 0.
+  const enforcing = cpBacked ? fleet.filter((d) => (d.rulesetPulledAt ?? 0) > 0 && d.state !== "heartbeat-lost").length : 0;
   return (
     <header data-nav={nav} className="wb-nav relative sticky top-0 z-40 flex items-center gap-3 h-[68px] px-4 lg:px-5 border-b border-(--n-edge) transition-[background,color] duration-300">
       <span className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-[linear-gradient(90deg,transparent,var(--n-glow),transparent)]" />
@@ -499,6 +513,26 @@ function Topbar({ onMenu }: { onMenu: () => void }) {
           <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-[#ff6e8a]/15 text-(--n-bad-fg) ring-1 ring-[#ff6e8a]/30 px-3 h-8 text-[12px] font-semibold">
             <OctagonX className="size-3.5" /> Kill switch on
           </span>
+        ) : cpBacked ? (
+          // Live posture. A green "enforcing" claim requires devices that have
+          // actually pulled the ruleset; a published-but-unpulled ruleset and the
+          // fail-closed default both read as neutral, never as active enforcement.
+          ruleCount && enforcing ? (
+            <span className="hidden xl:inline-flex items-center gap-2 rounded-full bg-(--n-ok-bg) ring-1 ring-(--n-ok-ring) px-3 h-8 text-[12px] font-medium text-(--n-ok-fg)">
+              <span className={cn("size-1.5 rounded-full bg-(--n-ok-dot)", live && "live-dot")} />
+              {ruleCount} {ruleCount === 1 ? "rule" : "rules"} · enforcing on {enforcing}/{fleet.length} {fleet.length === 1 ? "device" : "devices"}
+            </span>
+          ) : ruleCount ? (
+            <span className="hidden xl:inline-flex items-center gap-2 rounded-full ring-1 ring-(--n-ring) px-3 h-8 text-[12px] text-(--n-fg-2)">
+              <span className="size-1.5 rounded-full bg-(--n-fg-3)" />
+              {ruleCount} {ruleCount === 1 ? "rule" : "rules"} published · no device has pulled them yet
+            </span>
+          ) : (
+            <span className="hidden xl:inline-flex items-center gap-2 rounded-full ring-1 ring-(--n-ring) px-3 h-8 text-[12px] text-(--n-fg-2)">
+              <span className="size-1.5 rounded-full bg-(--n-fg-3)" />
+              {events ? "No rules — blocking by default" : "Waiting for your first agent"}
+            </span>
+          )
         ) : ruleCount ? (
           <span className="hidden xl:inline-flex items-center gap-2 rounded-full bg-(--n-ok-bg) ring-1 ring-(--n-ok-ring) px-3 h-8 text-[12px] font-medium text-(--n-ok-fg)">
             <span className={cn("size-1.5 rounded-full bg-(--n-ok-dot)", live && "live-dot")} />
