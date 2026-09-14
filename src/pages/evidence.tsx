@@ -40,9 +40,13 @@ function EvidenceBody({ e }: { e: Evt }) {
     ...(e.decision === "REVIEW" || approvers.length
       ? [{ label: "Approver", value: approvers.length ? approvers.map((x) => x!.name).join(" + ") : <span className="text-review">waiting for a human</span> }]
       : []),
-    { label: "Decision", value: <span className="flex items-center gap-2"><DecisionPill d={e.decision} size="sm" /><span className="font-mono text-[12px] text-fg-3">{e.latency} ms · {e.env}</span>{e.observed && <span className="text-[11.5px] text-review">observe mode: would {e.observed}</span>}</span> },
-    { label: "Permit", value: e.permit ? <span className="font-mono text-[12px] text-accent">{e.permit} · verified · used once</span> : <span className="text-fg-3">{e.decision === "BLOCK" ? "none — denied before execution" : e.decision === "REVIEW" ? "pending approval" : "auto-minted, 60s"}</span> },
-    { label: "Outcome", value: e.decision === "BLOCK" ? <span className="text-block font-medium">Effect never executed</span> : e.decision === "REVIEW" ? <span className="text-review font-medium">Paused</span> : e.decision === "CONSTRAIN" ? <span className="text-constrain font-medium">Safer variant executed once</span> : <span className="text-allow font-medium">Executed once</span> },
+    { label: "Decision", value: <span className="flex items-center gap-2"><DecisionPill d={e.decision} size="sm" /><span className="font-mono text-[12px] text-fg-3">{e.latency > 0 ? `${e.latency} ms · ` : ""}{e.env}</span>{e.observed && <span className="text-[11.5px] text-review">observe mode: would {e.observed}</span>}</span> },
+    // Only describe a permit that exists. An allow with no permit means none was
+    // minted — saying "auto-minted, 60s" would invent a control that never ran.
+    { label: "Permit", value: e.permit ? <span className="font-mono text-[12px] text-accent">{e.permit} · verified · used once</span> : <span className="text-fg-3">{e.decision === "BLOCK" ? "none — denied before execution" : e.decision === "REVIEW" ? "pending approval" : "none minted for this decision"}</span> },
+    // Wrapbox observes its own decision, not the outcome of the action it let
+    // through: "Executed once" would assert a completion nothing reported.
+    { label: "Outcome", value: e.decision === "BLOCK" ? <span className="text-block font-medium">Effect never executed</span> : e.decision === "REVIEW" ? <span className="text-review font-medium">Paused</span> : e.decision === "CONSTRAIN" ? <span className="text-constrain font-medium">Safer variant allowed to proceed</span> : <span className="text-allow font-medium">Allowed to proceed</span> },
   ];
   return (
     <div className="p-5 space-y-5">
@@ -226,7 +230,7 @@ export function Evidence({ query }: { query?: URLSearchParams }) {
                     )}
                     <td className={cn("px-3 py-3.5 text-[12px]", mine ? "text-fg-2" : "font-mono text-fg-3")}>{mine ? e.reason : e.rule}</td>
                     {!mine && <td className="px-3 py-3.5">{p && <span className="flex items-center gap-2 text-[12.5px]"><Avatar p={p} size={20} />{p.name}</span>}</td>}
-                    <td className="px-5 py-3.5 text-right font-mono text-[11.5px] text-fg-3 tnum">{e.latency} ms</td>
+                    <td className="px-5 py-3.5 text-right font-mono text-[11.5px] text-fg-3 tnum">{e.latency > 0 ? `${e.latency} ms` : "—"}</td>
                   </tr>
                 );
               })}

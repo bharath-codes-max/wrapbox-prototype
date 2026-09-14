@@ -96,6 +96,9 @@ export interface CpAgentRow {
   kind?: string;
   detected_via?: string;
   where?: string;
+  version?: string;
+  last_seen_at?: string;
+  created_at?: string;
   [k: string]: unknown;
 }
 export interface CpReceiptRow {

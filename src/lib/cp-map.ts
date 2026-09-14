@@ -29,9 +29,17 @@ function stateOf(s: string | null | undefined): FleetDevice["state"] {
   return "enrolling";
 }
 
+/**
+ * SQLite's datetime('now') returns UTC as "YYYY-MM-DD HH:MM:SS" — no T, no
+ * zone marker. Date.parse() reads that as LOCAL time, so every timestamp the
+ * Control Plane wrote lands off by the viewer's UTC offset (a live device
+ * reads as hours stale). Stamp the zone on before parsing; ISO strings with
+ * their own offset are passed through untouched.
+ */
 function toMs(iso: string | null | undefined): number {
   if (!iso) return 0;
-  const t = Date.parse(iso);
+  const sqliteUtc = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(iso);
+  const t = Date.parse(sqliteUtc ? `${iso.replace(" ", "T")}Z` : iso);
   return Number.isFinite(t) ? t : 0;
 }
 
@@ -61,9 +69,10 @@ export function agentFromCp(row: CpAgentRow): DiscoveredAgent {
   return {
     agentId: `unknown:${name}`,
     binary: typeof row.where === "string" ? row.where : name,
-    version: "",
+    version: typeof row.version === "string" ? row.version : "",
     launchMode: "unknown",
-    discoveredAt: 0,
+    // The row's own timestamps, never 0 — epoch renders as "20711d ago".
+    discoveredAt: toMs((row.created_at ?? row.last_seen_at) as string | undefined),
   };
 }
 

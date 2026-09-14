@@ -59,7 +59,10 @@ export function Fleet() {
       if (d.state === "heartbeat-lost") out.push({ tone: "review", title: `${d.hostname} stopped reporting`, body: `Last heartbeat ${fmtHeartbeat(d.heartbeat)}. Its cached bundle v${d.policyBundleVersion} keeps enforcing locally; no receipt can be minted for it until it checks in.`, href: `/fleet/${d.id}` });
       if (d.state === "quarantined") out.push({ tone: "block", title: `${d.hostname} is quarantined`, body: "Every action from this device is refused until an admin lifts the quarantine.", href: `/fleet/${d.id}` });
       for (const a of d.agents) {
-        if (!profileOf(a.agentId)) out.push({ tone: "review", title: `Unknown process on ${d.hostname}`, body: `${a.binary} is reaching a model provider without a profile. Its model calls are refused by rule model.egress until it is enrolled.`, href: `/fleet/${d.id}` });
+        // Say only what was observed. Discovery is a filesystem scan: it proves
+        // the agent is INSTALLED, never that it ran, reached a model host, or
+        // was refused anything. Never describe enforcement we did not perform.
+        if (!profileOf(a.agentId)) out.push({ tone: "review", title: `Ungoverned agent on ${d.hostname}`, body: `${a.binary} is installed but not provisioned by Wrapbox. Anything it does is outside policy unless it is launched through a Wrapbox shim — run \`wrapboxd wrap\` on the device to cover it.`, href: `/fleet/${d.id}` });
         if (a.adapter?.state === "tampered") out.push({ tone: "block", title: `Adapter changed on ${d.hostname}`, body: `${a.adapter.path} was edited outside Wrapbox. ${agentById(a.agentId).name} is unmanaged until the Runtime rewrites it.`, href: `/fleet/${d.id}` });
       }
     }
@@ -90,7 +93,7 @@ export function Fleet() {
         title={admin ? "Fleet" : "My device"}
         sub={
           admin
-            ? `${devices.length} enrolled ${devices.length === 1 ? "device" : "devices"} and ${gateways.length} ${gateways.length === 1 ? "gateway" : "gateways"} enforce contract v${version}. Every agent on them was discovered and provisioned by the Runtime — nothing was installed per agent.`
+            ? `${devices.length} enrolled ${devices.length === 1 ? "device" : "devices"} and ${gateways.length} ${gateways.length === 1 ? "gateway" : "gateways"} enforce contract v${version}. Every agent on them was discovered by the Runtime — nothing is installed per agent.`
             : `The Runtime on your laptop discovered your agents and wrote their adapters. Contract v${version} applies to all of them; you will only notice it when an action touches secrets, main, customer data or production.`
         }
         right={
@@ -114,7 +117,7 @@ export function Fleet() {
 
       {attention.length > 0 && (
         <Card className="overflow-hidden mb-4">
-          <CardHead title="Needs attention" sub="From runtime heartbeats, adapter integrity checks and the credential broker" />
+          <CardHead title="Needs attention" sub="From runtime heartbeats, agent discovery and adapter integrity checks" />
           <div className="border-t border-line">
             {attention.map((a, i) => (
               <a key={i} href={"#" + a.href} className="flex items-start gap-3 px-6 py-4 border-b border-line last:border-0 hover:bg-surface-2">
@@ -419,7 +422,9 @@ export function FleetDeviceDetail({ id }: { id: string }) {
       <Card className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-line overflow-hidden mb-5">
         {[
           ["Runtime", `wrapboxd ${d.runtimeVersion}`, d.state === "healthy" ? "running" : d.state === "heartbeat-lost" ? "not reporting" : d.state],
-          ["Policy bundle", `v${d.policyBundleVersion}`, "signed, cached locally"],
+          // Rule bundles are not signed in this build (bundle signing is on the
+          // roadmap) — say only that a copy is cached on the device.
+          ["Policy bundle", `v${d.policyBundleVersion}`, "cached on the device"],
           ["Heartbeat", fmtHeartbeat(d.heartbeat), "every 30 s while running"],
           ["Agents", String(d.agents.length), `${d.agents.filter((a) => a.adapter).length} adapters written`],
         ].map(([l, v, s]) => (
@@ -441,7 +446,7 @@ export function FleetDeviceDetail({ id }: { id: string }) {
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <div className="space-y-5 min-w-0">
           <Card className="overflow-hidden">
-            <CardHead title="Discovered agents" sub="Found by the Runtime from agent profiles. Each one's adapter was written by the Runtime, never by hand." />
+            <CardHead title="Discovered agents" sub="Found by the Runtime's scan of this device. An adapter is written only for an agent that matches a profile — the rest are listed here but not provisioned." />
             <div className="border-t border-line divide-y divide-line">
               {d.agents.map((a) => {
                 const agent = agentById(a.agentId);
@@ -469,7 +474,7 @@ export function FleetDeviceDetail({ id }: { id: string }) {
                         <span className="ml-auto text-[11px] text-fg-3">written {ago(a.adapter.writtenAt)} · {a.adapter.sha256.slice(0, 16)}…</span>
                       </div>
                     ) : (
-                      <div className="mt-2.5 text-[12px] text-fg-3">{p ? "Launched by the Runtime as a service — no adapter file; governed by the SDK guard and the Gateway." : "No profile matches this process. Nothing was provisioned; the Floor still sees it."}</div>
+                      <div className="mt-2.5 text-[12px] text-fg-3">{p ? "Launched by the Runtime as a service — no adapter file; governed by the SDK guard and the Gateway." : "No profile matches this process. Nothing was provisioned for it — it is governed only when launched through a Wrapbox shim."}</div>
                     )}
                   </div>
                 );

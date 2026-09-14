@@ -25,7 +25,7 @@ export const LAUNCH: Record<LaunchMode, { label: string; plain: string; tone: "a
   wrapbox: { label: "Wrapbox launch", plain: "Started by the Runtime under confinement. Files, processes and network are fenced below it.", tone: "allow" },
   "native-managed": { label: "Native · managed", plain: "Started normally; the vendor honours the adapter the Runtime wrote. Hooks ask Wrapbox before every tool call.", tone: "allow" },
   "native-unmanaged": { label: "Native · unmanaged", plain: "Its adapter was changed outside Wrapbox. Until the Runtime rewrites it, model calls are refused.", tone: "block" },
-  unknown: { label: "Unknown process", plain: "Not matched to any profile. Seen only because it tried to reach a model provider.", tone: "review" },
+  unknown: { label: "Unknown process", plain: "Not matched to any agent profile, so no adapter was written. Wrapbox governs it only when it is launched through a shim.", tone: "review" },
 };
 
 /** Coverage classes are the existing assurance levels, read per action kind. */
@@ -111,7 +111,10 @@ export const destinationKind = (d: Destination): Kind => (d.kind === "scm.push" 
 /** Plain-language gap statement for an agent on a device, or null when nothing is missing. */
 export function gapFor(device: FleetDevice, agent: DiscoveredAgent): string | null {
   const p = profileOf(agent.agentId);
-  if (!p) return `${agent.binary}: not in any profile — Floor only, model calls refused`;
+  // Never assert enforcement here: an unprofiled binary is simply ungoverned
+  // until it is launched through a shim. Claiming its calls are "refused"
+  // describes a Floor this build does not have.
+  if (!p) return `${agent.binary}: not in any profile — ungoverned unless launched through a Wrapbox shim`;
   if (agent.launchMode === "native-unmanaged") return `${agentById(agent.agentId).name}: adapter changed outside Wrapbox — Ceiling lost until re-provisioned`;
   if (!p.adapter) return `${agentById(agent.agentId).name}: no hook interface — Floor and Remote only`;
   if (device.state !== "healthy") return `${device.hostname}: Runtime not reporting — coverage last confirmed ${new Date(device.heartbeat).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;

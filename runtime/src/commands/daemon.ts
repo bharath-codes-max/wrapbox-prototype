@@ -45,6 +45,16 @@ export async function cmdDaemon(): Promise<number> {
   const version = daemonVersion();
   console.log(`wrapboxd ${version} — daemon started (server ${cfg.server}). Ctrl-C to stop.`);
 
+  // Last-resort net. An enforcement daemon that exits stops enforcing, so a
+  // stray async error must degrade to a log line, never to a dead process.
+  // Anything reaching here is a bug worth fixing — it is logged loudly.
+  process.on("uncaughtException", (err) => {
+    console.error(`wrapboxd: uncaught exception (daemon continues): ${err?.stack || err}`);
+  });
+  process.on("unhandledRejection", (reason) => {
+    console.error(`wrapboxd: unhandled rejection (daemon continues): ${reason}`);
+  });
+
   const timers: NodeJS.Timeout[] = [];
   let lastRulesHash = "";
   try {

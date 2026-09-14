@@ -186,10 +186,26 @@ export async function startProxy(port: number = DEFAULT_PROXY_PORT): Promise<Pro
   if (!cfg) throw new Error("proxy: not enrolled — cannot sign receipts (run: wrapboxd enroll ...)");
 
   // Universal safety net — one connection must never crash the daemon.
-  const server = http.createServer((req, res) => { try { handleHttp(req, res); } catch (err) {
-    console.error(`proxy handler: ${(err as Error).message}`);
-    try { res.destroy(); } catch { /* ignore */ }
-  } });
+  //
+  // try/catch alone is NOT that net: a socket reset arrives asynchronously as
+  // an 'error' event, and an unhandled one takes the whole process down. Every
+  // socket therefore gets an error listener attached BEFORE any I/O on it.
+  const server = http.createServer((req, res) => {
+    req.on("error", () => { /* client hung up mid-request */ });
+    res.on("error", () => { /* client hung up mid-response */ });
+    try { handleHttp(req, res); } catch (err) {
+      console.error(`proxy handler: ${(err as Error).message}`);
+      try { res.destroy(); } catch { /* ignore */ }
+    }
+  });
+  // Malformed request line / TLS sent to the plain port: answer if we still can,
+  // otherwise drop quietly. Without this listener Node throws on the socket.
+  server.on("clientError", (_err, socket) => {
+    try {
+      if ((socket as net.Socket).writable) socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
+      else socket.destroy();
+    } catch { /* ignore */ }
+  });
   const handleHttp = (req: http.IncomingMessage, res: http.ServerResponse) => {
     // Plain HTTP forward. req.url may be absolute (proxy request) or relative.
     let target: URL;
@@ -237,10 +253,16 @@ export async function startProxy(port: number = DEFAULT_PROXY_PORT): Promise<Pro
     req.pipe(outReq);
   };
 
-  server.on("connect", (req, clientSocket, head) => { try { handleConnect(req, clientSocket, head); } catch (err) {
-    console.error(`proxy connect: ${(err as Error).message}`);
-    try { clientSocket.destroy(); } catch { /* ignore */ }
-  } });
+  server.on("connect", (req, clientSocket, head) => {
+    // Attach FIRST: a browser that is refused a tunnel typically resets the
+    // socket immediately, and that reset must not reach the process as an
+    // unhandled 'error'.
+    clientSocket.on("error", () => { /* client reset the tunnel */ });
+    try { handleConnect(req, clientSocket, head); } catch (err) {
+      console.error(`proxy connect: ${(err as Error).message}`);
+      try { clientSocket.destroy(); } catch { /* ignore */ }
+    }
+  });
   const handleConnect = (req: http.IncomingMessage, clientSocket: Duplex, head: Buffer) => {
     // HTTPS tunnel — never MITM. Inspect the CONNECT target host string only.
     const { host, port } = parseHostPort(req.url || "", 443);
@@ -252,20 +274,28 @@ export async function startProxy(port: number = DEFAULT_PROXY_PORT): Promise<Pro
 
     if (d.effect === "block") {
       const safeReason = d.reason.replace(/[^\x20-\x7e]/g, "?");
-      clientSocket.write(`HTTP/1.1 403 Forbidden\r\nX-Wrapbox-Reason: ${safeReason}\r\n\r\n`);
-      clientSocket.end();
+      try {
+        clientSocket.write(`HTTP/1.1 403 Forbidden\r\nX-Wrapbox-Reason: ${safeReason}\r\n\r\n`);
+        clientSocket.end();
+      } catch { /* client already gone — the receipt is already written */ }
       return;
     }
-    const upstream = net.connect(port, host, () => {
-      clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
-      if (head && head.length) upstream.write(head);
-      upstream.pipe(clientSocket);
-      clientSocket.pipe(upstream);
-    });
+    const upstream = net.connect(port, host);
     upstream.on("error", () => {
-      clientSocket.end(`HTTP/1.1 502 Bad Gateway\r\n\r\n`);
+      try {
+        if ((clientSocket as net.Socket).writable) clientSocket.end("HTTP/1.1 502 Bad Gateway\r\n\r\n");
+        else clientSocket.destroy();
+      } catch { /* ignore */ }
     });
-    clientSocket.on("error", () => { try { upstream.destroy(); } catch { /* ignore */ } });
+    upstream.on("connect", () => {
+      try {
+        clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+        if (head && head.length) upstream.write(head);
+        upstream.pipe(clientSocket);
+        clientSocket.pipe(upstream);
+      } catch { try { upstream.destroy(); } catch { /* ignore */ } }
+    });
+    clientSocket.on("close", () => { try { upstream.destroy(); } catch { /* ignore */ } });
   };
 
   await new Promise<void>((resolve, reject) => {

@@ -181,6 +181,57 @@ npx tsx src/cli.ts verify
 # → Reports the break by seq number.
 ```
 
+## 6b. Govern browser-based AI (ChatGPT web, Gemini web, Claude.ai)
+
+A browser agent runs on the vendor's servers, so it can never read a file on
+the laptop — the kernel test above does not apply to it. What Wrapbox governs
+for browser agents is the **network**: which AI sites the browser may reach,
+with every attempt recorded. (This is the "employees must not paste our code
+into unapproved AI tools" control.)
+
+Add website rules — block two AI sites, approve one:
+
+```sh
+for spec in "Block ChatGPT website|block|150|chatgpt.com" \
+            "Block Gemini website|block|150|gemini.google.com" \
+            "Allow Claude website (approved)|allow|140|claude.ai"; do
+  IFS='|' read -r name eff pri host <<< "$spec"
+  curl -s -H "$A" -H 'content-type: application/json' \
+    -d "{\"org_id\":\"$ORG\",\"name\":\"$name\",\"effect\":\"$eff\",\"priority\":$pri,\"condition\":{\"field\":\"tool_input.host\",\"op\":\"contains\",\"value\":\"$host\"}}" \
+    $CP/v1/rules >/dev/null && echo "+ $name"
+done
+cd ~/Music/wrapbox-prototype/runtime && npx tsx src/cli.ts pull
+```
+
+With the daemon running (step 5), open a Chrome window that routes through the
+Wrapbox proxy. It uses its own profile folder, so your normal Chrome is untouched:
+
+```sh
+open -na "Google Chrome" --args \
+  --proxy-server="http://127.0.0.1:4180" \
+  --user-data-dir=/tmp/wrapbox-demo/chrome-profile \
+  --no-first-run "https://chatgpt.com"
+```
+
+| Visit | Result |
+|---|---|
+| chatgpt.com | `ERR_TUNNEL_CONNECTION_FAILED` — Wrapbox refused the tunnel |
+| gemini.google.com | same — blocked |
+| claude.ai | loads normally — your rule approved it |
+| google.com | loads normally — catch-all allow |
+
+Every attempt is a signed receipt (`enforcement: "proxy"`). Chrome retries a
+blocked site aggressively, so expect dozens of BLOCK receipts for one visit:
+
+```sh
+grep '"target":"chatgpt.com' $WRAPBOX_HOME/receipts.jsonl | wc -l
+```
+
+Honest limit: this is the browser you launched through the proxy. A browser the
+employee opens by clicking its icon is not routed until the proxy is set
+system-wide (an MDM-pushed network profile) — that is the production
+deployment path, documented in `docs/runtime/WRAPBOXD.md`, not this test.
+
 ## 7. See it all in the browser (v2 workspace)
 
 ```sh

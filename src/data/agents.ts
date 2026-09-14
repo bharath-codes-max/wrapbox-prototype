@@ -2036,7 +2036,9 @@ export const isUnknownAgent = (id: string) => id.startsWith("unknown:");
 function unknownAgent(id: string): Agent {
   let a = unknownAgents.get(id);
   if (!a) {
-    const binary = id.slice("unknown:".length);
+    // Only strip the prefix when it is actually there — a bare id like
+    // "discovery" would otherwise be sliced into nonsense ("y").
+    const binary = id.startsWith("unknown:") ? id.slice("unknown:".length) : id;
     a = { id, name: binary, vendor: "Unrecognized process", category: "custom", logo: "process", adapter: "runtime", surface: "terminal", file: "—", fileNote: "Not matched to any agent profile. Seen only through the model-egress gate.", lang: "bash", snippet: "", install: "", hookEvents: [], docs: "", connected: false, owner: "—", env: "—" };
     unknownAgents.set(id, a);
   }

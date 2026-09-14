@@ -10,7 +10,7 @@ import { useSyncExternalStore } from "react";
 import { getState, setState, subscribeStore } from "./store";
 import type { CpConfig } from "./cp-config";
 import { cpConfigComplete, getCpConfig, subscribeCpConfig } from "./cp-config";
-import { listAgents, listDevices, listReceipts, listRules } from "./cp-api";
+import { listAgents, listDevices, listOrgs, listReceipts, listRules } from "./cp-api";
 import { deviceFromCp, evtFromReceipt, groupAgentsByDevice, ruleFromCp } from "./cp-map";
 
 export type CpStatus = "unconfigured" | "connecting" | "connected" | "unreachable" | "unauthorized";
@@ -44,11 +44,12 @@ async function pollOnce(cfg: CpConfig) {
   if (inFlight) return;
   inFlight = true;
   try {
-    const [devices, agents, rules, receipts] = await Promise.all([
+    const [devices, agents, rules, receipts, orgs] = await Promise.all([
       listDevices(cfg.orgId),
       listAgents(cfg.orgId),
       listRules(cfg.orgId),
       listReceipts(cfg.orgId, { limit: 200 }),
+      listOrgs(),
     ]);
 
     // Auth failures anywhere bubble up as unauthorized; total unreachability as unreachable.
@@ -70,8 +71,14 @@ async function pollOnce(cfg: CpConfig) {
     const mappedRules = rules.ok ? rules.data.map(ruleFromCp) : getState().rules;
 
     // Receipts → Evt[]. Sorted newest first so the stream reads chronologically.
+    // Inventory receipts (agent:"discovery") are dropped here: they record that
+    // an agent was FOUND on disk, not that policy decided anything, and letting
+    // them into the decision stream would inflate "decisions today" with events
+    // no rule ever evaluated. They remain in the signed chain on the server and
+    // surface as agents on the Fleet page, which is where inventory belongs.
     const evts = receipts.ok
       ? receipts.data
+          .filter((r) => r.receipt?.agent !== "discovery")
           .map(evtFromReceipt)
           .sort((a, b) => b.ts - a.ts)
       : getState().events;
@@ -80,11 +87,16 @@ async function pollOnce(cfg: CpConfig) {
     // request and now must not overwrite the other workspace's data.
     if (getState().workspace !== "v2") return;
 
+    // The tenant's own identity, so the shell stops showing a placeholder
+    // company for a workspace that is pointed at a real org.
+    const org = orgs.ok ? orgs.data.find((o) => o.id === cfg.orgId) : undefined;
+
     setState({
       fleet,
       rules: mappedRules,
       published: mappedRules,
       events: evts,
+      ...(org ? { company: org.name, domain: org.domain ?? "", region: org.region || "us" } : {}),
     });
     setStatus("connected");
   } finally {

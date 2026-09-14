@@ -16,7 +16,18 @@ import { loadState, saveState } from "./receipts.js";
 
 export const SHIMS_DIR = path.join(PATHS.home, "shims");
 
-function shimContents(registryId: string, binName: string): string {
+/**
+ * Network mode baked into a shim.
+ *
+ * "proxy" is the strongest: the sandbox permits only loopback egress to the
+ * local policy proxy, so every destination is checked. It costs compatibility —
+ * a client that ignores HTTP_PROXY/HTTPS_PROXY (Node's undici does by default)
+ * gets no network at all rather than a proxied one, which looks like a broken
+ * agent. "on" keeps the kernel file rules and leaves egress alone.
+ */
+export type ShimNetMode = "proxy" | "on" | "off";
+
+function shimContents(registryId: string, binName: string, net: ShimNetMode): string {
   // NOTE: /usr/local/bin/wrapboxd is the documented install path. Callers
   // testing without a global install can set WRAPBOXD_BIN to point elsewhere;
   // the shim honours that override if present at wrap time.
@@ -29,7 +40,7 @@ if [ -z "$REAL" ] || [ "$REAL" = "$0" ]; then
   echo "wrapboxd shim: cannot resolve real ${binName} — is it installed on PATH?" >&2
   exit 127
 fi
-exec ${bin} run --agent ${registryId} --net proxy -- "$REAL" "$@"
+exec ${bin} run --agent ${registryId} --net ${net} -- "$REAL" "$@"
 `;
 }
 
@@ -46,7 +57,7 @@ function captureOriginalPath(): string {
   return parts.join(":");
 }
 
-export async function installShims(only?: string[]): Promise<WrapResult> {
+export async function installShims(only?: string[], net: ShimNetMode = "on"): Promise<WrapResult> {
   fs.mkdirSync(SHIMS_DIR, { recursive: true });
   const sightings = await detectAgents();
   const targets = shimTargets(sightings).filter((t) => !only || only.includes(t.entry.id));
@@ -59,7 +70,7 @@ export async function installShims(only?: string[]): Promise<WrapResult> {
   for (const t of targets) {
     for (const binName of t.binNames) {
       const p = path.join(SHIMS_DIR, binName);
-      const contents = shimContents(t.entry.id, binName);
+      const contents = shimContents(t.entry.id, binName, net);
       fs.writeFileSync(p, contents, { mode: 0o755 });
       fs.chmodSync(p, 0o755);
       const sha = sha256hex(contents);

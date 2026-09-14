@@ -40,7 +40,9 @@ export function DecisionRow({ e, onClick, compact }: { e: Evt; onClick?: () => v
       <span className="flex items-center gap-2.5">
         {compact && <DecisionPill d={e.decision} size="sm" />}
         {!compact && <span className="hidden xl:inline font-mono text-[11px] text-fg-3 truncate max-w-[140px]">{e.rule}</span>}
-        <span className="font-mono text-[11px] text-fg-3 tnum w-9 text-right">{e.latency} ms</span>
+        {/* A receipt carries no timing, so latency arrives as 0 for live
+            decisions. Rendering "0 ms" would invent a measurement. */}
+        <span className="font-mono text-[11px] text-fg-3 tnum w-9 text-right">{e.latency > 0 ? `${e.latency} ms` : "—"}</span>
         {!compact && p && <Avatar p={p} size={20} className="hidden md:inline-grid" />}
       </span>
     </motion.button>
