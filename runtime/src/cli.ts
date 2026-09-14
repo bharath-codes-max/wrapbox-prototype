@@ -55,7 +55,7 @@ async function main(): Promise<number> {
     case "unprotect":
       return (await import("./commands/protect.js")).cmdUnprotect(rest);
     case "daemon":
-      return (await import("./commands/daemon.js")).cmdDaemon();
+      return (await import("./commands/daemon.js")).cmdDaemon(rest);
     case "verify":
       return (await import("./commands/verify.js")).cmdVerify();
     case "sync":
@@ -68,6 +68,10 @@ async function main(): Promise<number> {
       return (await import("./commands/wrap.js")).cmdWrap(rest);
     case "unwrap":
       return (await import("./commands/wrap.js")).cmdUnwrap(rest);
+    case "protect-network":
+      return (await import("./commands/network.js")).cmdProtectNetwork();
+    case "unprotect-network":
+      return (await import("./commands/network.js")).cmdUnprotectNetwork();
     default:
       console.error(`wrapboxd: unknown command '${cmd}' (see wrapboxd --help)`);
       return 64;

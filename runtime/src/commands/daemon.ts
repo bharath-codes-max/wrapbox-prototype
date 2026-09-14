@@ -13,9 +13,10 @@ import { heartbeat, pullRules } from "../api.js";
 import { loadState, makeReceipt, appendToSpool, drainSpool, spoolDepth } from "../receipts.js";
 import { sha256hex } from "../canonical.js";
 import { installHooks } from "./protect.js";
-import { startProxy, type ProxyHandle } from "../proxy.js";
+import { startProxy, DEFAULT_PROXY_PORT, type ProxyHandle } from "../proxy.js";
 import { detectAgents } from "../discover.js";
 import { checkShimTamper, installShims } from "../shims.js";
+import { enableSystemProxy, disableSystemProxy } from "../sysproxy.js";
 
 function daemonVersion(): string {
   try {
@@ -36,12 +37,16 @@ function cachedPulledAt(): string | undefined {
   }
 }
 
-export async function cmdDaemon(): Promise<number> {
+export async function cmdDaemon(args: string[] = []): Promise<number> {
   const cfg = loadConfig();
   if (!cfg) {
     console.error("✖ Not enrolled. Run: wrapboxd enroll --server URL --org ORG --token WBXE...");
     return 1;
   }
+  // --protect-network makes the daemon set the macOS system proxy so EVERY app
+  // (Safari, Chrome, VS Code…) routes through the gate — and, crucially,
+  // restore it on exit so stopping the daemon never leaves the Mac offline.
+  const protectNetwork = args.includes("--protect-network");
   const version = daemonVersion();
   console.log(`wrapboxd ${version} — daemon started (server ${cfg.server}). Ctrl-C to stop.`);
 
@@ -153,6 +158,16 @@ export async function cmdDaemon(): Promise<number> {
   };
   await superviseProxy();
 
+  if (protectNetwork) {
+    try {
+      const res = await enableSystemProxy(DEFAULT_PROXY_PORT);
+      console.log(`system proxy: ON — every app routes through Wrapbox (services: ${res.services.join(", ")})`);
+      console.log("system proxy: will be restored automatically when this daemon stops.");
+    } catch (err) {
+      console.error(`system proxy: failed to enable (${(err as Error).message}) — continuing without it`);
+    }
+  }
+
   const doInventory = async () => {
     try {
       const sightings = await detectAgents();
@@ -189,14 +204,31 @@ export async function cmdDaemon(): Promise<number> {
   timers.push(setInterval(doShimTamper, 5 * 60_000));
 
   return new Promise<number>((resolve) => {
-    const stop = () => {
+    let stopping = false;
+    const stop = async () => {
+      if (stopping) return;
+      stopping = true;
       timers.forEach(clearInterval);
       if (proxy) proxy.server.removeAllListeners("close");
       void proxy?.stop();
-      console.log("\nwrapboxd daemon stopped.");
+      // CRITICAL: restore networking BEFORE we exit, or every app on the Mac
+      // is left pointed at a dead proxy port with no internet.
+      if (protectNetwork) {
+        try {
+          const svcs = await disableSystemProxy();
+          console.log(`system proxy: restored on ${svcs.join(", ")}`);
+        } catch (err) {
+          console.error(`system proxy: FAILED to restore (${(err as Error).message}) — run: wrapboxd unprotect-network`);
+        }
+      }
+      console.log("wrapboxd daemon stopped.");
       resolve(0);
     };
     process.on("SIGINT", stop);
     process.on("SIGTERM", stop);
+    // Belt-and-braces: if the process is about to exit for any other reason
+    // while the system proxy is ours, the synchronous-only exit hook cannot run
+    // networksetup, so we rely on SIGINT/SIGTERM above and the unprotect-network
+    // escape hatch. Document that plainly rather than pretend exit covers it.
   });
 }
