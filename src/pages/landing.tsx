@@ -5,10 +5,8 @@ import { agentById, type Decision } from "../data/agents";
 import { PEOPLE } from "../data/people";
 import { WrapboxLockup, WrapboxTile } from "../components/logo";
 import { Avatar, CopyButton, D_DOT, cn } from "../components/ui";
-import { useAccount } from "../lib/auth";
 import { logoUrl } from "../lib/logos";
 import { go } from "../lib/router";
-import { homePath } from "../lib/store";
 import { Terminal } from "./auth";
 
 import shotOverview from "../assets/shots/overview.jpg";
@@ -92,7 +90,6 @@ function SectionHead({ eyebrow, title, body, cta, onCta }: { eyebrow: string; ti
 /* ------------------------------------------------------------------ */
 
 function Nav() {
-  const account = useAccount();
   const [solid, setSolid] = useState(false);
   useEffect(() => {
     const on = () => setSolid(window.scrollY > 12);
@@ -119,21 +116,13 @@ function Nav() {
             </button>
           ))}
         </nav>
+        {/* App entry points are deliberately not linked from the public landing
+            page yet (no public login flow to send visitors into). The app is
+            still reachable directly at /login for internal testing. */}
         <div className="ml-auto flex items-center gap-2">
-          {account ? (
-            <button onClick={() => go(homePath())} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#111113] px-4 text-[13.5px] font-medium text-white hover:opacity-90">
-              Open the app <ArrowRight className="size-3.5" />
-            </button>
-          ) : (
-            <>
-              <button onClick={() => go("/login")} className="hidden sm:inline-flex h-9 items-center rounded-full px-3.5 text-[13.5px] font-medium text-fg-2 hover:text-fg">
-                Sign in
-              </button>
-              <button onClick={() => go("/signup")} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#111113] px-4 text-[13.5px] font-medium text-white hover:opacity-90">
-                Get started <ArrowRight className="size-3.5" />
-              </button>
-            </>
-          )}
+          <span className="inline-flex h-9 items-center rounded-full bg-surface-2 px-4 text-[13.5px] font-medium text-fg-3">
+            Coming soon
+          </span>
         </div>
       </Container>
     </header>
@@ -236,13 +225,10 @@ function Hero() {
               The runtime authorization layer for AI agents. Every risky action — from Claude Code to your Stripe MCP — is checked against one intent contract, milliseconds before it runs.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <button onClick={() => go("/signup")} className="inline-flex h-11 items-center gap-2 rounded-full bg-[#111113] px-5 text-[14.5px] font-medium text-white shadow-[0_10px_24px_-12px_rgba(17,17,19,0.8)] hover:opacity-90">
-                Start free <ArrowRight className="size-4" />
-              </button>
               <button onClick={() => scrollTo("decide")} className="inline-flex h-11 items-center gap-2 rounded-full border border-line bg-surface px-5 text-[14.5px] font-medium text-fg hover:border-line-strong">
-                Try it live
+                See how it works
               </button>
-              <span className="text-[13px] text-fg-3">Free for 3 people · no card</span>
+              <span className="text-[13px] text-fg-3">Sign-up opens soon</span>
             </div>
           </motion.div>
         </motion.div>
@@ -762,12 +748,9 @@ function Pricing() {
                     {price ? (annual ? " · billed yearly" : " · billed monthly") : ""}
                   </div>
                   <p className={cn("mt-4 text-[13.5px] leading-relaxed", p.popular ? "text-white/80" : "text-fg-2")}>{p.blurb}</p>
-                  <button
-                    onClick={() => go(p.name === "Enterprise" ? "/landing" : "/signup")}
-                    className={cn("mt-5 inline-flex h-10 items-center justify-center gap-1.5 rounded-full text-[13.5px] font-medium transition-opacity hover:opacity-90", p.popular ? "bg-white text-[#111113]" : "bg-[#111113] text-white")}
-                  >
-                    {p.cta} <ArrowRight className="size-3.5" />
-                  </button>
+                  <div className={cn("mt-5 inline-flex h-10 items-center justify-center gap-1.5 rounded-full text-[13.5px] font-medium", p.popular ? "bg-white/15 text-white/70" : "bg-surface-2 text-fg-3")}>
+                    {p.name === "Enterprise" ? "Talk to us — soon" : "Coming soon"}
+                  </div>
                   <ul className={cn("mt-6 space-y-2.5 border-t pt-5 text-[13px]", p.popular ? "border-white/15 text-white/85" : "border-line text-fg-2")}>
                     {p.features.map((f, k) => (
                       <li key={f} className="flex gap-2">
@@ -850,12 +833,9 @@ function FinalCta() {
               </h2>
               <p className="mt-4 text-[17px] font-medium text-white/90">Connect your first agent in minutes. Watch every action get a decision, a reason and a signature.</p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <button onClick={() => go("/signup")} className="inline-flex h-11 items-center gap-2 rounded-full bg-[#1b0f33] px-5 text-[14.5px] font-semibold text-white shadow-[0_10px_24px_-10px_rgba(27,15,51,0.8)] hover:bg-[#2a1850]">
-                  Start free <ArrowRight className="size-4" />
-                </button>
-                <button onClick={() => go("/login")} className="inline-flex h-11 items-center gap-2 rounded-full bg-[#1b0f33]/20 ring-1 ring-white/55 backdrop-blur-md px-5 text-[14.5px] font-semibold text-white hover:bg-[#1b0f33]/30">
-                  Sign in
-                </button>
+                <span className="inline-flex h-11 items-center gap-2 rounded-full bg-[#1b0f33]/20 ring-1 ring-white/55 backdrop-blur-md px-5 text-[14.5px] font-semibold text-white">
+                  Sign-up opens soon
+                </span>
               </div>
             </div>
           </Backdrop>

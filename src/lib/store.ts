@@ -37,9 +37,9 @@ export const WORKSPACES: Record<WorkspaceId, WorkspaceMeta> = {
   fresh: { id: "fresh", label: "Fresh workspace", kind: "fresh", labs: true, fabric: false, sims: false, tick: 2_400, blurb: "Completely empty. Start from zero and watch every page fill in." },
 };
 export const WORKSPACE_ORDER: WorkspaceId[] = ["v2", "fabric", "fresh"];
-/** The product ships one workspace. The earlier ones stay reachable for regression only, behind ?workspaces=all. */
-export const ALL_WORKSPACES = typeof location !== "undefined" && new URLSearchParams(location.search).has("workspaces");
-export const VISIBLE_WORKSPACES: WorkspaceId[] = ALL_WORKSPACES ? WORKSPACE_ORDER : ["v2"];
+/** v2 is the real product and the default landing spot after login. fabric (the
+ *  earlier scripted reference) and fresh stay in the switcher — not hidden. */
+export const VISIBLE_WORKSPACES: WorkspaceId[] = WORKSPACE_ORDER;
 
 export interface Evt {
   id: string;
@@ -432,7 +432,7 @@ export function space(id: WorkspaceId): State {
 }
 const theme = read<"light" | "dark">("wbx-theme", "light");
 const savedWs = read<string>("wbx-ws", "v2");
-const startWs: WorkspaceId = ALL_WORKSPACES && savedWs in WORKSPACES ? (savedWs as WorkspaceId) : "v2";
+const startWs: WorkspaceId = savedWs in WORKSPACES ? (savedWs as WorkspaceId) : "v2";
 let state: State = { ...space(startWs), theme };
 if (typeof window !== "undefined") {
   const warm = () => VISIBLE_WORKSPACES.forEach((id) => space(id));
