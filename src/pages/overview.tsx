@@ -1,4 +1,4 @@
-import { ArrowRight, FlaskConical, OctagonX, Pause, Play, Plug, Zap } from "lucide-react";
+import { ArrowRight, FlaskConical, OctagonX, Pause, Play, Plug, Server, Zap } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AGENTS, ASSURANCE, CATEGORIES, agentById, agentsIn, type Assurance, type Decision } from "../data/agents";
 import { DecisionSpace } from "../components/insight";
@@ -8,6 +8,7 @@ import { useAccount } from "../lib/auth";
 import { ago, go } from "../lib/router";
 import { adminPerson, getState, setState, spaceOf, tickTraffic, toast, useStore, useWorkspace, type Evt } from "../lib/store";
 import { EvidenceDrawer } from "./evidence";
+import { useCpStatus } from "../lib/cp-sync";
 
 function greeting() {
   const h = new Date().getHours();
@@ -83,7 +84,68 @@ function HourlyChart({ events }: { events?: Evt[] }) {
   );
 }
 
+function ConnectControlPlaneCard({ status }: { status: string }) {
+  const label =
+    status === "unconfigured" ? "No Control Plane connected yet." :
+    status === "connecting" ? "Trying to reach the Control Plane…" :
+    status === "unauthorized" ? "The admin key was rejected." :
+    "The Control Plane is unreachable from this browser.";
+  return (
+    <div className="mx-auto max-w-[1320px] px-4 lg:px-8 py-8">
+      <PageHeader
+        eyebrow="Wrapbox v2 · production"
+        title="Connect a Control Plane to see your fleet"
+        sub="Wrapbox v2 is the real product — nothing is shown here until it can reach a Control Plane. Every number on every page will come from that server, not from this browser."
+      />
+      <Card className="p-8">
+        <div className="flex items-start gap-4">
+          <span className="grid size-11 place-items-center rounded-xl bg-surface-2 text-fg-2">
+            <Server className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[15px] font-semibold">{label}</div>
+            <p className="mt-1 text-[13px] text-fg-3 max-w-[64ch] leading-relaxed">
+              Point Wrapbox at a running Control Plane, enroll at least one device, and this page will populate from live data. Until then it stays blank — no seeded numbers, no illustrative fleet.
+            </p>
+            <ol className="mt-5 space-y-3 text-[13px] max-w-[64ch]">
+              <li className="flex gap-3">
+                <span className="grid size-6 place-items-center rounded-full bg-fg text-surface text-[11px] font-semibold shrink-0">1</span>
+                <div>
+                  <div className="font-medium">Start the Control Plane</div>
+                  <pre className="mt-1 rounded-md bg-surface-2 px-3 py-2 font-mono text-[12px] text-fg-2 overflow-x-auto">cd control-plane && npm run dev</pre>
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="grid size-6 place-items-center rounded-full bg-fg text-surface text-[11px] font-semibold shrink-0">2</span>
+                <div>
+                  <div className="font-medium">Enroll a device from the runtime</div>
+                  <pre className="mt-1 rounded-md bg-surface-2 px-3 py-2 font-mono text-[12px] text-fg-2 overflow-x-auto">cd runtime && npm run cli -- enroll --server &lt;url&gt; --token &lt;wbxe_…&gt;</pre>
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="grid size-6 place-items-center rounded-full bg-fg text-surface text-[11px] font-semibold shrink-0">3</span>
+                <div>
+                  <div className="font-medium">Point Wrapbox at it</div>
+                  <p className="text-fg-3 mt-0.5">Open <button className="underline" onClick={() => go("/settings")}>Settings → Control Plane</button>, paste the server URL, admin key and org id.</p>
+                </div>
+              </li>
+            </ol>
+            <div className="mt-6 flex gap-2">
+              <Button variant="primary" onClick={() => go("/settings")}>
+                <Plug className="size-3.5" /> Open Settings
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 export function Overview() {
+  const workspace = useStore((s) => s.workspace);
+  const cpStatus = useCpStatus();
+  if (workspace === "v2" && cpStatus !== "connected") return <ConnectControlPlaneCard status={cpStatus} />;
   const allEvents = useStore((s) => s.events);
   const envFilter = useStore((s) => s.envFilter);
   const events = useMemo(() => (envFilter === "all" ? allEvents : allEvents.filter((e) => e.env === envFilter)), [allEvents, envFilter]);

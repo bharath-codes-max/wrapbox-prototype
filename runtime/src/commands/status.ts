@@ -5,8 +5,22 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import net from "node:net";
 import { loadConfig, PATHS, FRESH_HOURS } from "../config.js";
 import { loadState, spoolDepth } from "../receipts.js";
+import { detectAgents } from "../discover.js";
+import { SHIMS_DIR } from "../shims.js";
+import { DEFAULT_PROXY_PORT } from "../proxy.js";
+
+function probeProxy(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const s = net.connect(port, "127.0.0.1");
+    const done = (ok: boolean) => { try { s.destroy(); } catch { /* ignore */ } resolve(ok); };
+    s.once("connect", () => done(true));
+    s.once("error", () => done(false));
+    setTimeout(() => done(false), 300);
+  });
+}
 
 export async function cmdStatus(): Promise<number> {
   const cfg = loadConfig();
@@ -56,5 +70,17 @@ export async function cmdStatus(): Promise<number> {
   console.log(`Spool depth:     ${spool.unsent} unsent (${spool.total} total)`);
   console.log(`Hooks installed: ${hooksInstalled ? "yes" : "no"} (${settingsPath})`);
   console.log(`Enforcement:     ${cfg && ruleCount !== null ? (fresh ? "full" : mode) : "not enrolled"}`);
+
+  const sightings = await detectAgents();
+  console.log(`\nAgents detected: ${sightings.length}`);
+  for (const s of sightings) console.log(`  ${s.registryId.padEnd(18)} ${s.detected.padEnd(9)} ${s.where}${s.version ? ` (${s.version})` : ""}`);
+
+  let shimEntries: string[] = [];
+  try { shimEntries = fs.readdirSync(SHIMS_DIR); } catch { /* none */ }
+  console.log(`\nShims installed: ${shimEntries.length} (${SHIMS_DIR})`);
+  for (const name of shimEntries) console.log(`  ${name}`);
+
+  const proxyUp = await probeProxy(DEFAULT_PROXY_PORT);
+  console.log(`\nProxy:           ${proxyUp ? `listening on 127.0.0.1:${DEFAULT_PROXY_PORT}` : "stopped"}`);
   return 0;
 }

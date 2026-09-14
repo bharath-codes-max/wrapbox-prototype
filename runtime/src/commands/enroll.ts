@@ -14,11 +14,13 @@ export async function cmdEnroll(args: string[]): Promise<number> {
   let org = "";
   let token = "";
   let force = false;
+  let noWrap = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--server" && args[i + 1]) server = args[++i];
     else if (args[i] === "--org" && args[i + 1]) org = args[++i];
     else if (args[i] === "--token" && args[i + 1]) token = args[++i];
     else if (args[i] === "--force") force = true;
+    else if (args[i] === "--no-wrap") noWrap = true;
   }
   if (!server || !org || !token) {
     console.error("Usage: wrapboxd enroll --server URL --org ORG_ID --token WBXE... [--force]");
@@ -58,9 +60,27 @@ export async function cmdEnroll(args: string[]): Promise<number> {
   console.log(`✔ Enrolled. Device id: ${res.id}`);
   console.log(`  Key id: ${res.key_id ?? keyId}`);
   console.log(`  Config: ${PATHS.configFile} (0600 — the API key is never printed)`);
-  console.log("Next steps:");
+
+  if (!noWrap) {
+    try {
+      const shims = await import("../shims.js");
+      const wrapRes = await shims.installShims();
+      if (wrapRes.installed.length > 0) {
+        console.log(`\n✔ Auto-wrapped ${wrapRes.installed.length} agent binary/binaries.`);
+        for (const s of wrapRes.installed) console.log(`  ${s.path} → ${s.registryId}`);
+        console.log("");
+        console.log(wrapRes.hint);
+      } else {
+        console.log(`\nNo shim-safe agents detected on PATH. Install one, then run \`wrapboxd wrap\`.`);
+      }
+    } catch (err) {
+      console.error(`(auto-wrap skipped: ${(err as Error).message})`);
+    }
+  }
+
+  console.log("\nNext steps:");
   console.log("  wrapboxd pull                     # fetch this device's policy");
   console.log("  wrapboxd protect claude-code      # install the PreToolUse governor hooks");
-  console.log("  wrapboxd daemon                   # heartbeat, rule sync, evidence drain");
+  console.log("  wrapboxd daemon                   # heartbeat, rule sync, evidence drain, proxy");
   return 0;
 }

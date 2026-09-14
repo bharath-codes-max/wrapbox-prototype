@@ -18,4 +18,5 @@ export default defineConfig({
     },
   },
   build: { assetsInlineLimit: 100_000_000, chunkSizeWarningLimit: 5000 },
+  server: { port: Number(process.env.PORT) || 5173, strictPort: !!process.env.PORT },
 });

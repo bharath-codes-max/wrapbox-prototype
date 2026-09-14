@@ -124,7 +124,10 @@ export async function devicesRoutes(app: FastifyInstance) {
     if (!org_id) return reply.code(400).send({ error: "org_id required" });
 
     const { rows } = await client().execute({
-      sql: "SELECT id, hostname, os, arch, owner_email, state, last_heartbeat, key_id, daemon_version, ruleset_pulled_at, chain_head_seq, created_at FROM devices WHERE org_id = ? ORDER BY created_at DESC",
+      sql: `SELECT d.id, d.hostname, d.os, d.arch, d.owner_email, d.state, d.last_heartbeat,
+                   d.key_id, d.daemon_version, d.ruleset_pulled_at, d.chain_head_seq, d.created_at,
+                   (SELECT COUNT(*) FROM agents a WHERE a.device_id = d.id) AS agent_count
+            FROM devices d WHERE d.org_id = ? ORDER BY d.created_at DESC`,
       args: [org_id],
     });
 

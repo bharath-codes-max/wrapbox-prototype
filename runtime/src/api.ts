@@ -79,3 +79,19 @@ export async function pushEvidence(
 ): Promise<{ accepted: number; duplicates: number; rejected: Array<{ id: string; reason: string }> }> {
   return post(`${cfg.server}/v1/evidence`, { receipts }, { authorization: `Bearer ${cfg.api_key}` });
 }
+
+export interface AgentInventoryEntry {
+  registry_id: string;
+  name: string;
+  kind: string;
+  detected_via: string;
+  where: string;
+  version?: string;
+}
+
+export async function pushAgents(
+  cfg: Config,
+  agents: AgentInventoryEntry[],
+): Promise<{ upserted: number; seen: number }> {
+  return post(`${cfg.server}/v1/agents`, { agents }, { authorization: `Bearer ${cfg.api_key}` });
+}

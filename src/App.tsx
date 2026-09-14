@@ -3,6 +3,8 @@ import { useEffect } from "react";
 import { Shell } from "./components/shell";
 import { useRoute } from "./lib/router";
 import { WORKSPACES, homePath, startLive, useStore } from "./lib/store";
+import { startCpSync } from "./lib/cp-sync";
+import { cpConfigComplete, useCpConfig } from "./lib/cp-config";
 import { AgentDetail, AgentsPage } from "./pages/agents";
 import { Fleet, FleetDeviceDetail } from "./pages/fleet";
 import { Docs } from "./pages/docs";
@@ -31,12 +33,14 @@ export default function App() {
   const role = useStore((s) => s.role);
   const theme = useStore((s) => s.theme);
   const workspace = useStore((s) => s.workspace);
+  const cpCfg = useCpConfig();
   const account = useAccount();
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
   useEffect(() => startLive(), []);
+  useEffect(() => { startCpSync(); }, []);
 
   const [path, qs] = route.split("?");
   const query = new URLSearchParams(qs ?? "");
@@ -54,7 +58,8 @@ export default function App() {
     else if (account && authRoute) go(homePath());
     else if (labsRoute && !meta.labs) go("/");
     else if (v1Route && meta.fabric) go("/");
-  }, [account, authRoute, landing, labsRoute, v1Route, meta]);
+    else if (account && workspace === "v2" && !cpConfigComplete(cpCfg) && seg[0] !== "settings" && !authRoute && !landing) go("/settings");
+  }, [account, authRoute, landing, labsRoute, v1Route, meta, workspace, cpCfg, path]);
 
   if (landing || (!account && !authRoute))
     return (

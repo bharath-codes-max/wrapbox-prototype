@@ -18,7 +18,11 @@ Commands:
       [--deny PATH]... -- <cmd...>                Run a command under a Seatbelt profile
   protect claude-code                             Install PreToolUse governor hooks
   unprotect claude-code                           Remove the governor hooks
-  daemon                                          Foreground loop: heartbeat, pull, drain, tamper watch
+  discover                                        List every agent detected on this machine
+  scan                                            Discover + emit receipts for new sightings
+  wrap [id...]                                    Install PATH shims for detected shim-safe agents
+  unwrap                                          Remove installed PATH shims
+  daemon                                          Foreground loop: heartbeat, pull, drain, tamper watch, proxy
   verify                                          Verify the local receipt chain (sig + prev + seq)
   sync                                            Drain the evidence spool once
 
@@ -56,6 +60,14 @@ async function main(): Promise<number> {
       return (await import("./commands/verify.js")).cmdVerify();
     case "sync":
       return (await import("./commands/sync.js")).cmdSync();
+    case "discover":
+      return (await import("./commands/discover.js")).cmdDiscover();
+    case "scan":
+      return (await import("./commands/discover.js")).cmdScan();
+    case "wrap":
+      return (await import("./commands/wrap.js")).cmdWrap(rest);
+    case "unwrap":
+      return (await import("./commands/wrap.js")).cmdUnwrap(rest);
     default:
       console.error(`wrapboxd: unknown command '${cmd}' (see wrapboxd --help)`);
       return 64;

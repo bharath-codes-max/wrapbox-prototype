@@ -1,4 +1,4 @@
-import { Compass, LogOut, Moon, ShieldCheck, Sparkles, Sun } from "lucide-react";
+import { Compass, LogOut, Moon, Plug, ShieldCheck, Sparkles, Sun } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button, Card, PageHeader, cn } from "../components/ui";
 import { setNavStyle, useNavStyle, type NavStyle } from "../lib/navstyle";
@@ -6,6 +6,9 @@ import { signOut, useAccount } from "../lib/auth";
 import { go } from "../lib/router";
 import { setState, setTheme, tourFor, useStore } from "../lib/store";
 import { aiPreferred, aiStatus, setAiPreferred } from "../lib/draft";
+import { clearCpConfig, setCpConfig, useCpConfig } from "../lib/cp-config";
+import { listOrgs, ping, type CpOrg } from "../lib/cp-api";
+import { useCpStatus, type CpStatus } from "../lib/cp-sync";
 
 /** OpenAI drafting status. The key lives in a server environment variable — this screen never holds it. */
 function AiDrafting() {
@@ -93,9 +96,163 @@ function BarPreview({ style, active, onClick }: { style: NavStyle; active: boole
   );
 }
 
+const STATUS_LABEL: Record<CpStatus, { text: string; tone: "allow" | "review" | "block" | "muted" }> = {
+  connected: { text: "Connected", tone: "allow" },
+  connecting: { text: "Connecting…", tone: "review" },
+  unconfigured: { text: "Not configured", tone: "muted" },
+  unreachable: { text: "Unreachable", tone: "review" },
+  unauthorized: { text: "Unauthorized", tone: "block" },
+};
+
+function StatusPill({ status }: { status: CpStatus }) {
+  const s = STATUS_LABEL[status];
+  const cls =
+    s.tone === "allow" ? "bg-allow-soft text-allow" :
+    s.tone === "review" ? "bg-review-soft text-review" :
+    s.tone === "block" ? "bg-block-soft text-block" :
+    "bg-surface-2 text-fg-2";
+  return <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold", cls)}>{s.text}</span>;
+}
+
+function ControlPlaneCard() {
+  const cfg = useCpConfig();
+  const status = useCpStatus();
+  const [server, setServer] = useState(cfg.server);
+  const [key, setKey] = useState(cfg.adminKey);
+  const [orgId, setOrgId] = useState(cfg.orgId);
+  const [orgs, setOrgs] = useState<CpOrg[] | null>(null);
+  const [loadingOrgs, setLoadingOrgs] = useState(false);
+  const [testMsg, setTestMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  useEffect(() => { setServer(cfg.server); }, [cfg.server]);
+  useEffect(() => { setKey(cfg.adminKey); }, [cfg.adminKey]);
+  useEffect(() => { setOrgId(cfg.orgId); }, [cfg.orgId]);
+
+  async function loadOrgs() {
+    setLoadingOrgs(true);
+    setTestMsg(null);
+    // Save the entered values first so the api client sees them.
+    setCpConfig({ server: server.trim(), adminKey: key, orgId });
+    const r = await listOrgs();
+    setLoadingOrgs(false);
+    if (!r.ok) { setTestMsg({ tone: "err", text: r.error || `HTTP ${r.status}` }); return; }
+    setOrgs(r.data);
+    if (!orgId && r.data.length === 1) { setOrgId(r.data[0].id); setCpConfig({ orgId: r.data[0].id }); }
+  }
+
+  async function testConnection() {
+    setTesting(true);
+    setTestMsg(null);
+    setCpConfig({ server: server.trim(), adminKey: key, orgId });
+    const h = await ping(server.trim());
+    if (!h.ok) { setTesting(false); setTestMsg({ tone: "err", text: `Health check failed — ${h.error}` }); return; }
+    const o = await listOrgs();
+    setTesting(false);
+    if (!o.ok) { setTestMsg({ tone: "err", text: `Auth check failed — ${o.error}` }); return; }
+    setOrgs(o.data);
+    setTestMsg({ tone: "ok", text: `Reached the Control Plane · ${o.data.length} org${o.data.length === 1 ? "" : "s"} visible.` });
+  }
+
+  function save() {
+    setCpConfig({ server: server.trim(), adminKey: key, orgId });
+  }
+
+  function disconnect() {
+    clearCpConfig();
+    setServer(""); setKey(""); setOrgId(""); setOrgs(null); setTestMsg(null);
+  }
+
+  return (
+    <>
+      <Row title="Connection" sub="Wrapbox v2 pulls its fleet, rules, agents and receipts from the live Control Plane you point it at. The admin key is stored only in this browser, and never sent to any URL you did not type here.">
+        <StatusPill status={status} />
+      </Row>
+      <div className="border-t border-line px-6 py-5 space-y-3">
+        <label className="block">
+          <div className="text-[12.5px] font-medium mb-1">Server URL</div>
+          <input
+            value={server}
+            onChange={(e) => setServer(e.target.value)}
+            onBlur={save}
+            placeholder="http://localhost:4231"
+            spellCheck={false}
+            autoComplete="off"
+            className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-mono outline-none focus:border-line-strong"
+          />
+        </label>
+        <label className="block">
+          <div className="text-[12.5px] font-medium mb-1">Admin key</div>
+          <input
+            type="password"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            onBlur={save}
+            placeholder="X-Admin-Key value from the Control Plane env"
+            spellCheck={false}
+            autoComplete="off"
+            className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-mono outline-none focus:border-line-strong"
+          />
+        </label>
+        <label className="block">
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-[12.5px] font-medium">Org id</div>
+            <button
+              type="button"
+              onClick={loadOrgs}
+              disabled={!server.trim() || !key || loadingOrgs}
+              className="text-[11.5px] text-fg-2 hover:text-fg disabled:opacity-40"
+            >
+              {loadingOrgs ? "Loading…" : "Load orgs"}
+            </button>
+          </div>
+          {orgs && orgs.length > 0 ? (
+            <select
+              value={orgId}
+              onChange={(e) => { setOrgId(e.target.value); setCpConfig({ orgId: e.target.value }); }}
+              onBlur={save}
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-[13px] outline-none focus:border-line-strong"
+            >
+              <option value="">Select an org…</option>
+              {orgs.map((o) => (
+                <option key={o.id} value={o.id}>{o.name} · {o.id}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={orgId}
+              onChange={(e) => setOrgId(e.target.value)}
+              onBlur={save}
+              placeholder="org id from the Control Plane"
+              spellCheck={false}
+              autoComplete="off"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-mono outline-none focus:border-line-strong"
+            />
+          )}
+        </label>
+        {testMsg && (
+          <div className={cn("text-[12.5px]", testMsg.tone === "ok" ? "text-allow" : "text-block")}>
+            {testMsg.text}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button variant="primary" onClick={testConnection} disabled={!server.trim() || !key || testing}>
+            <Plug className="size-3.5" /> {testing ? "Testing…" : "Test connection"}
+          </Button>
+          <Button onClick={disconnect}>Disconnect</Button>
+        </div>
+        <p className="text-[11.5px] text-fg-3 leading-relaxed pt-1">
+          The Control Plane runs at <code className="font-mono text-fg-2">PORT=4231 npm run dev</code> in the <code className="font-mono text-fg-2">control-plane/</code> workspace, and mints its own admin key on startup (printed to its logs). Every call from this page carries <code className="font-mono text-fg-2">X-Admin-Key</code>. The key never leaves the browser and is not written into rules, YAML or receipts.
+        </p>
+      </div>
+    </>
+  );
+}
+
 export function SettingsPage() {
   const theme = useStore((s) => s.theme);
   const workspace = useStore((s) => s.workspace);
+  const role = useStore((s) => s.role);
   const hasTour = tourFor(workspace).length > 0;
   const nav = useNavStyle();
   const account = useAccount();
@@ -132,6 +289,15 @@ export function SettingsPage() {
           </div>
         </Row>
       </Card>
+
+      {workspace === "v2" && role === "admin" && (
+        <>
+          <div className="eyebrow mt-7 mb-2 px-1">Control Plane</div>
+          <Card className="overflow-hidden">
+            <ControlPlaneCard />
+          </Card>
+        </>
+      )}
 
       <div className="eyebrow mt-7 mb-2 px-1">Rule drafting</div>
       <Card className="overflow-hidden">

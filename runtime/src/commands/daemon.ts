@@ -13,6 +13,9 @@ import { heartbeat, pullRules } from "../api.js";
 import { loadState, makeReceipt, appendToSpool, drainSpool, spoolDepth } from "../receipts.js";
 import { sha256hex } from "../canonical.js";
 import { installHooks } from "./protect.js";
+import { startProxy, type ProxyHandle } from "../proxy.js";
+import { detectAgents } from "../discover.js";
+import { checkShimTamper, installShims } from "../shims.js";
 
 function daemonVersion(): string {
   try {
@@ -118,20 +121,68 @@ export async function cmdDaemon(): Promise<number> {
     }
   };
 
+  // Universal network gate — supervise with a small exponential backoff so a
+  // one-off crash doesn't leave the fabric ungoverned.
+  let proxy: ProxyHandle | null = null;
+  let proxyBackoffMs = 500;
+  const superviseProxy = async () => {
+    try {
+      proxy = await startProxy();
+      proxyBackoffMs = 500;
+      console.log(`proxy: listening on 127.0.0.1:${proxy.port}`);
+      proxy.server.on("close", () => {
+        proxy = null;
+        setTimeout(() => { void superviseProxy(); }, proxyBackoffMs);
+        proxyBackoffMs = Math.min(proxyBackoffMs * 2, 30_000);
+      });
+    } catch (err) {
+      console.error(`proxy failed to start: ${(err as Error).message}`);
+      setTimeout(() => { void superviseProxy(); }, proxyBackoffMs);
+      proxyBackoffMs = Math.min(proxyBackoffMs * 2, 30_000);
+    }
+  };
+  await superviseProxy();
+
+  const doInventory = async () => {
+    try {
+      const sightings = await detectAgents();
+      console.log(`inventory: ${sightings.length} agent sighting(s) detected`);
+    } catch (err) {
+      console.error(`inventory scan failed: ${(err as Error).message}`);
+    }
+  };
+
+  const doShimTamper = () => {
+    try {
+      const report = checkShimTamper();
+      if (report.drifted.length === 0 && report.missing.length === 0) return;
+      console.log(`shim tamper: ${report.drifted.length} drifted, ${report.missing.length} missing — regenerating`);
+      void installShims();
+    } catch (err) {
+      console.error(`shim tamper check failed: ${(err as Error).message}`);
+    }
+  };
+
   // Kick everything once at start, then on their intervals.
   await doHeartbeat();
   await doPull();
   await doDrain();
   doTamperCheck();
+  await doInventory();
+  doShimTamper();
 
   timers.push(setInterval(doHeartbeat, cfg.heartbeatInterval * 1000));
   timers.push(setInterval(doPull, cfg.pullInterval * 1000));
   timers.push(setInterval(doDrain, 10_000));
   timers.push(setInterval(doTamperCheck, 5_000));
+  timers.push(setInterval(doInventory, 15 * 60_000));
+  timers.push(setInterval(doShimTamper, 5 * 60_000));
 
   return new Promise<number>((resolve) => {
     const stop = () => {
       timers.forEach(clearInterval);
+      if (proxy) proxy.server.removeAllListeners("close");
+      void proxy?.stop();
       console.log("\nwrapboxd daemon stopped.");
       resolve(0);
     };

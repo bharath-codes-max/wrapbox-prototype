@@ -115,4 +115,12 @@ export const MIGRATIONS = [
   )`,
 
   `CREATE INDEX IF NOT EXISTS idx_receipts_device_seq ON receipts(device_id, seq)`,
+
+  // Fabric: agent inventory reported by the device
+  `ALTER TABLE agents ADD COLUMN kind TEXT`,
+  `ALTER TABLE agents ADD COLUMN detected_via TEXT`,
+  `ALTER TABLE agents ADD COLUMN registry_id TEXT`,
+  `ALTER TABLE agents ADD COLUMN where_ TEXT`,
+  `ALTER TABLE agents ADD COLUMN last_seen_at TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS uniq_agents_device_reg_where ON agents(device_id, registry_id, where_)`,
 ];

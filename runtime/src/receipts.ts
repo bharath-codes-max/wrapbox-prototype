@@ -26,7 +26,7 @@ export interface Receipt {
   reason: string;
   rule_id: string | null;
   ruleset_pulled_at: string | null;
-  enforcement: "hook" | "seatbelt" | "both" | "unwrapped" | "hook-degraded";
+  enforcement: "hook" | "seatbelt" | "both" | "unwrapped" | "hook-degraded" | "proxy";
   degraded: boolean;
   prev: string;
   sig: string;

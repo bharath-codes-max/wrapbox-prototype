@@ -14,12 +14,15 @@ import { loadConfig, PATHS } from "../config.js";
 import { makeReceipt, appendToSpool } from "../receipts.js";
 import { compileProfile, rulesToDenies, matchesSecretPattern, type NetworkMode } from "../seatbelt.js";
 import { startViolationWatch, showViolationsSince, violationKey, type Violation } from "../logwatch.js";
+import { writeProxySession, clearProxySession, DEFAULT_PROXY_PORT } from "../proxy.js";
 
 export async function cmdRun(args: string[]): Promise<number> {
   let project: string | undefined;
   let network: NetworkMode = "on";
   const denyExtras: string[] = [];
   let cmd: string[] = [];
+  let agentTag: string | undefined;
+  let proxyEnv: { host: string; port: number } | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -28,12 +31,20 @@ export async function cmdRun(args: string[]): Promise<number> {
       break;
     } else if (a === "--project" && args[i + 1]) {
       project = args[++i];
+    } else if (a === "--agent" && args[i + 1]) {
+      agentTag = args[++i];
     } else if (a === "--net" && args[i + 1]) {
       const v = args[++i];
       if (v === "on" || v === "off") network = v;
-      else if (v.startsWith("loopback:")) network = { loopbackPort: Number(v.slice("loopback:".length)) };
+      else if (v === "proxy") {
+        // Route through the local proxy: allow loopback egress in the sandbox
+        // and set HTTP_PROXY/HTTPS_PROXY on the child env.
+        const port = DEFAULT_PROXY_PORT;
+        network = { loopbackPort: port };
+        proxyEnv = { host: "127.0.0.1", port };
+      } else if (v.startsWith("loopback:")) network = { loopbackPort: Number(v.slice("loopback:".length)) };
       else {
-        console.error(`✖ Invalid --net value: ${v} (use on | off | loopback:PORT)`);
+        console.error(`✖ Invalid --net value: ${v} (use on | off | proxy | loopback:PORT)`);
         return 64;
       }
     } else if (a === "--deny" && args[i + 1]) {
@@ -116,9 +127,22 @@ export async function cmdRun(args: string[]): Promise<number> {
   };
   const stopWatch = startViolationWatch(onDeny);
 
+  const childEnv: NodeJS.ProcessEnv = { ...process.env, WRAPBOX_SESSION: session };
+  if (agentTag) childEnv.WRAPBOX_AGENT = agentTag;
+  if (proxyEnv) {
+    const url = `http://${proxyEnv.host}:${proxyEnv.port}`;
+    childEnv.HTTP_PROXY = url;
+    childEnv.HTTPS_PROXY = url;
+    childEnv.http_proxy = url;
+    childEnv.https_proxy = url;
+    childEnv.NO_PROXY = "localhost,127.0.0.1,::1";
+    childEnv.no_proxy = childEnv.NO_PROXY;
+    if (agentTag) writeProxySession(agentTag, session);
+  }
+
   const child = spawn("/usr/bin/sandbox-exec", ["-f", profilePath, ...cmd], {
     stdio: "inherit",
-    env: { ...process.env, WRAPBOX_SESSION: session },
+    env: childEnv,
   });
 
   const code: number = await new Promise((resolve) => {
@@ -135,6 +159,8 @@ export async function cmdRun(args: string[]): Promise<number> {
   await new Promise((r) => setTimeout(r, 2500));
   stopWatch();
   showViolationsSince(startedAt, onDeny);
-  console.error(`wrapboxd: session ${session} exited ${code}; ${receiptsWritten} violation receipt(s) written`);
+  if (proxyEnv && agentTag) clearProxySession();
+  const tag = agentTag ? ` agent=${agentTag}` : "";
+  console.error(`wrapboxd: session ${session}${tag} exited ${code}; ${receiptsWritten} violation receipt(s) written`);
   return code;
 }
