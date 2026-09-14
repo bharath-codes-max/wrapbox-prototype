@@ -341,8 +341,8 @@ const ENVS: { id: "all" | Env; label: string; dot: string; note: string }[] = [
   { id: "development", label: "Development", dot: "bg-[#9db4ff]", note: "laptops and sandboxes" },
 ];
 
-const WS_ICON: Record<WorkspaceId, typeof Bot> = { fabric: ShieldCheck, prod: Building2, demo: FlaskConical, fresh: Plus };
-const WS_SHORT: Record<WorkspaceId, string> = { fabric: "fabric", prod: "production", demo: "demo", fresh: "fresh" };
+const WS_ICON: Record<WorkspaceId, typeof Bot> = { v2: Rocket, fabric: ShieldCheck, prod: Building2, demo: FlaskConical, fresh: Plus };
+const WS_SHORT: Record<WorkspaceId, string> = { v2: "v2", fabric: "fabric", prod: "production", demo: "demo", fresh: "fresh" };
 
 function WorkspaceMenu() {
   const [open, setOpen] = useState(false);

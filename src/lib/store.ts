@@ -13,7 +13,7 @@ import { TEMPLATES, approvalFrom, approversFor, categoryOf, gateFromAct, mkEvt, 
 export { TEMPLATES, approvalFrom, categoryOf, gateFromAct, genericSignals, spaceOf } from "./traffic";
 
 export type Role = "admin" | "employee";
-export type WorkspaceId = "fabric" | "prod" | "demo" | "fresh";
+export type WorkspaceId = "v2" | "fabric" | "prod" | "demo" | "fresh";
 export const EMPLOYEE = PEOPLE.dev;
 export const ADMIN = PEOPLE.priya;
 export const NONE: string[] = [];
@@ -33,15 +33,16 @@ export interface WorkspaceMeta {
   blurb: string;
 }
 export const WORKSPACES: Record<WorkspaceId, WorkspaceMeta> = {
+  v2: { id: "v2", label: "Wrapbox v2", kind: "fresh", labs: false, fabric: true, sims: false, tick: 0, blurb: "The real product. Empty until devices enroll and rules are created — data comes from the live Control Plane." },
   fabric: { id: "fabric", label: "Enforcement Fabric — v2", kind: "reference", labs: false, fabric: true, sims: true, tick: 12_000, blurb: "Installed once per device. Every agent on it is discovered, provisioned, confined and credential-brokered — nothing installed per agent." },
   prod: { id: "prod", label: "Production", kind: "reference", labs: false, fabric: false, sims: false, tick: 16_000, blurb: "A company three months into Wrapbox — the reference for how the product should look and behave." },
   demo: { id: "demo", label: "Demo", kind: "sandbox", labs: true, fabric: false, sims: false, tick: 2_400, blurb: "Scripted scenarios, a playground and test traffic for explaining and trying every decision path." },
   fresh: { id: "fresh", label: "Fresh workspace", kind: "fresh", labs: true, fabric: false, sims: false, tick: 2_400, blurb: "Completely empty. Start from zero and watch every page fill in." },
 };
-export const WORKSPACE_ORDER: WorkspaceId[] = ["fabric", "prod", "demo", "fresh"];
+export const WORKSPACE_ORDER: WorkspaceId[] = ["v2", "fabric", "prod", "demo", "fresh"];
 /** The product ships one workspace. The earlier ones stay reachable for regression only, behind ?workspaces=all. */
 export const ALL_WORKSPACES = typeof location !== "undefined" && new URLSearchParams(location.search).has("workspaces");
-export const VISIBLE_WORKSPACES: WorkspaceId[] = ALL_WORKSPACES ? WORKSPACE_ORDER : ["fabric"];
+export const VISIBLE_WORKSPACES: WorkspaceId[] = ALL_WORKSPACES ? WORKSPACE_ORDER : ["v2"];
 
 export interface Evt {
   id: string;
@@ -387,6 +388,17 @@ function demoState(): State {
   };
 }
 
+function v2State(): State {
+  return {
+    ...freshState(),
+    workspace: "v2",
+    company: "Wrapbox",
+    domain: "wrapbox.ai",
+    region: "us",
+    idp: "",
+  };
+}
+
 function freshState(): State {
   return {
     workspace: "fresh",
@@ -457,13 +469,13 @@ function loadFresh(): State {
 /* ================= the store ================= */
 /** Workspaces are built on first use: the reference tenant carries two weeks of decisions and is only paid for when opened. */
 const spaces: Partial<Record<WorkspaceId, State>> = {};
-const BUILD: Record<WorkspaceId, () => State> = { fabric: () => fabricState(), prod: () => referenceState(), demo: demoState, fresh: loadFresh };
+const BUILD: Record<WorkspaceId, () => State> = { v2: v2State, fabric: () => fabricState(), prod: () => referenceState(), demo: demoState, fresh: loadFresh };
 export function space(id: WorkspaceId): State {
   return (spaces[id] ??= BUILD[id]());
 }
 const theme = read<"light" | "dark">("wbx-theme", "light");
-const savedWs = read<string>("wbx-ws", "fabric");
-const startWs: WorkspaceId = ALL_WORKSPACES && savedWs in WORKSPACES ? (savedWs as WorkspaceId) : "fabric";
+const savedWs = read<string>("wbx-ws", "v2");
+const startWs: WorkspaceId = ALL_WORKSPACES && savedWs in WORKSPACES ? (savedWs as WorkspaceId) : "v2";
 let state: State = { ...space(startWs), theme };
 if (typeof window !== "undefined") {
   const warm = () => VISIBLE_WORKSPACES.forEach((id) => space(id));
@@ -697,7 +709,7 @@ let timer: number | undefined;
 let lastTick = 0;
 export function tickTraffic(n = 1) {
   const s = getState();
-  const templates = s.workspace === "fabric" ? fabricTemplates(s) : s.workspace === "prod" ? REFERENCE_TEMPLATES : TEMPLATES;
+  const templates = s.workspace === "v2" ? [] : s.workspace === "fabric" ? fabricTemplates(s) : s.workspace === "prod" ? REFERENCE_TEMPLATES : TEMPLATES;
   const ctx = { rules: s.published, kill: s.killSwitch, members: s.members, allowed: s.allowed, admin: adminPerson(s).id, attributeAsIs: WORKSPACES[s.workspace].fabric };
   const evts: Evt[] = [];
   const aps: Approval[] = [];

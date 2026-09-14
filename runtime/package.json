@@ -1,0 +1,22 @@
+{
+  "name": "wrapboxd",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "wrapboxd": "./dist/cli.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "tsc",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "nanoid": "^5.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "@types/node": "^22.20.0",
+    "typescript": "^5.7.0"
+  }
+}
