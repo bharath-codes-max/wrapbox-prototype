@@ -161,6 +161,23 @@ console.log("-".repeat(96));
   ok("receipt ids are unique per action", new Set(ids).size === ids.length, `${ids.length - new Set(ids).size} collision(s)`);
   console.log(`  ${ids.length} receipts, ${new Set(ids).size} distinct · sample ${ids.slice(0, 5).join(", ")}`);
   ok("no rule matches on agent identity (when.subject)", PLAYGROUND_RULES.every((r) => !r.when.subject), "a rule uses when.subject — the agent could change the verdict");
+
+  // A receipt names a DECISION EVENT, not an action. Re-deciding the same action
+  // under different policy or a different asker must mint a different id, or one
+  // id would denote two contradictory records.
+  const secrets = POLICY_TOGGLES.find((t) => t.ruleIds.includes("secrets-never"));
+  if (secrets) {
+    const onIds = POLICY_TOGGLES.filter((t) => t.defaultOn).map((t) => t.id);
+    const offIds = onIds.filter((i) => i !== secrets.id);
+    const a = runAction(must("pg-cursor-env"), { enabledToggleIds: onIds });
+    const b = runAction(must("pg-cursor-env"), { enabledToggleIds: offIds });
+    ok("a different policy state mints a different receipt", a.receiptId !== b.receiptId, `both runs returned ${a.receiptId} while deciding ${a.verdict.decision} then ${b.verdict.decision}`);
+    ok("that pair really did decide differently", a.verdict.decision !== b.verdict.decision, `both ${a.verdict.decision}`);
+  }
+  const byCursor = runAction(must("pg-cursor-env"), { agent: "Cursor" });
+  const byCli = runAction(must("pg-cursor-env"), { agent: "Claude Code (CLI)" });
+  ok("a different asker mints a different receipt", byCursor.receiptId !== byCli.receiptId, `both returned ${byCursor.receiptId}`);
+  ok("…while the verdict is unchanged", byCursor.verdict.decision === byCli.verdict.decision, `${byCursor.verdict.decision} vs ${byCli.verdict.decision}`);
 }
 
 /* ============================================================================

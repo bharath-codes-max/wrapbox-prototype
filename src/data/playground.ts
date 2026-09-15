@@ -1189,7 +1189,16 @@ function hash32(seed: string): number {
   return h >>> 0;
 }
 
-const receiptFor = (actionId: string) => `WB-${10000 + (hash32(actionId) % 90000)}`;
+/**
+ * A receipt identifies a DECISION EVENT, not an action. The same action decided
+ * under a different policy state — or asked by a different agent — is a separate
+ * signed record, so the id is derived from all three. Deriving it from the action
+ * alone would let one id denote a BLOCK on one run and an ALLOW on the next,
+ * which is exactly what a signed evidence ledger must never do. Still fully
+ * deterministic: no clock, no randomness.
+ */
+const receiptFor = (actionId: string, toggleIds: string[], agent: string) =>
+  `WB-${10000 + (hash32(`${actionId}|${[...toggleIds].sort().join(",")}|${agent}`) % 90000)}`;
 const permitFor = (actionId: string) => "wbp_" + hash32(`${actionId}|permit`).toString(36).padStart(7, "0");
 
 const DEFAULT_TOGGLES = POLICY_TOGGLES.filter((t) => t.defaultOn).map((t) => t.id);
@@ -1222,7 +1231,9 @@ export function runAction(action: ScenarioAction, opts: { enabledToggleIds?: str
   const surface = SURFACE_BY_ACTION.get(action.id);
   if (!surface) throw new Error(`runAction: no surface owns action ${action.id}`);
 
-  const rules = activeRules(opts.enabledToggleIds ?? DEFAULT_TOGGLES);
+  const toggles = opts.enabledToggleIds ?? DEFAULT_TOGGLES;
+  const agent = opts.agent ?? action.defaultAgent;
+  const rules = activeRules(toggles);
   const verdict = evaluate(action.act, rules, CATEGORY_BY_GROUP[surface.group]);
 
   const rewritten = verdict.decision === "CONSTRAIN" ? rewrite(action.act, verdict.constrain) : undefined;
@@ -1242,8 +1253,8 @@ export function runAction(action: ScenarioAction, opts: { enabledToggleIds?: str
     plane: surface.plane,
     rewritten,
     permitId,
-    receiptId: receiptFor(action.id),
+    receiptId: receiptFor(action.id, toggles, agent),
     result,
-    agent: opts.agent ?? action.defaultAgent,
+    agent,
   };
 }
