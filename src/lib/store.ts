@@ -33,7 +33,7 @@ export interface WorkspaceMeta {
 }
 export const WORKSPACES: Record<WorkspaceId, WorkspaceMeta> = {
   v2: { id: "v2", label: "Wrapbox v2", kind: "fresh", labs: false, fabric: true, sims: false, tick: 0, blurb: "The real product. Empty until devices enroll and rules are created — data comes from the live Control Plane." },
-  live: { id: "live", label: "Live demo", kind: "reference", labs: false, fabric: false, sims: true, tick: 0, blurb: "A guided, cinematic run of Wrapbox end to end — real policy engine, simulated surroundings." },
+  live: { id: "live", label: "Live demo", kind: "reference", labs: false, fabric: false, sims: true, tick: 0, blurb: "A click-driven playground: pick any agent surface, run an action, and see the real policy engine decide — simulated surroundings, real decisions." },
   fabric: { id: "fabric", label: "Enforcement Fabric — v2", kind: "reference", labs: false, fabric: true, sims: true, tick: 12_000, blurb: "Installed once per device. Every agent on it is discovered, provisioned, confined and credential-brokered — nothing installed per agent." },
   fresh: { id: "fresh", label: "Fresh workspace", kind: "fresh", labs: true, fabric: false, sims: false, tick: 2_400, blurb: "Completely empty. Start from zero and watch every page fill in." },
 };

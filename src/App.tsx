@@ -76,7 +76,7 @@ export default function App() {
       </MotionConfig>
     );
 
-  // The pitch theatre owns the whole viewport — no Shell, no sidebar.
+  // The Enforcement Playground owns the whole viewport — no Shell, no sidebar.
   if (workspace === "live")
     return (
       <MotionConfig reducedMotion="user">
