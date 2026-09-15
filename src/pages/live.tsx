@@ -121,10 +121,15 @@ function machineryView(b: Beat | null): "runtime" | "controlplane" | "gateway" {
 }
 
 /** The latest typing stream aimed at `target` at or before `index`. */
-function latestTyping(index: number, target: "admin-prompt" | "employee-terminal" | "contract-draft") {
+function latestTyping(
+  index: number,
+  target: "admin-prompt" | "employee-terminal" | "contract-draft",
+  chapters?: number[],
+) {
   for (let i = index; i >= 0; i--) {
-    const t = LIVE_BEATS[i].typing;
-    if (t?.target === target) return { text: t.text, at: i };
+    const b = LIVE_BEATS[i];
+    if (chapters && !chapters.includes(b.chapter)) continue;
+    if (b.typing?.target === target) return { text: b.typing.text, at: i };
   }
   return null;
 }
@@ -663,8 +668,10 @@ function EmployeeColumn({ d }: { d: ReturnType<typeof useDirector> }) {
 
 function EmployeeTerminal({ d }: { d: ReturnType<typeof useDirector> }) {
   const { index, beat } = d;
-  const t = latestTyping(index, "employee-terminal");
-  const live = beat?.typing?.target === "employee-terminal" && d.state === "playing";
+  // Only the laptop chapters' typing belongs in the Claude Code terminal — never
+  // chapter 4's cloud-runner command (which also targets employee-terminal).
+  const t = latestTyping(index, "employee-terminal", [1, 2, 3, 5]);
+  const live = beat?.chapter !== 4 && beat?.typing?.target === "employee-terminal" && d.state === "playing";
   const typed = useTyper(t?.text ?? "", live, d.speed, d.reducedMotion);
   const read = useMemo(() => (index >= IDX["c3-read"] ? runDecision(LIVE_BEATS[IDX["c3-read"]], ctxUpTo(IDX["c3-read"])) : null), [index]);
   const write = useMemo(() => (index >= IDX["c3-write"] ? runDecision(LIVE_BEATS[IDX["c3-write"]], ctxUpTo(IDX["c3-write"])) : null), [index]);
@@ -720,8 +727,8 @@ function TermBlock({ children }: { children: ReactNode }) {
 
 function CloudRunner({ d }: { d: ReturnType<typeof useDirector> }) {
   const { index, beat } = d;
-  const t = latestTyping(index, "employee-terminal");
-  const live = beat?.typing?.target === "employee-terminal" && d.state === "playing";
+  const t = latestTyping(index, "employee-terminal", [4]);
+  const live = beat?.chapter === 4 && beat?.typing?.target === "employee-terminal" && d.state === "playing";
   const typed = useTyper(t?.text ?? "", live, d.speed, d.reducedMotion);
   const phase = index >= IDX["c4-replay"] ? "replay" : index >= IDX["c4-execute"] ? "done" : index >= IDX["c4-review"] ? "held" : "run";
   return (
