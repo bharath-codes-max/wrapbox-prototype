@@ -339,6 +339,26 @@ export function PageHeader({ eyebrow, title, sub, right }: { eyebrow?: ReactNode
   );
 }
 
+/** The evidence chain: the vertical dotted list every decision record reads as —
+ *  label column, hairline connector, accent dots. Shared by the Evidence drawer and
+ *  the playground so the idiom cannot drift between them. */
+export function EvidenceChain({ rows, labelWidth = 80, className }: { rows: { label: string; value: ReactNode }[]; labelWidth?: number; className?: string }) {
+  return (
+    <ol className={cn("relative", className)}>
+      {rows.map((c, i) => (
+        <li key={c.label} className="relative grid gap-3 pb-3.5 last:pb-0" style={{ gridTemplateColumns: `${labelWidth}px 1fr` }}>
+          {i < rows.length - 1 && <span className="absolute top-4 bottom-0 w-px bg-line" style={{ left: labelWidth + 3 }} />}
+          <span className="text-[12px] text-fg-3 pt-0.5">{c.label}</span>
+          <span className="relative pl-4 text-[13px] min-w-0">
+            <span className="absolute left-[-1px] top-[7px] size-[7px] rounded-full bg-accent" />
+            {c.value}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export function Dot({ tone }: { tone: "allow" | "review" | "block" | "muted" | "accent" }) {
   return (
     <span

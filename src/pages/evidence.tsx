@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { AGENTS, agentById, type Decision } from "../data/agents";
 import { personById } from "../data/people";
 import { CodeBlock, json } from "../components/code";
-import { Avatar, Button, Card, DecisionPill, Drawer, Logo, PageHeader, Segmented, cn } from "../components/ui";
+import { Avatar, Button, Card, DecisionPill, Drawer, EvidenceChain, Logo, PageHeader, Segmented, cn } from "../components/ui";
 import { clock } from "../lib/router";
 import { EMPLOYEE, getState, toast, useStore, useWorkspace, type Evt } from "../lib/store";
 
@@ -80,18 +80,7 @@ function EvidenceBody({ e }: { e: Evt }) {
     <div className="p-5 space-y-5">
       <div>
         <div className="eyebrow mb-3">Evidence chain</div>
-        <ol className="relative">
-          {chain.map((c, i) => (
-            <li key={c.label} className="relative grid grid-cols-[80px_1fr] gap-3 pb-3.5">
-              {i < chain.length - 1 && <span className="absolute left-[83px] top-4 bottom-0 w-px bg-line" />}
-              <span className="text-[12px] text-fg-3 pt-0.5">{c.label}</span>
-              <span className="relative pl-4 text-[13px] min-w-0">
-                <span className="absolute left-[-1px] top-[7px] size-[7px] rounded-full bg-accent" />
-                {c.value}
-              </span>
-            </li>
-          ))}
-        </ol>
+        <EvidenceChain rows={chain} />
       </div>
       <div>
         {/* "Immutable record" is only earned when the signer's chain fields are

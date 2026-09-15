@@ -58,8 +58,10 @@ export interface Surface {
   plane: Plane;
   title: string;
   subtitle: string;
-  /** lucide icon name, resolved by the UI's own map */
+  /** lucide icon name, resolved by the UI's own map — the fallback when no vendor mark exists */
   icon: string;
+  /** Vendor mark in src/assets/logos, rendered through <Logo>. Absent only for surfaces with no vendor (an unknown agent). */
+  logo?: string;
   chrome: "browser" | "ide" | "app" | "console" | "sql" | "payments" | "repo" | "cloud" | "chat";
   actions: ScenarioAction[];
 }
@@ -338,6 +340,7 @@ export const SURFACES: Surface[] = [
     title: "Chrome",
     subtitle: "Managed browser on a company laptop",
     icon: "Globe",
+    logo: "google",
     chrome: "browser",
     actions: [
       {
@@ -407,6 +410,7 @@ export const SURFACES: Surface[] = [
     title: "Cursor",
     subtitle: "IDE agent on the managed device",
     icon: "Code2",
+    logo: "cursor",
     chrome: "ide",
     actions: [
       {
@@ -475,6 +479,7 @@ export const SURFACES: Surface[] = [
     title: "VS Code + Copilot",
     subtitle: "Copilot agent mode on the same device",
     icon: "Code",
+    logo: "githubcopilot",
     chrome: "ide",
     actions: [
       {
@@ -529,6 +534,7 @@ export const SURFACES: Surface[] = [
     title: "Claude Code (CLI)",
     subtitle: "Terminal agent with shell and git",
     icon: "Terminal",
+    logo: "claudecode",
     chrome: "console",
     actions: [
       {
@@ -638,6 +644,7 @@ export const SURFACES: Surface[] = [
     title: "Claude Desktop",
     subtitle: "Desktop assistant with file access",
     icon: "MessageSquare",
+    logo: "claude",
     chrome: "chat",
     actions: [
       {
@@ -693,6 +700,7 @@ export const SURFACES: Surface[] = [
     title: "Stripe MCP",
     subtitle: "Payments tools behind the MCP gateway",
     icon: "CreditCard",
+    logo: "stripe",
     chrome: "payments",
     actions: [
       {
@@ -764,6 +772,7 @@ export const SURFACES: Surface[] = [
     title: "PostgreSQL",
     subtitle: "Production database behind the gateway",
     icon: "Database",
+    logo: "postgresql",
     chrome: "sql",
     actions: [
       {
@@ -857,6 +866,7 @@ export const SURFACES: Surface[] = [
     title: "GitHub",
     subtitle: "Repositories, branches and deploys",
     icon: "GitBranch",
+    logo: "github_light",
     chrome: "repo",
     actions: [
       {
@@ -946,6 +956,7 @@ export const SURFACES: Surface[] = [
     title: "AWS",
     subtitle: "Cloud account behind the API gateway",
     icon: "Cloud",
+    logo: "aws",
     chrome: "cloud",
     actions: [
       {
@@ -1028,6 +1039,7 @@ export const SURFACES: Surface[] = [
     title: "Slack",
     subtitle: "Workspace automation",
     icon: "Hash",
+    logo: "slack",
     chrome: "chat",
     actions: [
       {
@@ -1093,6 +1105,7 @@ export const SURFACES: Surface[] = [
     title: "Salesforce",
     subtitle: "CRM agent actions",
     icon: "Building2",
+    logo: "salesforce",
     chrome: "app",
     actions: [
       {

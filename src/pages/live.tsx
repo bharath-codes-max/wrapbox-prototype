@@ -17,32 +17,23 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import {
   Bot,
   Boxes,
-  Building2,
   Check,
   ChevronDown,
-  Cloud,
-  Code,
-  Code2,
   CreditCard,
   Cpu,
   Database,
-  FileCode,
   GitBranch,
-  Globe,
   Hash,
   HelpCircle,
   KeyRound,
   Laptop,
   Lock,
   LogOut,
-  MessageCircle,
-  MessageSquare,
   Repeat,
   RotateCcw,
   Send,
   Server,
   Signature,
-  Terminal,
   Upload,
 } from "lucide-react";
 import {
@@ -62,46 +53,16 @@ import type { Decision } from "../data/agents";
 import type { Rule } from "../data/contract";
 import type { Verdict } from "../lib/engine";
 import { switchWorkspace } from "../lib/store";
-import { WrapboxLogo } from "../components/logo";
-import { Button, Card, CardHead, Chip, D_DOT, DecisionPill, Dot, Drawer, Kbd, Segmented, Toggle, cn } from "../components/ui";
+import { useNavStyle } from "../lib/navstyle";
+import { WrapboxWordmark } from "../components/logo";
+import { Button, Card, CardHead, Chip, D_DOT, DecisionPill, Dot, Drawer, EvidenceChain, Logo, Segmented, Toggle, cn } from "../components/ui";
 
 /* ============================ stage theme ============================ */
-// The stage commits to a light look regardless of the app theme setting: we pin
-// the app's LIGHT token values on the root so every `bg-surface` / `text-fg` /
-// `text-allow` class resolves to its light value inside the playground, and the
-// three cards sit on an off-white ground with a faint blue-tinted spotlight.
-const STAGE: CSSProperties = {
-  // app light palette (from index.css) — scoped to the playground subtree
-  ["--bg" as string]: "#fafaf8",
-  ["--surface" as string]: "#ffffff",
-  ["--surface-2" as string]: "#f4f4f1",
-  ["--surface-3" as string]: "#ebebe7",
-  ["--line" as string]: "#e6e5e0",
-  ["--line-strong" as string]: "#d3d2cc",
-  ["--fg" as string]: "#111c35",
-  ["--fg-2" as string]: "#4a5061",
-  ["--fg-3" as string]: "#8a8e99",
-  ["--accent" as string]: "#1848ff",
-  ["--accent-2" as string]: "#5a82ff",
-  ["--accent-soft" as string]: "#f0f2f8",
-  ["--accent-fg" as string]: "#ffffff",
-  ["--ink" as string]: "#111c35",
-  ["--ink-fg" as string]: "#ffffff",
-  ["--allow" as string]: "#0a8a5c",
-  ["--allow-soft" as string]: "#e9f5ee",
-  ["--constrain" as string]: "#6b45e0",
-  ["--constrain-soft" as string]: "#f1ecfd",
-  ["--review" as string]: "#b26500",
-  ["--review-soft" as string]: "#fbf2e1",
-  ["--block" as string]: "#d6224a",
-  ["--block-soft" as string]: "#fcecee",
-  ["--shadow" as string]: "0 1px 2px rgba(17, 28, 53, 0.04), 0 8px 24px -12px rgba(17, 28, 53, 0.12)",
-  ["--shadow-lg" as string]: "0 24px 60px -24px rgba(17, 28, 53, 0.35)",
-  fontFamily: "var(--font-sans)",
-  color: "var(--fg)",
-  // off-white ground with a faint spotlight, never stark white
-  background: "radial-gradient(1200px 700px at 50% -8%, #eef2ff 0%, #f5f6f4 42%, #fafaf8 100%)",
-};
+// The stage commits to a light look regardless of the app theme setting. The
+// mount effect below pins `data-theme="light"` on the root, so every token
+// already resolves to its light value; the stage itself is the same flat
+// `var(--bg)` ground every product page sits on.
+const STAGE: CSSProperties = { background: "var(--bg)", fontFamily: "var(--font-sans)", color: "var(--fg)" };
 
 const D_WORD: Record<Decision, string> = { ALLOW: "Allowed", CONSTRAIN: "Constrained", REVIEW: "Held for review", BLOCK: "Blocked" };
 
@@ -152,7 +113,6 @@ const DECISION_ORDER: Decision[] = ["BLOCK", "REVIEW", "CONSTRAIN", "ALLOW"];
 /* ============================ the real verdict ============================ */
 function VerdictCard({ verdict, permitId, rewritten, original }: { verdict: Verdict; permitId?: string; rewritten?: string; original?: string }) {
   const d = verdict.decision;
-  const enforced = verdict.trace.filter((t) => t.matched);
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
@@ -160,16 +120,10 @@ function VerdictCard({ verdict, permitId, rewritten, original }: { verdict: Verd
         <span className="text-[13px] font-semibold">{D_WORD[d]}</span>
         {verdict.constrain && <Chip tone="muted"><span className={cn("size-1.5 rounded-full", D_DOT.CONSTRAIN)} />{verdict.constrain === "mask" ? "masked" : verdict.constrain}</Chip>}
       </div>
-      <p className="mt-1.5 text-[13px] leading-relaxed text-fg-2">{verdict.reason}</p>
-      {enforced.length > 0 && (
-        <div className="mt-2 space-y-0.5">
-          {enforced.slice(0, 2).map((t, i) => (
-            <div key={i} className="text-[12px] leading-snug text-fg-3">
-              <span className="font-mono text-fg-2">{t.rule.id}</span> — {t.why}
-            </div>
-          ))}
-        </div>
-      )}
+      {/* The rule id and title live on the "Matched rule" row and the full trace in
+          the Why drawer — the decision row states the reason once, and only when it
+          adds something the title did not already say. */}
+      {verdict.reason !== verdict.title && <p className="mt-1.5 text-[13px] leading-relaxed text-fg-2">{verdict.reason}</p>}
       {(verdict.approvers || verdict.quorum || permitId) && (
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
           {verdict.approvers && <Chip tone="review">{verdict.approvers}</Chip>}
@@ -194,10 +148,9 @@ function DeployCard({ deploy, onOnboard, onPush, reduced }: { deploy: DeployStat
   const pushed = deploy === "pushed";
   return (
     <Card className="shrink-0 overflow-hidden">
-      {/* The one prism on the page: the same ribbed glass as the product's Get-started tile, as a slim
-          band. Its ambient drift is frozen here — on this stage nothing moves without a click. */}
-      <div className="hero-prism h-2" style={{ animation: "none" }} aria-hidden />
-      <CardHead title="Deploy" sub="Create the workspace, then push wrapboxd to the fleet. Two clicks; nothing here runs on its own." />
+      {/* First-run mark: the product's prism hairline (the same one .fresh-bar draws), never a band. */}
+      <div className="prism-swatch h-[2px]" aria-hidden />
+      <CardHead title="Deploy" sub="Create the workspace, then push wrapboxd to the fleet." />
       <div className="border-t border-line">
         {/* Step 1 */}
         <div className="px-6 py-4 border-b border-line">
@@ -338,19 +291,19 @@ function Node({ icon, title, copy, lit, ruleId, right, reduced, children }: { ic
       {lit && <motion.span layout initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: reduced ? 0.01 : 0.3, ease: EASE, delay: reduced ? 0 : 0.4 }} className="prism-swatch absolute inset-x-0 top-0 h-[2px] origin-left" />}
       <div className="flex items-center gap-2">
         <span className="grid size-6 shrink-0 place-items-center rounded-md bg-surface text-fg-2 border border-line">{icon}</span>
-        <span className="eyebrow !text-fg">{title}</span>
+        <span className="text-[13px] font-semibold">{title}</span>
         <span className="ml-auto flex items-center gap-1.5">
           {right}
           <AnimatePresence initial={false}>
             {lit && ruleId && (
               <motion.span key={ruleId} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={reduced ? { duration: 0.01 } : { ...SPRING, delay: 0.45 }}>
-                <Chip tone="accent"><span className="font-mono">{ruleId}</span></Chip>
+                <Chip tone="accent" className="whitespace-nowrap"><span className="font-mono">{ruleId}</span></Chip>
               </motion.span>
             )}
           </AnimatePresence>
         </span>
       </div>
-      <p className="mt-1.5 text-[12px] leading-relaxed text-fg-3">{copy}</p>
+      <p className="mt-1.5 text-[12.5px] leading-relaxed text-fg-2">{copy}</p>
       {children}
     </motion.div>
   );
@@ -396,29 +349,36 @@ function Packet({ runKey, label, reduced }: { runKey: string; label: string; red
 }
 
 function FleetList({ deploy, reduced }: { deploy: DeployState; reduced: boolean }) {
-  if (deploy !== "pushed") return <div className="mt-2.5 border-t border-line pt-2 text-[12px] text-fg-3">0 devices · push wrapboxd from the admin console</div>;
+  if (deploy !== "pushed") return <div className="mt-2.5 border-t border-line pt-2 text-[12.5px] text-fg-2">0 devices · push wrapboxd from Deploy, on the left</div>;
   return (
-    <ul className="mt-2.5 border-t border-line">
-      {FLEET.map((d, i) => (
-        <motion.li
-          key={d.host}
-          initial={{ opacity: 0, x: -6 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: reduced ? 0.01 : 0.28, ease: EASE, delay: reduced ? 0 : 0.12 + i * 0.14 }}
-          className="py-1.5 border-b border-line last:border-0 text-[11.5px]"
-        >
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-fg truncate">{d.host}</span>
-            <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-fg-2"><Dot tone="allow" /> enrolled</span>
-          </div>
-          <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-fg-3">
-            <span className="truncate">{d.os}</span>
-            <span aria-hidden>·</span>
-            <span className="font-mono">{keyIdFor(d.host)}</span>
-          </div>
-        </motion.li>
-      ))}
-    </ul>
+    <div className="mt-2.5 border-t border-line">
+      {/* One column header carries the state; each row is a bare dot. The list is the evidence of enrolment. */}
+      <div className="flex items-center justify-between pt-2 pb-1 text-[11px] text-fg-3">
+        <span>Device</span>
+        <span>Enrolled</span>
+      </div>
+      <ul>
+        {FLEET.map((d, i) => (
+          <motion.li
+            key={d.host}
+            initial={{ opacity: 0, x: -6 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: reduced ? 0.01 : 0.28, ease: EASE, delay: reduced ? 0 : 0.12 + i * 0.14 }}
+            className="py-1.5 border-t border-line"
+          >
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[12.5px] text-fg truncate">{d.host}</span>
+              <span className="ml-auto mr-[18px] inline-flex shrink-0"><Dot tone="allow" /></span>
+            </div>
+            <div className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-fg-2">
+              <span className="truncate">{d.os}</span>
+              <span aria-hidden>·</span>
+              <span className="font-mono">{keyIdFor(d.host)}</span>
+            </div>
+          </motion.li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -443,7 +403,6 @@ function FabricMap({ run, runKey, effect, deploy, receiptCount, reduced }: { run
             copy="On the device · OS-level enforcement (Apple Endpoint Security on macOS, kernel confinement on Linux)."
             lit={plane === "runtime"}
             ruleId={run?.verdict.rule}
-            right={pushed && <Chip tone="allow">Fleet · {FLEET.length} enrolled</Chip>}
             reduced={reduced}
           >
             <FleetList deploy={deploy} reduced={reduced} />
@@ -506,24 +465,6 @@ function EvidenceList({ receipts, reduced }: { receipts: Receipt[]; reduced: boo
   );
 }
 
-/** The evidence-chain list: the same vertical dotted idiom as the Evidence page. */
-function Chain({ rows }: { rows: { label: string; value: ReactNode }[] }) {
-  return (
-    <ol className="relative">
-      {rows.map((c, i) => (
-        <li key={c.label} className="relative grid grid-cols-[88px_1fr] gap-3 pb-3.5 last:pb-0">
-          {i < rows.length - 1 && <span className="absolute left-[91px] top-4 bottom-0 w-px bg-line" />}
-          <span className="text-[12px] text-fg-3 pt-0.5">{c.label}</span>
-          <span className="relative pl-4 text-[13px] min-w-0">
-            <span className="absolute left-[-1px] top-[7px] size-[7px] rounded-full bg-accent" />
-            {c.value}
-          </span>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 function FabricColumn({
   run,
   runKey,
@@ -566,7 +507,7 @@ function FabricColumn({
         },
         { label: "Intent", value: <span className="text-fg-2">{action.intent}</span> },
         {
-          label: "Enforcement point",
+          label: "Enforced at",
           value: (
             <span className="flex flex-wrap items-center gap-x-1.5">
               {run.plane === "runtime" ? <Laptop className="size-3.5 text-fg-2" /> : <Server className="size-3.5 text-fg-2" />}
@@ -607,19 +548,19 @@ function FabricColumn({
       </div>
 
       {!live ? (
-        <div className="border-t border-line px-6 py-10 text-center text-[13px] text-fg-3">Pick a surface on the right, then run one of its actions. Nothing plays on its own.</div>
+        <div className="border-t border-line px-6 py-10 text-center text-[13px] text-fg-3">Pick a surface on the right, then run one of its actions.</div>
       ) : (
         <div className="border-t border-line px-6 py-5">
           <motion.div ref={decisionRef} key={runKey} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduced ? 0.01 : 0.35, ease: EASE, delay: reveal }} onAnimationComplete={settle}>
             <Card className="overflow-hidden">
               <CardHead title="Decision" sub={`${run.agent} · ${action.label}`} right={<DecisionPill d={run.verdict.decision} />} />
               <div className="border-t border-line px-6 py-5">
-                <Chain rows={rows} />
+                <EvidenceChain rows={rows} />
               </div>
               <div className="flex flex-wrap items-center gap-2 border-t border-line px-6 py-3.5">
                 <Button variant="secondary" size="sm" onClick={() => setWhy(true)}><HelpCircle className="size-3.5" /> Why?</Button>
                 <Button variant="secondary" size="sm" onClick={onAnotherAgent}><Repeat className="size-3.5" /> Try another agent</Button>
-                <span className="text-[12px] text-fg-3">Same rule, different agent — the decision does not change.</span>
+                <span className="text-[12px] text-fg-3">The rule keys on the action and its context, not the agent's name.</span>
               </div>
             </Card>
           </motion.div>
@@ -647,7 +588,7 @@ function FabricColumn({
             </div>
             <div>
               <div className="eyebrow mb-2">Evaluation trace</div>
-              <Chain
+              <EvidenceChain
                 rows={run.verdict.trace
                   .filter((t) => t.matched)
                   .map((t) => ({
@@ -661,7 +602,6 @@ function FabricColumn({
                   }))}
               />
             </div>
-            <div className="flex items-center gap-2 text-[12px] text-fg-3"><Kbd>Esc</Kbd> closes this panel</div>
           </div>
         )}
       </Drawer>
@@ -670,32 +610,21 @@ function FabricColumn({
 }
 
 /* ============================ 3 · WHERE IS THE AGENT? ============================ */
-const ICONS: Record<string, typeof Globe> = {
-  Globe,
-  Bot,
-  Code,
-  Code2,
-  Hash,
-  FileCode,
-  MessageSquare,
-  Terminal,
-  CreditCard,
-  Database,
-  GitBranch,
-  Cloud,
-  MessageCircle,
-  Building2,
-  Laptop,
-  Server,
-  Boxes,
-};
+// Vendor surfaces render their real mark through <Logo>; the lucide glyph is the
+// fallback for a surface with no vendor (the unknown agent).
+const ICONS: Record<string, typeof Bot> = { Bot };
 const iconFor = (name: string) => ICONS[name] ?? Boxes;
 
 type TabId = "all" | "runtime" | "gateway" | "browser" | "ide" | "mcp" | "cloud" | "data" | "saas";
-const TABS: { value: TabId; label: string }[] = [
+// Two filter dimensions, the way Evidence lays them out: a three-option Segmented
+// for the plane and a select for the kind. Both resolve through matchesTab().
+const PLANE_TABS: { value: TabId; label: string }[] = [
   { value: "all", label: "All" },
   { value: "runtime", label: "Runtime" },
   { value: "gateway", label: "Gateway" },
+];
+const KIND_TABS: { value: TabId; label: string }[] = [
+  { value: "all", label: "Any kind" },
   { value: "browser", label: "Browser" },
   { value: "ide", label: "IDE" },
   { value: "mcp", label: "MCP" },
@@ -718,9 +647,9 @@ function matchesTab(s: Surface, tab: TabId): boolean {
 }
 
 const PlaneTag = ({ plane }: { plane: Plane }) => (
-  <Chip tone="muted" className="uppercase tracking-wide">
+  <Chip tone="muted" className="whitespace-nowrap">
     {plane === "runtime" ? <Laptop className="size-3" /> : <Server className="size-3" />}
-    {plane}
+    {plane === "runtime" ? "Runtime" : "Gateway"}
   </Chip>
 );
 
@@ -789,7 +718,7 @@ function MiniChrome({ surface, action, agent }: { surface: Surface; action: Scen
         <div className={box}>
           <div className="eyebrow mb-1.5 flex items-center gap-1.5"><Database className="size-3" /> {surface.title} · production</div>
           <div className="min-h-[38px] break-all rounded-md border border-line bg-surface px-2.5 py-2 font-mono text-[11.5px] leading-snug text-fg-2">{a?.act.sql ?? "SELECT 1;"}</div>
-          <div className="mt-2 text-[11.5px] text-fg-3">Pick an action below to run it through the Gateway.</div>
+          <div className="mt-2 text-[11.5px] text-fg-2">Pick an action below to run it through the Gateway.</div>
         </div>
       );
     case "payments":
@@ -851,7 +780,11 @@ function SurfaceRow({
   return (
     <div className={cn("border-b border-line last:border-0", open && "bg-surface-2/40")}>
       <button onClick={onOpen} aria-expanded={open} className="flex w-full items-start gap-3 px-5 py-3.5 text-left hover:bg-surface-2 transition-colors">
-        <span className={cn("grid size-8 shrink-0 place-items-center rounded-lg", open ? "bg-accent-soft text-accent" : "bg-surface-2 text-fg-2")}><Icon className="size-4" /></span>
+        {surface.logo ? (
+          <Logo name={surface.logo} size={28} rounded="rounded-lg" className="mt-px" />
+        ) : (
+          <span className={cn("grid size-7 shrink-0 place-items-center rounded-lg", open ? "bg-accent-soft text-accent" : "bg-surface-2 text-fg-2")}><Icon className="size-4" /></span>
+        )}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold">{surface.title}</span>
           <span className="block truncate text-[12px] text-fg-2">{surface.subtitle}</span>
@@ -906,12 +839,18 @@ function Explorer({
   onRun: (s: Surface, a: ScenarioAction) => void;
   reduced: boolean;
 }) {
-  const list = SURFACES.filter((s) => matchesTab(s, tab));
+  const [kind, setKind] = useState<TabId>("all");
+  const list = SURFACES.filter((s) => matchesTab(s, tab) && matchesTab(s, kind));
   return (
     <Card className="shrink-0">
       <CardHead title="Where is the agent?" sub="Every place an agent can run. Open one, then run an action — any surface, any order." />
-      <div className="px-6 pb-4">
-        <Segmented size="sm" options={TABS} value={tab} onChange={setTab} className="flex-wrap" />
+      <div className="flex items-center gap-2 px-6 py-4 border-t border-line">
+        <Segmented size="sm" options={PLANE_TABS} value={tab} onChange={setTab} />
+        <select value={kind} onChange={(e) => setKind(e.target.value as TabId)} aria-label="Kind of surface" className="h-7 rounded-full border border-line bg-surface px-3 text-[12.5px] text-fg-2 outline-none">
+          {KIND_TABS.map((k) => (
+            <option key={k.value} value={k.value}>{k.label}</option>
+          ))}
+        </select>
       </div>
       <div className="border-t border-line">
         {list.map((s) => (
@@ -938,6 +877,7 @@ export function EnforcementPlayground() {
   // Deploy is presentation state: it never feeds runAction(). Clicks set it; the
   // Fabric animates from it. Nothing gates the explorer on it.
   const [deploy, setDeploy] = useState<DeployState>("idle");
+  const nav = useNavStyle();
 
   const reduced = !!useReducedMotion();
   const [enabled, setEnabled] = useState<string[]>(DEFAULT_TOGGLES);
@@ -1010,22 +950,26 @@ export function EnforcementPlayground() {
     <div style={STAGE} className="fixed inset-0 flex flex-col overflow-hidden">
       <style>{`.wbx-pg{grid-template-columns:1fr}@media(min-width:1100px){.wbx-pg{grid-template-columns:1fr 1.34fr 1fr}.wbx-pg>div{overflow-y:auto;min-height:0}}`}</style>
 
-      {/* top chrome */}
-      <header className="flex h-14 shrink-0 items-center gap-3 px-6">
-        <div className="flex items-center gap-2.5">
-          <WrapboxLogo size={22} tone="light" />
-          <span className="font-brand text-[15px] font-bold tracking-tight">Wrapbox</span>
-          <Chip tone="accent" className="uppercase tracking-wide">Live demo</Chip>
-        </div>
-        <Chip tone="muted"><Dot tone="accent" /> Simulated environment · live policy engine</Chip>
+      {/* The product's top bar — the same .wb-nav every page sits under, in whichever
+          style the user chose (matte black by default, off-white if they switched). */}
+      <header data-nav={nav} className="wb-nav relative flex h-[68px] shrink-0 items-center gap-3 px-4 lg:px-5 border-b border-(--n-edge)">
+        <span className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-[linear-gradient(90deg,transparent,var(--n-glow),transparent)]" />
+        <WrapboxWordmark tone={nav === "light" ? "light" : "dark"} />
+        <span className="hidden md:block h-7 w-px bg-(--n-ring) mx-1" />
+        <span className="hidden md:inline-flex items-center gap-2 rounded-full ring-1 ring-(--n-ring) px-3 h-8 text-[12px] text-(--n-fg-2)">
+          <span className="size-1.5 rounded-full bg-(--n-fg-3)" />
+          Simulated environment · live policy engine
+        </span>
         <div className="ml-auto flex items-center gap-3">
-          <span className="hidden text-[12px] text-fg-3 sm:inline">{ORG.name}</span>
-          <Button variant="secondary" size="sm" onClick={() => switchWorkspace("v2")}><LogOut className="size-3.5" /> Exit demo</Button>
+          <span className="hidden text-[12.5px] text-(--n-fg-2) sm:inline">{ORG.name}</span>
+          <button onClick={() => switchWorkspace("v2")} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-(--n-pill-bg) px-3.5 text-[12.5px] font-medium text-(--n-pill-fg) hover:opacity-90 transition-opacity">
+            <LogOut className="size-3.5" /> Exit demo
+          </button>
         </div>
       </header>
 
       {/* the three columns */}
-      <div className="wbx-pg grid min-h-0 flex-1 gap-3 overflow-y-auto px-6 pb-4 pt-1 scroll-thin">
+      <div className="wbx-pg grid min-h-0 flex-1 gap-3 overflow-y-auto px-6 pb-4 pt-4 scroll-thin">
         <div className="flex flex-col gap-3 scroll-thin pr-0.5">
           <DeployCard deploy={deploy} onOnboard={() => setDeploy("onboarded")} onPush={() => setDeploy("pushed")} reduced={reduced} />
           <IntentContract enabled={enabled} onToggle={toggle} onReset={reset} reduced={reduced} />
