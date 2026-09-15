@@ -162,12 +162,13 @@ function NavLink({ it, current, onNavigate, lead }: { it: NavItem; current: stri
       onClick={onNavigate}
       className={cn(
         "group relative flex items-center gap-2.5 rounded-lg px-2.5 h-9 text-[13.5px] transition-colors",
-        active ? "bg-surface text-fg font-medium shadow-card border border-line" : "text-fg-2 hover:text-fg hover:bg-surface border border-transparent",
+        // Flat by default; the active row is the only one that draws a surface.
+        active ? "bg-accent-soft text-accent font-medium" : "text-fg-2 hover:text-fg hover:bg-surface-2",
         it.adminOnly && "opacity-60",
       )}
     >
-      {active && <span className="absolute -left-2.5 top-2 bottom-2 w-[3px] rounded-r-full bg-accent" />}
-      <it.icon className={cn("size-4 shrink-0", active ? "text-fg" : "text-fg-3 group-hover:text-fg-2")} strokeWidth={1.8} />
+      {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-[2.5px] rounded-full bg-accent" />}
+      <it.icon className={cn("size-4 shrink-0", active ? "text-accent" : "text-fg-3 group-hover:text-fg-2")} strokeWidth={1.8} />
       <span className="truncate">{it.label}</span>
       {it.adminOnly ? (
         <Lock className="ml-auto size-3.5 text-fg-3" />
@@ -186,20 +187,23 @@ function Sidebar({ current, onNavigate }: { current: string; onNavigate?: () => 
   const me = role === "admin" ? ADMIN : EMPLOYEE;
   return (
     <div className="flex h-full flex-col">
-      <nav className="flex-1 overflow-y-auto scroll-thin px-2.5 pt-3 pb-3 space-y-2">
+      {/* Classic flat nav: section labels sit directly on the page, items carry
+          no chrome of their own. Only the active row is drawn, so the eye finds
+          "where am I" instantly instead of parsing four nested boxes. */}
+      <nav className="flex-1 overflow-y-auto scroll-thin px-3 pt-3 pb-3">
         {nav.map((g, gi) =>
           // The lead group is a call to action, not a section — it keeps its own emphasis.
           g.section ? (
-            <div key={gi} className="rounded-2xl border border-line bg-surface-2/60 p-1.5">
-              <div className="eyebrow px-2 pt-1.5 pb-1.5 !text-[10.5px]">{g.section}</div>
-              <div className="space-y-0.5">
+            <div key={gi} className={cn(gi > 0 && "mt-6")}>
+              <div className="px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-fg-3">{g.section}</div>
+              <div className="space-y-px">
                 {g.items.map((it) => (
                   <NavLink key={it.path} it={it} current={current} onNavigate={onNavigate} />
                 ))}
               </div>
             </div>
           ) : (
-            <div key={gi} className="space-y-0.5">
+            <div key={gi} className={cn(gi > 0 && "mt-6")}>
               {g.items.map((it) => (
                 <NavLink key={it.path} it={it} current={current} onNavigate={onNavigate} lead />
               ))}
@@ -207,7 +211,7 @@ function Sidebar({ current, onNavigate }: { current: string; onNavigate?: () => 
           ),
         )}
       </nav>
-      <div className="px-2.5 pb-2">
+      <div className="px-3 pb-2 pt-2 space-y-px border-t border-line">
         <NavLink it={{ path: "/settings", label: "Settings", icon: SettingsIcon }} current={current} onNavigate={onNavigate} />
         <NavLink it={{ path: "/welcome", label: "About Wrapbox", icon: Info }} current={current} onNavigate={onNavigate} />
       </div>
