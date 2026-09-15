@@ -77,6 +77,9 @@ const GROUND: Record<StageTheme, string> = {
 };
 
 const D_WORD: Record<Decision, string> = { ALLOW: "Allowed", CONSTRAIN: "Constrained", REVIEW: "Held for review", BLOCK: "Blocked" };
+// Compiled-rule chips carry the same semantic color as everywhere else a
+// decision shows up — never a flat gray that hides which rules are dangerous.
+const D_CHIP_TONE: Record<Decision, "block" | "review" | "constrain" | "allow"> = { BLOCK: "block", REVIEW: "review", CONSTRAIN: "constrain", ALLOW: "allow" };
 
 // The product's motion vocabulary: springs for things that land (Segmented,
 // Drawer), a single ease for glides.
@@ -160,8 +163,6 @@ function DeployCard({ deploy, onOnboard, onPush, reduced }: { deploy: DeployStat
   const pushed = deploy === "pushed";
   return (
     <Card className="shrink-0 overflow-hidden shadow-card">
-      {/* First-run mark: the product's prism hairline (the same one .fresh-bar draws), never a band. */}
-      <div className="prism-swatch h-[2px]" aria-hidden />
       <CardHead title="Deploy" sub="Create the workspace, then push wrapboxd to the fleet." />
       <div className="border-t border-line">
         {/* Step 1 */}
@@ -262,7 +263,7 @@ function IntentContract({ enabled, onToggle, onReset, reduced }: { enabled: stri
                   <AnimatePresence initial={false}>
                     {g.rules.map((r) => (
                       <motion.span key={r.id} layout initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }} transition={reduced ? { duration: 0.01 } : SPRING} title={r.why}>
-                        <Chip tone="muted">{r.title}</Chip>
+                        <Chip tone={D_CHIP_TONE[g.d]}>{r.title}</Chip>
                       </motion.span>
                     ))}
                   </AnimatePresence>
@@ -305,7 +306,7 @@ function Node({ icon, title, copy, lit, tone = "accent", ruleId, right, reduced,
       transition={{ duration: reduced ? 0.01 : 0.3, ease: EASE, delay: lit && !reduced ? 0.4 : 0 }}
       className="relative overflow-hidden rounded-xl border border-line bg-surface-2 px-3.5 py-3"
     >
-      {lit && <motion.span layout initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: reduced ? 0.01 : 0.3, ease: EASE, delay: reduced ? 0 : 0.4 }} className="prism-swatch absolute inset-x-0 top-0 h-[2px] origin-left" />}
+      {lit && <motion.span layout initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: reduced ? 0.01 : 0.3, ease: EASE, delay: reduced ? 0 : 0.4 }} style={{ background: ring }} className="absolute inset-x-0 top-0 h-[2px] origin-left" aria-hidden />}
       <div className="flex items-center gap-2">
         <span className="grid size-6 shrink-0 place-items-center rounded-md bg-surface text-fg-2 border border-line">{icon}</span>
         <span className="text-[13px] font-semibold">{title}</span>
@@ -1060,7 +1061,6 @@ export function EnforcementPlayground() {
       {/* The product's top bar — the same .wb-nav every page sits under, in whichever
           style the user chose (matte black by default, off-white if they switched). */}
       <header data-nav={nav} className="wb-nav relative flex h-[68px] shrink-0 items-center gap-3 px-4 lg:px-5 border-b border-(--n-edge)">
-        <span className="prism-swatch pointer-events-none absolute inset-x-0 bottom-0 h-[2px] opacity-80" />
         <WrapboxWordmark tone={nav === "light" ? "light" : "dark"} />
         <span className="hidden md:block h-7 w-px bg-(--n-ring) mx-1" />
         <span className="hidden md:inline-flex items-center gap-2 rounded-full ring-1 ring-(--n-ring) px-3 h-8 text-[12px] text-(--n-fg-2)">

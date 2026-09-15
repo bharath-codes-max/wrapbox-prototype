@@ -374,7 +374,7 @@ export function Dot({ tone }: { tone: "allow" | "review" | "block" | "muted" | "
   );
 }
 
-export function Chip({ children, className, tone = "muted" }: { children: ReactNode; className?: string; tone?: "muted" | "accent" | "allow" | "review" | "block" }) {
+export function Chip({ children, className, tone = "muted" }: { children: ReactNode; className?: string; tone?: "muted" | "accent" | "allow" | "review" | "block" | "constrain" }) {
   return (
     <span
       className={cn(
@@ -384,6 +384,7 @@ export function Chip({ children, className, tone = "muted" }: { children: ReactN
         tone === "allow" && "bg-allow-soft text-allow",
         tone === "review" && "bg-review-soft text-review",
         tone === "block" && "bg-block-soft text-block",
+        tone === "constrain" && "bg-constrain-soft text-constrain",
         className,
       )}
     >
