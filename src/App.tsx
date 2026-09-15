@@ -25,6 +25,7 @@ import { Playground } from "./pages/playground";
 import { SettingsPage } from "./pages/settings";
 import { AuthPage } from "./pages/auth";
 import { Landing } from "./pages/landing";
+import { LiveDemo } from "./pages/live";
 import { useAccount } from "./lib/auth";
 import { go } from "./lib/router";
 
@@ -72,6 +73,14 @@ export default function App() {
     return (
       <MotionConfig reducedMotion="user">
         <AuthPage mode={seg[0] === "signup" ? "signup" : "login"} />
+      </MotionConfig>
+    );
+
+  // The pitch theatre owns the whole viewport — no Shell, no sidebar.
+  if (workspace === "live")
+    return (
+      <MotionConfig reducedMotion="user">
+        <LiveDemo />
       </MotionConfig>
     );
 

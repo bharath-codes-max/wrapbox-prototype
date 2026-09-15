@@ -12,7 +12,7 @@ import { TEMPLATES, approvalFrom, approversFor, categoryOf, gateFromAct, mkEvt, 
 export { TEMPLATES, approvalFrom, categoryOf, gateFromAct, genericSignals, spaceOf } from "./traffic";
 
 export type Role = "admin" | "employee";
-export type WorkspaceId = "v2" | "fabric" | "fresh";
+export type WorkspaceId = "v2" | "live" | "fabric" | "fresh";
 export const EMPLOYEE = PEOPLE.dev;
 export const ADMIN = PEOPLE.priya;
 export const NONE: string[] = [];
@@ -33,10 +33,11 @@ export interface WorkspaceMeta {
 }
 export const WORKSPACES: Record<WorkspaceId, WorkspaceMeta> = {
   v2: { id: "v2", label: "Wrapbox v2", kind: "fresh", labs: false, fabric: true, sims: false, tick: 0, blurb: "The real product. Empty until devices enroll and rules are created — data comes from the live Control Plane." },
+  live: { id: "live", label: "Live demo", kind: "reference", labs: false, fabric: false, sims: true, tick: 0, blurb: "A guided, cinematic run of Wrapbox end to end — real policy engine, simulated surroundings." },
   fabric: { id: "fabric", label: "Enforcement Fabric — v2", kind: "reference", labs: false, fabric: true, sims: true, tick: 12_000, blurb: "Installed once per device. Every agent on it is discovered, provisioned, confined and credential-brokered — nothing installed per agent." },
   fresh: { id: "fresh", label: "Fresh workspace", kind: "fresh", labs: true, fabric: false, sims: false, tick: 2_400, blurb: "Completely empty. Start from zero and watch every page fill in." },
 };
-export const WORKSPACE_ORDER: WorkspaceId[] = ["v2", "fabric", "fresh"];
+export const WORKSPACE_ORDER: WorkspaceId[] = ["v2", "live", "fabric", "fresh"];
 /** v2 is the real product and the default landing spot after login. fabric (the
  *  earlier scripted reference) and fresh stay in the switcher — not hidden. */
 export const VISIBLE_WORKSPACES: WorkspaceId[] = WORKSPACE_ORDER;
@@ -356,6 +357,11 @@ function v2State(): State {
   };
 }
 
+/** The pitch theatre. Self-contained — the film carries its own beats, so it needs no seeded fleet data. */
+function liveState(): State {
+  return { ...freshState(), workspace: "live", company: "Northwind Financial", domain: "northwind.example", region: "us" };
+}
+
 function freshState(): State {
   return {
     workspace: "fresh",
@@ -426,7 +432,7 @@ function loadFresh(): State {
 /* ================= the store ================= */
 /** Workspaces are built on first use: the reference tenant carries two weeks of decisions and is only paid for when opened. */
 const spaces: Partial<Record<WorkspaceId, State>> = {};
-const BUILD: Record<WorkspaceId, () => State> = { v2: v2State, fabric: () => fabricState(), fresh: loadFresh };
+const BUILD: Record<WorkspaceId, () => State> = { v2: v2State, live: liveState, fabric: () => fabricState(), fresh: loadFresh };
 export function space(id: WorkspaceId): State {
   return (spaces[id] ??= BUILD[id]());
 }

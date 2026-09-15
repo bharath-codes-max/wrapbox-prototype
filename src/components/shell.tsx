@@ -4,6 +4,7 @@ import {
   BookOpen,
   Bot,
   Check,
+  Clapperboard,
   ChevronsUpDown,
   CircleCheck,
   CirclePlay,
@@ -344,8 +345,8 @@ const ENVS: { id: "all" | Env; label: string; dot: string; note: string }[] = [
   { id: "development", label: "Development", dot: "bg-[#9db4ff]", note: "laptops and sandboxes" },
 ];
 
-const WS_ICON: Record<WorkspaceId, typeof Bot> = { v2: Rocket, fabric: ShieldCheck, fresh: Plus };
-const WS_SHORT: Record<WorkspaceId, string> = { v2: "v2", fabric: "fabric", fresh: "fresh" };
+const WS_ICON: Record<WorkspaceId, typeof Bot> = { v2: Rocket, live: Clapperboard, fabric: ShieldCheck, fresh: Plus };
+const WS_SHORT: Record<WorkspaceId, string> = { v2: "v2", live: "live", fabric: "fabric", fresh: "fresh" };
 
 function WorkspaceMenu() {
   const [open, setOpen] = useState(false);
