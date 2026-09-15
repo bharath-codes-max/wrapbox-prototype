@@ -4,7 +4,7 @@
 // output returned by runDecision() — this file never authors a decision string.
 //
 // Left = ADMIN console · Middle = THE MACHINERY (the star) · Right = EMPLOYEE.
-// Motion via motion/react; app design tokens, elevated onto a dark cinematic
+// Motion via motion/react; app design tokens, elevated onto a light cinematic
 // stage. Respects prefers-reduced-motion through the director's `reducedMotion`.
 
 import { AnimatePresence, motion } from "motion/react";
@@ -44,40 +44,45 @@ import { WrapboxLogo } from "../components/logo";
 import { cn } from "../components/ui";
 
 /* ============================ stage theme ============================ */
-// The stage commits to a dark look regardless of the app theme: we pin the app's
-// dark token values on the root so every `bg-surface` / `text-fg` / `text-allow`
-// class resolves to its dark value inside the theatre, and the three screens glow
-// against an even darker ground.
+// The stage commits to a light look regardless of the app theme setting: we pin
+// the app's LIGHT token values on the root so every `bg-surface` / `text-fg` /
+// `text-allow` class resolves to its light value inside the theatre, and the
+// three screens sit on an off-white ground with a faint blue-tinted spotlight.
 const STAGE: CSSProperties = {
-  // app dark palette (from index.css) — scoped to the theatre subtree
-  ["--bg" as string]: "#070b15",
-  ["--surface" as string]: "#0e1424",
-  ["--surface-2" as string]: "#141b2e",
-  ["--surface-3" as string]: "#1b2338",
-  ["--line" as string]: "#1e273d",
-  ["--line-strong" as string]: "#2b3652",
-  ["--fg" as string]: "#e8ecf5",
-  ["--fg-2" as string]: "#a3acc2",
-  ["--fg-3" as string]: "#6c7590",
-  ["--accent" as string]: "#7c98ff",
-  ["--accent-2" as string]: "#9db4ff",
-  ["--accent-soft" as string]: "#161f3a",
-  ["--accent-fg" as string]: "#070b15",
-  ["--ink" as string]: "#e8ecf5",
-  ["--ink-fg" as string]: "#111c35",
-  ["--allow" as string]: "#3fd49b",
-  ["--allow-soft" as string]: "#0d271e",
-  ["--constrain" as string]: "#a78bff",
-  ["--constrain-soft" as string]: "#221a3f",
-  ["--review" as string]: "#f4b453",
-  ["--review-soft" as string]: "#2c2010",
-  ["--block" as string]: "#ff6e8a",
-  ["--block-soft" as string]: "#321219",
+  // app light palette (from index.css) — scoped to the theatre subtree
+  ["--bg" as string]: "#fafaf8",
+  ["--surface" as string]: "#ffffff",
+  ["--surface-2" as string]: "#f4f4f1",
+  ["--surface-3" as string]: "#ebebe7",
+  ["--line" as string]: "#e6e5e0",
+  ["--line-strong" as string]: "#d3d2cc",
+  ["--fg" as string]: "#111c35",
+  ["--fg-2" as string]: "#4a5061",
+  ["--fg-3" as string]: "#8a8e99",
+  ["--accent" as string]: "#1848ff",
+  ["--accent-2" as string]: "#5a82ff",
+  ["--accent-soft" as string]: "#f0f2f8",
+  ["--accent-fg" as string]: "#ffffff",
+  ["--ink" as string]: "#111c35",
+  ["--ink-fg" as string]: "#ffffff",
+  ["--allow" as string]: "#0a8a5c",
+  ["--allow-soft" as string]: "#e9f5ee",
+  ["--constrain" as string]: "#6b45e0",
+  ["--constrain-soft" as string]: "#f1ecfd",
+  ["--review" as string]: "#b26500",
+  ["--review-soft" as string]: "#fbf2e1",
+  ["--block" as string]: "#d6224a",
+  ["--block-soft" as string]: "#fcecee",
   fontFamily: "var(--font-sans)",
   color: "var(--fg)",
-  // near-black cinematic ground
-  background: "radial-gradient(1200px 700px at 50% -8%, #101a33 0%, #0a0f1d 42%, #05070e 100%)",
+  // off-white ground with a faint spotlight, never stark white
+  background: "radial-gradient(1200px 700px at 50% -8%, #eef2ff 0%, #f5f6f4 42%, #fafaf8 100%)",
 };
+// Text set on a saturated brand/decision color (a pill, a button, an active
+// chip). The light palette's colors are dark/saturated enough that white reads
+// correctly everywhere they're used — unlike the dark theme's pale colors,
+// which needed dark text instead.
+const ON_COLOR = "#ffffff";
 
 const D_TEXT: Record<Decision, string> = { ALLOW: "text-allow", CONSTRAIN: "text-constrain", REVIEW: "text-review", BLOCK: "text-block" };
 const D_SOFT: Record<Decision, string> = { ALLOW: "bg-allow-soft", CONSTRAIN: "bg-constrain-soft", REVIEW: "bg-review-soft", BLOCK: "bg-block-soft" };
@@ -193,7 +198,7 @@ function VerdictCard({ verdict, permitId, dense }: { verdict: Verdict; permitId?
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE }} className={cn("rounded-xl border p-3", D_SOFT[d])} style={{ borderColor: `${D_VAR[d]}55` }}>
       <div className="flex items-center gap-2.5">
-        <span className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12.5px] font-bold tracking-wide" style={{ background: D_VAR[d], color: "#0a0f1d" }}>
+        <span className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12.5px] font-bold tracking-wide" style={{ background: D_VAR[d], color: ON_COLOR }}>
           {d === "BLOCK" ? <Lock className="size-3.5" /> : d === "ALLOW" ? <Check className="size-3.5" /> : d === "REVIEW" ? <ShieldCheck className="size-3.5" /> : <ShieldCheck className="size-3.5" />}
           {d}
         </span>
@@ -234,14 +239,14 @@ function VerdictCard({ verdict, permitId, dense }: { verdict: Verdict; permitId?
 /* ============================ ADMIN column ============================ */
 function BrowserChrome({ children, url = "console.wrapbox.ai" }: { children: ReactNode; url?: string }) {
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-line bg-[#0b0f1c]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-line bg-surface">
       <div className="flex items-center gap-2 border-b border-line bg-surface-2 px-3 py-2">
         <span className="flex items-center gap-1.5">
           <span className="size-2.5 rounded-full bg-[#ff5f57]" />
           <span className="size-2.5 rounded-full bg-[#febc2e]" />
           <span className="size-2.5 rounded-full bg-[#28c840]" />
         </span>
-        <div className="ml-2 flex h-6 flex-1 items-center gap-1.5 rounded-md bg-[#070b15] px-2 text-[11px] text-fg-3">
+        <div className="ml-2 flex h-6 flex-1 items-center gap-1.5 rounded-md bg-surface-2 px-2 text-[11px] text-fg-3">
           <Lock className="size-3 text-allow" />
           <span className="truncate">{url}</span>
         </div>
@@ -269,7 +274,7 @@ function AdminColumn({ d }: { d: ReturnType<typeof useDirector> }) {
     <BrowserChrome>
       {/* console header */}
       <div className="mb-3 flex items-center gap-2">
-        <span className="grid size-6 place-items-center rounded-md bg-accent-soft"><WrapboxLogo size={14} tone="dark" /></span>
+        <span className="grid size-6 place-items-center rounded-md bg-accent-soft"><WrapboxLogo size={14} tone="light" /></span>
         <span className="text-[12.5px] font-semibold text-fg">Wrapbox Console</span>
         <span className="ml-auto text-[11px] text-fg-3">Northwind Financial</span>
       </div>
@@ -282,7 +287,7 @@ function AdminColumn({ d }: { d: ReturnType<typeof useDirector> }) {
             <Field label="Single sign-on" value="Okta · SAML" icon={<Fingerprint className="size-3.5" />} />
             <Field label="Control plane region" value="us-east-1" icon={<Server className="size-3.5" />} />
             {cmd && (
-              <div className="rounded-md border border-line bg-[#070b15] px-2.5 py-1.5 font-mono text-[11px] text-fg-2">
+              <div className="rounded-md border border-line bg-surface-2 px-2.5 py-1.5 font-mono text-[11px] text-fg-2">
                 <span className="text-allow">$</span> {cmdText.shown}
                 <Caret on={cmdLive && !cmdText.done} />
               </div>
@@ -296,7 +301,7 @@ function AdminColumn({ d }: { d: ReturnType<typeof useDirector> }) {
             <div className="text-[11px] uppercase tracking-[0.14em] text-fg-3">Intent contract</div>
             <div>
               <div className="mb-1 text-[11px] font-medium text-fg-2">Describe</div>
-              <div className="min-h-[86px] rounded-md border border-line bg-[#070b15] p-2.5 text-[12px] leading-relaxed text-fg">
+              <div className="min-h-[86px] rounded-md border border-line bg-surface-2 p-2.5 text-[12px] leading-relaxed text-fg">
                 {draftText.shown}
                 <Caret on={draftLive && !draftText.done} />
               </div>
@@ -388,7 +393,7 @@ function InteractiveButton({ active, label, onClick, icon, tone = "accent" }: { 
     <motion.button
       onClick={onClick}
       className="relative flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-[12.5px] font-semibold"
-      style={{ background: active ? base : "var(--surface-3)", color: active ? "#0a0f1d" : "var(--fg-2)" }}
+      style={{ background: active ? base : "var(--surface-3)", color: active ? ON_COLOR : "var(--fg-2)" }}
       animate={active ? { boxShadow: [`0 0 0 0 ${base}66`, `0 0 0 8px ${base}00`] } : { boxShadow: "0 0 0 0 transparent" }}
       transition={active ? { duration: 1.4, repeat: Infinity, ease: "easeOut" } : { duration: 0.2 }}
     >
@@ -454,7 +459,7 @@ function PlaneTab({ on, children }: { on: boolean; children: ReactNode }) {
 }
 function MachinerySlot({ children }: { children: ReactNode }) {
   return (
-    <motion.div initial={{ opacity: 0, scale: 0.985 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.985 }} transition={{ duration: 0.4, ease: EASE }} className="absolute inset-0 overflow-auto rounded-2xl border border-line-strong bg-[#0b0f1c] p-4" style={{ boxShadow: "inset 0 1px 0 #ffffff0a, 0 0 40px -18px #7c98ff55" }}>
+    <motion.div initial={{ opacity: 0, scale: 0.985 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.985 }} transition={{ duration: 0.4, ease: EASE }} className="absolute inset-0 overflow-auto rounded-2xl border border-line-strong bg-surface p-4" style={{ boxShadow: "inset 0 1px 0 #ffffff0a, 0 0 40px -18px #7c98ff55" }}>
       {children}
     </motion.div>
   );
@@ -482,7 +487,7 @@ function RuntimePlane({ d, dec, pii, timeWindow }: { d: ReturnType<typeof useDir
             <motion.div
               animate={firing ? { opacity: [0.4, 1], borderColor: ["var(--line)", "var(--accent)"] } : { opacity: 1 }}
               transition={{ delay: firing ? i * 0.18 : 0, duration: 0.4 }}
-              className="flex-1 rounded-md border border-line bg-[#070b15] px-1.5 py-1.5 text-center font-mono text-[9.5px] leading-tight text-fg-2"
+              className="flex-1 rounded-md border border-line bg-surface-2 px-1.5 py-1.5 text-center font-mono text-[9.5px] leading-tight text-fg-2"
             >
               {s}
             </motion.div>
@@ -574,7 +579,7 @@ function MdmPush({ d }: { d: ReturnType<typeof useDirector> }) {
         <div className="absolute left-1/2 top-2 bottom-14 w-px -translate-x-1/2 bg-gradient-to-b from-accent/40 to-line" />
         {(d.index >= IDX["c1-mdm"]) &&
           [0, 1, 2].map((i) => (
-            <motion.div key={i} initial={{ top: "2%", opacity: 0 }} animate={{ top: "72%", opacity: [0, 1, 0] }} transition={{ duration: d.reducedMotion ? 0.01 : 1.8, delay: i * 0.35, repeat: d.reducedMotion ? 0 : Infinity }} className="absolute left-1/2 -translate-x-1/2 rounded bg-accent px-1.5 py-0.5 text-[9px] font-bold text-[#0a0f1d]" style={{ left: `${30 + i * 20}%` }}>
+            <motion.div key={i} initial={{ top: "2%", opacity: 0 }} animate={{ top: "72%", opacity: [0, 1, 0] }} transition={{ duration: d.reducedMotion ? 0.01 : 1.8, delay: i * 0.35, repeat: d.reducedMotion ? 0 : Infinity }} className="absolute left-1/2 -translate-x-1/2 rounded bg-accent px-1.5 py-0.5 text-[9px] font-bold text-white" style={{ left: `${30 + i * 20}%` }}>
               profile
             </motion.div>
           ))}
@@ -628,7 +633,7 @@ function GatewayPlane({ index, dec }: { index: number; dec: (ReturnType<typeof r
           {[0, 1].map((i) => {
             const on = phase === "approve" ? true : approved;
             return (
-              <motion.div key={i} animate={on ? { borderColor: "var(--allow)", backgroundColor: "var(--allow-soft)" } : {}} transition={{ delay: phase === "approve" ? i * 0.6 : 0, duration: 0.4 }} className="flex items-center gap-2 rounded-md border border-line bg-[#070b15] px-2 py-1.5">
+              <motion.div key={i} animate={on ? { borderColor: "var(--allow)", backgroundColor: "var(--allow-soft)" } : {}} transition={{ delay: phase === "approve" ? i * 0.6 : 0, duration: 0.4 }} className="flex items-center gap-2 rounded-md border border-line bg-surface-2 px-2 py-1.5">
                 <span className="grid size-6 place-items-center rounded-full bg-surface-3 text-[10px] font-semibold text-fg-2">S{i + 1}</span>
                 <span className="text-[11px] text-fg-2">on-call SRE</span>
                 {on && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="ml-auto text-allow"><Check className="size-3.5" /></motion.span>}
@@ -677,7 +682,7 @@ function EmployeeTerminal({ d }: { d: ReturnType<typeof useDirector> }) {
   const write = useMemo(() => (index >= IDX["c3-write"] ? runDecision(LIVE_BEATS[IDX["c3-write"]], ctxUpTo(IDX["c3-write"])) : null), [index]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-line bg-[#05070e]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-line bg-surface">
       <div className="flex items-center gap-2 border-b border-line bg-surface-2 px-3 py-2">
         <span className="flex items-center gap-1.5">
           <span className="size-2.5 rounded-full bg-[#ff5f57]" />
@@ -722,7 +727,7 @@ function EmployeeTerminal({ d }: { d: ReturnType<typeof useDirector> }) {
   );
 }
 function TermBlock({ children }: { children: ReactNode }) {
-  return <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="rounded-md border border-line bg-[#0b0f1c] p-2">{children}</motion.div>;
+  return <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="rounded-md border border-line bg-surface p-2">{children}</motion.div>;
 }
 
 function CloudRunner({ d }: { d: ReturnType<typeof useDirector> }) {
@@ -732,7 +737,7 @@ function CloudRunner({ d }: { d: ReturnType<typeof useDirector> }) {
   const typed = useTyper(t?.text ?? "", live, d.speed, d.reducedMotion);
   const phase = index >= IDX["c4-replay"] ? "replay" : index >= IDX["c4-execute"] ? "done" : index >= IDX["c4-review"] ? "held" : "run";
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-line bg-[#0b0f1c]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-line bg-surface">
       <div className="flex items-center gap-2 border-b border-line bg-surface-2 px-3 py-2">
         <Cloud className="size-4 text-fg-2" />
         <span className="text-[11.5px] font-semibold text-fg">Scheduled cloud agent</span>
@@ -764,7 +769,7 @@ function Step({ on, label, tone }: { on: boolean; label: string; tone: "review" 
   const c = tone === "allow" ? "var(--allow)" : tone === "block" ? "var(--block)" : "var(--review)";
   return (
     <motion.div animate={{ opacity: on ? 1 : 0.4 }} className="flex items-center gap-2 text-[11.5px]">
-      <span className="grid size-4 place-items-center rounded-full" style={{ background: on ? c : "var(--surface-3)" }}>{on && <Check className="size-2.5 text-[#0a0f1d]" />}</span>
+      <span className="grid size-4 place-items-center rounded-full" style={{ background: on ? c : "var(--surface-3)" }}>{on && <Check className="size-2.5 text-white" />}</span>
       <span className="text-fg-2">{label}</span>
     </motion.div>
   );
@@ -780,7 +785,7 @@ function Transport({ d }: { d: ReturnType<typeof useDirector> }) {
   return (
     <div className="flex items-center gap-3">
       <button onClick={d.restart} title="Restart" className="grid size-9 place-items-center rounded-full border border-line bg-surface-2 text-fg-2 transition-colors hover:text-fg"><RotateCcw className="size-4" /></button>
-      <button onClick={d.toggle} title={playing ? "Pause" : "Play"} className="grid size-11 place-items-center rounded-full text-[#0a0f1d]" style={{ background: "var(--accent)", boxShadow: "0 8px 24px -8px var(--accent)" }}>
+      <button onClick={d.toggle} title={playing ? "Pause" : "Play"} className="grid size-11 place-items-center rounded-full text-white" style={{ background: "var(--accent)", boxShadow: "0 8px 24px -8px var(--accent)" }}>
         {playing ? <Pause className="size-5" /> : <Play className="ml-0.5 size-5" />}
       </button>
 
@@ -790,7 +795,7 @@ function Transport({ d }: { d: ReturnType<typeof useDirector> }) {
           return (
             <button key={c.n} onClick={() => { d.seekChapter(c.n); d.play(); }} className={cn("group relative flex-1 rounded-lg border px-2 py-1.5 text-left transition-colors", active ? "border-accent/50 bg-accent-soft" : "border-line bg-surface-2 hover:border-line-strong")}>
               <div className="flex items-center gap-1.5">
-                <span className={cn("grid size-4 place-items-center rounded-full text-[9px] font-bold", active ? "bg-accent text-[#0a0f1d]" : "bg-surface-3 text-fg-3")}>{c.n}</span>
+                <span className={cn("grid size-4 place-items-center rounded-full text-[9px] font-bold", active ? "bg-accent text-white" : "bg-surface-3 text-fg-3")}>{c.n}</span>
                 <span className={cn("truncate text-[11px] font-medium", active ? "text-fg" : "text-fg-3")}>{c.title}</span>
               </div>
               {active && (
@@ -848,9 +853,9 @@ export function LiveDemo() {
       {/* top chrome */}
       <header className="flex items-center gap-3 px-6 pt-4 pb-1">
         <div className="flex items-center gap-2.5">
-          <WrapboxLogo size={22} tone="dark" />
-          <span className="font-brand text-[15px] font-bold tracking-tight text-white" style={{ fontFamily: "var(--font-brand)" }}>Wrapbox</span>
-          <span className="rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/80">Live demo</span>
+          <WrapboxLogo size={22} tone="light" />
+          <span className="font-brand text-[15px] font-bold tracking-tight text-fg" style={{ fontFamily: "var(--font-brand)" }}>Wrapbox</span>
+          <span className="rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent">Live demo</span>
         </div>
         <Chip className="ml-1" tone="muted"><span className="size-1.5 animate-pulse rounded-full bg-accent" /> Simulated environment · live policy engine</Chip>
         <div className="ml-auto flex items-center gap-2">
@@ -886,30 +891,30 @@ export function LiveDemo() {
       </div>
 
       {/* transport */}
-      <footer className="border-t border-line/60 bg-[#070b15]/80 px-6 py-3 backdrop-blur">
+      <footer className="border-t border-line/60 bg-surface-2/80 px-6 py-3 backdrop-blur">
         <Transport d={d} />
       </footer>
 
       {/* idle overlay */}
       <AnimatePresence>
         {d.state === "idle" && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }} className="absolute inset-0 z-30 grid place-items-center" style={{ background: "radial-gradient(900px 500px at 50% 45%, #0a0f1dcc 0%, #05070ef2 70%)", backdropFilter: "blur(2px)" }}>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }} className="absolute inset-0 z-30 grid place-items-center" style={{ background: "radial-gradient(900px 500px at 50% 45%, #fafaf8ee 0%, #fafaf8fa 70%)", backdropFilter: "blur(2px)" }}>
             <div className="flex max-w-xl flex-col items-center text-center">
               <div className="mb-6 flex items-center gap-3">
-                <WrapboxLogo size={30} tone="dark" />
-                <span className="font-brand text-2xl font-bold tracking-tight text-white" style={{ fontFamily: "var(--font-brand)" }}>Wrapbox</span>
+                <WrapboxLogo size={30} tone="light" />
+                <span className="font-brand text-2xl font-bold tracking-tight text-fg" style={{ fontFamily: "var(--font-brand)" }}>Wrapbox</span>
               </div>
               <motion.button
                 onClick={d.play}
                 whileHover={{ scale: 1.04 }}
                 whileTap={{ scale: 0.97 }}
-                className="grid size-20 place-items-center rounded-full text-[#0a0f1d]"
+                className="grid size-20 place-items-center rounded-full text-white"
                 style={{ background: "var(--accent)", boxShadow: "0 0 0 1px #ffffff22, 0 20px 60px -12px var(--accent)" }}
               >
                 <motion.span animate={{ boxShadow: ["0 0 0 0 var(--accent)", "0 0 0 22px transparent"] }} transition={{ duration: 1.8, repeat: Infinity, ease: "easeOut" }} className="absolute inset-0 rounded-full" />
                 <Play className="ml-1 size-9" />
               </motion.button>
-              <h1 className="mt-7 text-[22px] font-semibold tracking-tight text-white">Watch one policy stop a real agent</h1>
+              <h1 className="mt-7 text-[22px] font-semibold tracking-tight text-fg">Watch one policy stop a real agent</h1>
               <p className="mt-2 text-[14px] text-fg-2">On the laptop and in the cloud. Every verdict is the real policy engine — the surroundings are simulated.</p>
               <div className="mt-5 flex items-center gap-1.5 text-[11.5px] text-fg-3"><Clapperboard className="size-3.5" /> 5 chapters · ~90 seconds · press space to play</div>
             </div>
