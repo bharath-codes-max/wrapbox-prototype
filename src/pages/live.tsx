@@ -1,6 +1,8 @@
 // The Enforcement Playground — a full-screen, three-column exploration of one
-// intent contract. Click-driven only: nothing autoplays, nothing advances on a
-// timer, and every motion in here is the direct consequence of a click.
+// intent contract. Decisions are click-driven only: no scenario autoplays and no
+// verdict advances on a timer. The only free-running motion is ambient dressing —
+// the heartbeat on the rails, the live enrolment dots, mouse parallax — which
+// never touches the engine and stops under prefers-reduced-motion.
 //
 // Left = ADMIN · deploy + the intent contract · Middle = THE WRAPBOX FABRIC (the
 // teaching diagram + the real decision) · Right = WHERE IS THE AGENT? (the explorer).
@@ -13,7 +15,7 @@
 // page idioms (fleet / settings / evidence) so this reads as the same product.
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import {
   Bot,
   Boxes,
@@ -29,11 +31,13 @@ import {
   Laptop,
   Lock,
   LogOut,
+  Moon,
   Repeat,
   RotateCcw,
   Send,
   Server,
   Signature,
+  Sun,
   Upload,
 } from "lucide-react";
 import {
@@ -55,14 +59,22 @@ import type { Verdict } from "../lib/engine";
 import { switchWorkspace } from "../lib/store";
 import { useNavStyle } from "../lib/navstyle";
 import { WrapboxWordmark } from "../components/logo";
-import { Button, Card, CardHead, Chip, D_DOT, DecisionPill, Dot, Drawer, EvidenceChain, Logo, Segmented, Toggle, cn } from "../components/ui";
+import { Button, Card, CardHead, Chip, D_DOT, D_VAR, DecisionPill, Dot, Drawer, EvidenceChain, Logo, Segmented, Toggle, cn } from "../components/ui";
 
 /* ============================ stage theme ============================ */
-// The stage commits to a light look regardless of the app theme setting. The
-// mount effect below pins `data-theme="light"` on the root, so every token
-// already resolves to its light value; the stage itself is the same flat
-// `var(--bg)` ground every product page sits on.
-const STAGE: CSSProperties = { background: "var(--bg)", fontFamily: "var(--font-sans)", color: "var(--fg)" };
+// The stage carries its own light/dark switch (header, Sun/Moon), independent of
+// the app setting: the mount effect pins `data-theme` on the root to whichever
+// side is chosen, so every token — and the portalled Drawer — resolves with it.
+type StageTheme = "light" | "dark";
+const THEME_KEY = "wbx-live-theme";
+
+const STAGE: CSSProperties = { fontFamily: "var(--font-sans)", color: "var(--fg)" };
+// The ground: a quiet radial wash instead of the flat token, so the white cards
+// visibly lift in light and the dark side reads as the app shell's deep field.
+const GROUND: Record<StageTheme, string> = {
+  light: "radial-gradient(1200px 700px at 50% -8%, #e9eefb 0%, #f2f3f0 45%, #f7f7f5 100%)",
+  dark: "radial-gradient(1200px 700px at 50% -8%, #111b36 0%, #0a101f 55%, #080c17 100%)",
+};
 
 const D_WORD: Record<Decision, string> = { ALLOW: "Allowed", CONSTRAIN: "Constrained", REVIEW: "Held for review", BLOCK: "Blocked" };
 
@@ -77,11 +89,11 @@ type DeployState = "idle" | "onboarded" | "pushed";
 const ORG = { name: "Northwind Financial", sso: "Okta · SAML", region: "us-east-1", mdm: "Jamf Pro" };
 
 /** The four devices in the MDM scope. Simulated fleet; deterministic key ids. */
-const FLEET: { host: string; os: string }[] = [
-  { host: "nwf-mbp-0417", os: "macOS 15.3" },
-  { host: "nwf-mbp-0422", os: "macOS 15.3" },
-  { host: "nwf-lnx-ci-02", os: "Ubuntu 24.04" },
-  { host: "nwf-mbp-0431", os: "macOS 14.7" },
+const FLEET: { host: string; os: string; logo: "apple" | "ubuntu" }[] = [
+  { host: "nwf-mbp-0417", os: "macOS 15.3", logo: "apple" },
+  { host: "nwf-mbp-0422", os: "macOS 15.3", logo: "apple" },
+  { host: "nwf-lnx-ci-02", os: "Ubuntu 24.04", logo: "ubuntu" },
+  { host: "nwf-mbp-0431", os: "macOS 14.7", logo: "apple" },
 ];
 
 /** Device key id: FNV-1a over the hostname, so the same host always shows the same `dk_…`. No randomness. */
@@ -147,7 +159,7 @@ function DeployCard({ deploy, onOnboard, onPush, reduced }: { deploy: DeployStat
   const onboarded = deploy !== "idle";
   const pushed = deploy === "pushed";
   return (
-    <Card className="shrink-0 overflow-hidden">
+    <Card className="shrink-0 overflow-hidden shadow-card">
       {/* First-run mark: the product's prism hairline (the same one .fresh-bar draws), never a band. */}
       <div className="prism-swatch h-[2px]" aria-hidden />
       <CardHead title="Deploy" sub="Create the workspace, then push wrapboxd to the fleet." />
@@ -193,10 +205,14 @@ function DeployCard({ deploy, onOnboard, onPush, reduced }: { deploy: DeployStat
               <div className="text-[13px] font-semibold">{ORG.mdm}</div>
               <div className="text-[12px] text-fg-2">{FLEET.length} devices in scope · macOS and Linux</div>
             </div>
+            <span className="flex items-center -space-x-1.5" aria-hidden>
+              <Logo name="apple" size={20} rounded="rounded-full" />
+              <Logo name="ubuntu" size={20} rounded="rounded-full" />
+            </span>
           </div>
           <div className="mt-3 flex items-center gap-3">
             {pushed ? (
-              <Chip tone="allow"><Check className="size-3" /> Pushed · {FLEET.length} enrolled</Chip>
+              <Chip tone="allow"><Check className="size-3" /> Push sent · {FLEET.length} devices</Chip>
             ) : (
               <Button variant="accent" size="sm" onClick={onPush} disabled={!onboarded}>Push via MDM</Button>
             )}
@@ -221,7 +237,7 @@ function IntentContract({ enabled, onToggle, onReset, reduced }: { enabled: stri
   const grouped = DECISION_ORDER.map((d) => ({ d, rules: active.filter((r) => ruleDecision(r) === d) })).filter((g) => g.rules.length);
 
   return (
-    <Card className="shrink-0">
+    <Card className="shrink-0 shadow-card">
       <CardHead title="Intent contract" sub="What the admin wrote" right={<Button variant="ghost" size="sm" onClick={onReset}><RotateCcw className="size-3.5" /> Reset</Button>} />
       <div className="border-t border-line">
         <div className="px-6 py-4 border-b border-line">
@@ -281,10 +297,11 @@ function IntentContract({ enabled, onToggle, onReset, reduced }: { enabled: stri
 }
 
 /* ============================ 2 · THE WRAPBOX FABRIC ============================ */
-function Node({ icon, title, copy, lit, ruleId, right, reduced, children }: { icon: ReactNode; title: string; copy: ReactNode; lit?: boolean; ruleId?: string; right?: ReactNode; reduced: boolean; children?: ReactNode }) {
+function Node({ icon, title, copy, lit, tone = "accent", ruleId, right, reduced, children }: { icon: ReactNode; title: string; copy: ReactNode; lit?: boolean; tone?: "accent" | "ink"; ruleId?: string; right?: ReactNode; reduced: boolean; children?: ReactNode }) {
+  const ring = tone === "ink" ? "var(--ink)" : "var(--accent)";
   return (
     <motion.div
-      animate={{ boxShadow: lit ? "0 0 0 2px color-mix(in oklab, var(--accent) 30%, transparent)" : "0 0 0 0px transparent" }}
+      animate={{ boxShadow: lit ? `0 0 0 2px color-mix(in oklab, ${ring} 28%, transparent)` : "0 0 0 0px transparent" }}
       transition={{ duration: reduced ? 0.01 : 0.3, ease: EASE, delay: lit && !reduced ? 0.4 : 0 }}
       className="relative overflow-hidden rounded-xl border border-line bg-surface-2 px-3.5 py-3"
     >
@@ -309,9 +326,10 @@ function Node({ icon, title, copy, lit, ruleId, right, reduced, children }: { ic
   );
 }
 
-function RailDown() {
+function RailDown({ live }: { live?: boolean }) {
   return (
     <div className="relative h-5" aria-hidden>
+      {live && <span className="wbx-heart absolute left-1/2 top-0 size-1 rounded-full bg-accent" />}
       <span className="absolute left-1/2 top-0 h-2.5 w-px -translate-x-1/2 bg-line" />
       <span className="absolute left-[25%] right-[25%] top-2.5 h-px bg-line" />
       <span className="absolute left-[25%] top-2.5 h-2.5 w-px bg-line" />
@@ -319,9 +337,10 @@ function RailDown() {
     </div>
   );
 }
-function RailUp() {
+function RailUp({ live }: { live?: boolean }) {
   return (
     <div className="relative h-5" aria-hidden>
+      {live && <span className="wbx-heart wbx-heart-2 absolute left-1/2 top-0 size-1 rounded-full bg-accent" />}
       <span className="absolute left-[25%] top-0 h-2.5 w-px bg-line" />
       <span className="absolute right-[25%] top-0 h-2.5 w-px bg-line" />
       <span className="absolute left-[25%] right-[25%] top-2.5 h-px bg-line" />
@@ -348,35 +367,53 @@ function Packet({ runKey, label, reduced }: { runKey: string; label: string; red
   );
 }
 
-function FleetList({ deploy, reduced }: { deploy: DeployState; reduced: boolean }) {
+function FleetList({ deploy, enrolled, reduced }: { deploy: DeployState; enrolled: number; reduced: boolean }) {
   if (deploy !== "pushed") return <div className="mt-2.5 border-t border-line pt-2 text-[12.5px] text-fg-2">0 devices · push wrapboxd from Deploy, on the left</div>;
   return (
     <div className="mt-2.5 border-t border-line">
-      {/* One column header carries the state; each row is a bare dot. The list is the evidence of enrolment. */}
+      {/* The header counts enrolment up as the sequence lands; each row flips from
+          enrolling to a pulsing live dot the moment its key is minted. */}
       <div className="flex items-center justify-between pt-2 pb-1 text-[11px] text-fg-3">
         <span>Device</span>
-        <span>Enrolled</span>
+        <span className="tnum">{Math.min(enrolled, FLEET.length)}/{FLEET.length} enrolled</span>
       </div>
       <ul>
-        {FLEET.map((d, i) => (
-          <motion.li
-            key={d.host}
-            initial={{ opacity: 0, x: -6 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: reduced ? 0.01 : 0.28, ease: EASE, delay: reduced ? 0 : 0.12 + i * 0.14 }}
-            className="py-1.5 border-t border-line"
-          >
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-[12.5px] text-fg truncate">{d.host}</span>
-              <span className="ml-auto mr-[18px] inline-flex shrink-0"><Dot tone="allow" /></span>
-            </div>
-            <div className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-fg-2">
-              <span className="truncate">{d.os}</span>
-              <span aria-hidden>·</span>
-              <span className="font-mono">{keyIdFor(d.host)}</span>
-            </div>
-          </motion.li>
-        ))}
+        {FLEET.map((d, i) => {
+          const ok = i < enrolled;
+          return (
+            <motion.li
+              key={d.host}
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: reduced ? 0.01 : 0.28, ease: EASE, delay: reduced ? 0 : 0.5 + i * 0.38 }}
+              className="py-1.5 border-t border-line"
+            >
+              <div className="flex items-center gap-2">
+                <Logo name={d.logo} size={18} rounded="rounded-[5px]" />
+                <span className="font-mono text-[12.5px] text-fg truncate">{d.host}</span>
+                <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 text-[11px]">
+                  {ok ? (
+                    <>
+                      <span className="live-dot size-[7px] rounded-full bg-allow" />
+                      <span className="font-medium text-allow">enrolled</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="size-[7px] animate-pulse rounded-full border border-fg-3" />
+                      <span className="text-fg-3">enrolling…</span>
+                    </>
+                  )}
+                </span>
+              </div>
+              <div className="mt-0.5 flex items-center gap-1.5 pl-[26px] text-[11.5px] text-fg-2">
+                <span className="truncate">{d.os}</span>
+                <span aria-hidden>·</span>
+                {ok ? <span className="shrink-0 font-mono">{keyIdFor(d.host)}</span> : <span className="shrink-0 font-mono text-fg-3">minting key…</span>}
+                {ok && <span className="ml-auto shrink-0 whitespace-nowrap text-[11px] text-fg-3">just now</span>}
+              </div>
+            </motion.li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -385,49 +422,89 @@ function FleetList({ deploy, reduced }: { deploy: DeployState; reduced: boolean 
 function FabricMap({ run, runKey, effect, deploy, receiptCount, reduced }: { run: RunResult | null; runKey: string; effect: string; deploy: DeployState; receiptCount: number; reduced: boolean }) {
   const plane = run?.plane;
   const pushed = deploy === "pushed";
+
+  // Presentation-only enrolment sequence: the push click starts it, reduced
+  // motion snaps it, and reset (deploy back to idle) clears it. It never feeds
+  // runAction() — decisions stay click-only.
+  const [enrolled, setEnrolled] = useState(0);
+  useEffect(() => {
+    if (!pushed) {
+      setEnrolled(0);
+      return;
+    }
+    if (reduced) {
+      setEnrolled(FLEET.length);
+      return;
+    }
+    const timers = FLEET.map((_, i) => window.setTimeout(() => setEnrolled(i + 1), 680 + i * 380));
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [pushed, reduced]);
+  const allIn = enrolled >= FLEET.length;
+
+  // Mouse parallax over the map — the product's .parallax-mouse idiom. CSS vars
+  // only; the reduced-motion media query already pins the transform.
+  const onMove = (e: MouseEvent<HTMLDivElement>) => {
+    if (reduced) return;
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty("--mx", (((e.clientX - r.left) / r.width) * 2 - 1).toFixed(3));
+    el.style.setProperty("--my", (((e.clientY - r.top) / r.height) * 2 - 1).toFixed(3));
+  };
+  const onLeave = (e: MouseEvent<HTMLDivElement>) => {
+    e.currentTarget.style.setProperty("--mx", "0");
+    e.currentTarget.style.setProperty("--my", "0");
+  };
+
   return (
-    <div className="px-6 py-5">
-      <Node
-        icon={<Cpu className="size-3.5" />}
-        title="Control plane"
-        copy="Holds the contract and the evidence — compiles the admin's sentence into rules and signs every receipt."
-        right={pushed && <Chip tone="muted"><Signature className="size-3" /> policy bundle v1 · signed</Chip>}
-        reduced={reduced}
-      />
-      <RailDown />
+    <div className="px-6 py-5" onMouseMove={onMove} onMouseLeave={onLeave}>
+      <div className="parallax-mouse" style={{ "--depth": 3 } as CSSProperties}>
+        <Node
+          icon={<Cpu className="size-3.5" />}
+          title="Control plane"
+          copy="Holds the contract and the evidence — compiles the admin's sentence into rules and signs every receipt."
+          right={pushed && <Chip tone="muted"><Signature className="size-3" /> policy bundle v1 · signed</Chip>}
+          reduced={reduced}
+        />
+      </div>
+      <RailDown live={pushed && !reduced} />
       <div className="grid grid-cols-2 gap-3">
-        <div className="relative">
+        <div className="parallax-mouse relative" style={{ "--depth": 6 } as CSSProperties}>
           <Node
             icon={<Laptop className="size-3.5" />}
             title="Runtime"
             copy="On the device · OS-level enforcement (Apple Endpoint Security on macOS, kernel confinement on Linux)."
             lit={plane === "runtime"}
             ruleId={run?.verdict.rule}
+            right={pushed && allIn ? <Chip tone="allow" className="whitespace-nowrap">Fleet · {FLEET.length}</Chip> : undefined}
             reduced={reduced}
           >
-            <FleetList deploy={deploy} reduced={reduced} />
+            <FleetList deploy={deploy} enrolled={enrolled} reduced={reduced} />
           </Node>
+          {pushed && !allIn && <Packet runKey="mdm-push" label="wrapboxd · policy v1" reduced={reduced} />}
           {run && plane === "runtime" && <Packet runKey={runKey} label={effect} reduced={reduced} />}
         </div>
-        <div className="relative">
+        <div className="parallax-mouse relative" style={{ "--depth": 6 } as CSSProperties}>
           <Node
             icon={<Server className="size-3.5" />}
             title="Gateway"
             copy="To company systems — APIs, MCP, SaaS, cloud and data — even when the agent runs elsewhere."
             lit={plane === "gateway"}
+            tone="ink"
             ruleId={run?.verdict.rule}
             reduced={reduced}
           />
           {run && plane === "gateway" && <Packet runKey={runKey} label={effect} reduced={reduced} />}
         </div>
       </div>
-      <RailUp />
-      <Node
-        icon={<Signature className="size-3.5" />}
-        title="Signed evidence"
-        copy={receiptCount ? `${receiptCount} signed ${receiptCount === 1 ? "receipt" : "receipts"} this session · replayable from the control plane.` : "Every decision — allowed, constrained, held or blocked — becomes a signed receipt the control plane can replay."}
-        reduced={reduced}
-      />
+      <RailUp live={pushed && !reduced} />
+      <div className="parallax-mouse" style={{ "--depth": 3 } as CSSProperties}>
+        <Node
+          icon={<Signature className="size-3.5" />}
+          title="Signed evidence"
+          copy={receiptCount ? `${receiptCount} signed ${receiptCount === 1 ? "receipt" : "receipts"} this session · replayable from the control plane.` : "Every decision — allowed, constrained, held or blocked — becomes a signed receipt the control plane can replay."}
+          reduced={reduced}
+        />
+      </div>
     </div>
   );
 }
@@ -510,8 +587,7 @@ function FabricColumn({
           label: "Enforced at",
           value: (
             <span className="flex flex-wrap items-center gap-x-1.5">
-              {run.plane === "runtime" ? <Laptop className="size-3.5 text-fg-2" /> : <Server className="size-3.5 text-fg-2" />}
-              <span className="font-medium capitalize">{run.plane}</span>
+              <PlaneTag plane={run.plane} />
               <span className="text-fg-3">— {run.plane === "runtime" ? "on the device" : "in front of the company system"}</span>
               {run.plane === "runtime" && deploy !== "pushed" && <span className="basis-full text-[12px] text-fg-3">fleet not pushed yet — enrolled ad hoc for this run</span>}
             </span>
@@ -541,7 +617,7 @@ function FabricColumn({
     : [];
 
   return (
-    <Card className="shrink-0">
+    <Card className="shrink-0 shadow-card">
       <CardHead title="The Wrapbox fabric" sub="Where the request goes, which rule matched, and what the engine decided at the moment you clicked." />
       <div className="border-t border-line">
         <FabricMap run={run} runKey={runKey} effect={action?.act.effect ?? ""} deploy={deploy} receiptCount={receipts.length} reduced={reduced} />
@@ -552,7 +628,8 @@ function FabricColumn({
       ) : (
         <div className="border-t border-line px-6 py-5">
           <motion.div ref={decisionRef} key={runKey} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduced ? 0.01 : 0.35, ease: EASE, delay: reveal }} onAnimationComplete={settle}>
-            <Card className="overflow-hidden">
+            <Card className="relative overflow-hidden shadow-card">
+              <span aria-hidden className="absolute inset-x-0 top-0 h-[2px]" style={{ background: D_VAR[run.verdict.decision] }} />
               <CardHead title="Decision" sub={`${run.agent} · ${action.label}`} right={<DecisionPill d={run.verdict.decision} />} />
               <div className="border-t border-line px-6 py-5">
                 <EvidenceChain rows={rows} />
@@ -646,12 +723,19 @@ function matchesTab(s: Surface, tab: TabId): boolean {
   return GROUPS_OF_TAB[tab].includes(s.group);
 }
 
-const PlaneTag = ({ plane }: { plane: Plane }) => (
-  <Chip tone="muted" className="whitespace-nowrap">
-    {plane === "runtime" ? <Laptop className="size-3" /> : <Server className="size-3" />}
-    {plane === "runtime" ? "Runtime" : "Gateway"}
-  </Chip>
-);
+// One identity per plane, used everywhere a plane is named: Runtime wears the
+// accent family, Gateway the solid ink of the primary button. Decision colors
+// (allow/review/constrain/block) are never reused for a plane.
+const PlaneTag = ({ plane }: { plane: Plane }) =>
+  plane === "runtime" ? (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-accent/25 bg-accent-soft px-2 py-1 text-[11.5px] font-medium leading-none text-accent">
+      <Laptop className="size-3" /> Runtime
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-ink px-2 py-1 text-[11.5px] font-medium leading-none text-ink-fg">
+      <Server className="size-3" /> Gateway
+    </span>
+  );
 
 /* ---- the mini interfaces (simulated surroundings, on product tokens) ---- */
 const Traffic = () => (
@@ -842,7 +926,7 @@ function Explorer({
   const [kind, setKind] = useState<TabId>("all");
   const list = SURFACES.filter((s) => matchesTab(s, tab) && matchesTab(s, kind));
   return (
-    <Card className="shrink-0">
+    <Card className="shrink-0 shadow-card">
       <CardHead title="Where is the agent?" sub="Every place an agent can run. Open one, then run an action — any surface, any order." />
       <div className="flex items-center gap-2 px-6 py-4 border-t border-line">
         <Segmented size="sm" options={PLANE_TABS} value={tab} onChange={setTab} />
@@ -878,6 +962,15 @@ export function EnforcementPlayground() {
   // Fabric animates from it. Nothing gates the explorer on it.
   const [deploy, setDeploy] = useState<DeployState>("idle");
   const nav = useNavStyle();
+
+  // The stage's own light/dark switch. Sticky across visits; presentation only.
+  const [stageTheme, setStageTheme] = useState<StageTheme>(() => {
+    try {
+      return localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
+    } catch {
+      return "light";
+    }
+  });
 
   const reduced = !!useReducedMotion();
   const [enabled, setEnabled] = useState<string[]>(DEFAULT_TOGGLES);
@@ -933,27 +1026,41 @@ export function EnforcementPlayground() {
     setDeploy("idle");
   };
 
-  // The STAGE pin covers this subtree; the product Drawer portals to <body>, so
-  // the light pin is extended to the root theme while the playground is mounted
-  // and restored on unmount. Presentation only.
+  // The stage theme covers this subtree through the root pin; the product Drawer
+  // portals to <body>, so the pin is extended to the root theme while the
+  // playground is mounted, and the app's own setting is restored on unmount.
+  const prevTheme = useRef<{ v?: string } | null>(null);
   useEffect(() => {
     const root = document.documentElement;
-    const prev = root.dataset.theme;
-    root.dataset.theme = "light";
+    if (!prevTheme.current) prevTheme.current = { v: root.dataset.theme };
+    root.dataset.theme = stageTheme;
+    try {
+      localStorage.setItem(THEME_KEY, stageTheme);
+    } catch {
+      /* storage unavailable — the switch still works for this visit */
+    }
+  }, [stageTheme]);
+  useEffect(() => {
     return () => {
+      const root = document.documentElement;
+      const prev = prevTheme.current?.v;
       if (prev === undefined) delete root.dataset.theme;
       else root.dataset.theme = prev;
     };
   }, []);
 
   return (
-    <div style={STAGE} className="fixed inset-0 flex flex-col overflow-hidden">
-      <style>{`.wbx-pg{grid-template-columns:1fr}@media(min-width:1100px){.wbx-pg{grid-template-columns:1fr 1.34fr 1fr}.wbx-pg>div{overflow-y:auto;min-height:0}}`}</style>
+    <div style={{ ...STAGE, background: GROUND[stageTheme] }} className="fixed inset-0 flex flex-col overflow-hidden">
+      <style>{`.wbx-pg{grid-template-columns:1fr}@media(min-width:1100px){.wbx-pg{grid-template-columns:1fr 1.34fr 1fr}.wbx-pg>div{overflow-y:auto;min-height:0}}
+@keyframes wbx-heart{0%{transform:translate(-50%,-3px);opacity:0}30%{opacity:.85}70%{opacity:.85}100%{transform:translate(-50%,17px);opacity:0}}
+.wbx-heart{animation:wbx-heart 3.4s ease-in-out infinite}
+.wbx-heart-2{animation-delay:1.7s}
+@media(prefers-reduced-motion:reduce){.wbx-heart{animation:none;opacity:0}}`}</style>
 
       {/* The product's top bar — the same .wb-nav every page sits under, in whichever
           style the user chose (matte black by default, off-white if they switched). */}
       <header data-nav={nav} className="wb-nav relative flex h-[68px] shrink-0 items-center gap-3 px-4 lg:px-5 border-b border-(--n-edge)">
-        <span className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-[linear-gradient(90deg,transparent,var(--n-glow),transparent)]" />
+        <span className="prism-swatch pointer-events-none absolute inset-x-0 bottom-0 h-[2px] opacity-80" />
         <WrapboxWordmark tone={nav === "light" ? "light" : "dark"} />
         <span className="hidden md:block h-7 w-px bg-(--n-ring) mx-1" />
         <span className="hidden md:inline-flex items-center gap-2 rounded-full ring-1 ring-(--n-ring) px-3 h-8 text-[12px] text-(--n-fg-2)">
@@ -961,6 +1068,15 @@ export function EnforcementPlayground() {
           Simulated environment · live policy engine
         </span>
         <div className="ml-auto flex items-center gap-3">
+          <Segmented
+            size="sm"
+            value={stageTheme}
+            onChange={setStageTheme}
+            options={[
+              { value: "light", label: <Sun className="size-3.5" />, title: "Light" },
+              { value: "dark", label: <Moon className="size-3.5" />, title: "Dark" },
+            ]}
+          />
           <span className="hidden text-[12.5px] text-(--n-fg-2) sm:inline">{ORG.name}</span>
           <button onClick={() => switchWorkspace("v2")} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-(--n-pill-bg) px-3.5 text-[12.5px] font-medium text-(--n-pill-fg) hover:opacity-90 transition-opacity">
             <LogOut className="size-3.5" /> Exit demo
